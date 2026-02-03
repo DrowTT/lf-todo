@@ -17,6 +17,11 @@ const contextMenu = ref({
   categoryId: null as number | null
 })
 
+// 重命名状态
+const editingCategoryId = ref<number | null>(null)
+const editingName = ref('')
+const editInputRef = ref<HTMLInputElement | null>(null)
+
 onMounted(() => {
   store.fetchCategories()
   // 点击其他地方关闭右键菜单
@@ -65,6 +70,30 @@ const handleDeleteCategory = async () => {
   }
   closeContextMenu()
 }
+
+const handleRenameClick = async () => {
+  if (contextMenu.value.categoryId === null) return
+  const category = store.categories.find((c) => c.id === contextMenu.value.categoryId)
+  if (category) {
+    editingCategoryId.value = category.id
+    editingName.value = category.name
+    closeContextMenu()
+    await nextTick()
+    editInputRef.value?.focus()
+  }
+}
+
+const handleRenameConfirm = async () => {
+  if (editingCategoryId.value !== null && editingName.value.trim()) {
+    await store.updateCategory(editingCategoryId.value, editingName.value.trim())
+  }
+  cancelRename()
+}
+
+const cancelRename = () => {
+  editingCategoryId.value = null
+  editingName.value = ''
+}
 </script>
 
 <template>
@@ -81,7 +110,16 @@ const handleDeleteCategory = async () => {
           @click="store.selectCategory(cat.id)"
           @contextmenu="handleContextMenu($event, cat.id)"
         >
-          <span class="category-item__name">{{ cat.name }}</span>
+          <input
+            v-if="editingCategoryId === cat.id"
+            v-model="editingName"
+            class="category-list__input category-list__input--inline"
+            @keyup.enter="handleRenameConfirm"
+            @blur="handleRenameConfirm"
+            @click.stop
+            ref="editInputRef"
+          />
+          <span v-else class="category-item__name">{{ cat.name }}</span>
         </li>
       </ul>
 
@@ -125,7 +163,11 @@ const handleDeleteCategory = async () => {
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       @click.stop
     >
-      <button @click="handleDeleteCategory" class="context-menu__item">删除分类</button>
+      <button @click="handleRenameClick" class="context-menu__item">重命名</button>
+      <div class="context-menu__divider"></div>
+      <button @click="handleDeleteCategory" class="context-menu__item context-menu__item--danger">
+        删除分类
+      </button>
     </div>
   </div>
 </template>
@@ -205,6 +247,12 @@ const handleDeleteCategory = async () => {
     &::placeholder {
       color: $text-muted;
     }
+
+    &--inline {
+      padding: 0 $spacing-xs;
+      height: 20px;
+      font-size: $font-sm;
+    }
   }
 }
 
@@ -258,8 +306,21 @@ const handleDeleteCategory = async () => {
 
     &:hover {
       background: $bg-hover;
-      color: $danger-color;
+      color: $text-primary;
     }
+
+    &--danger {
+      &:hover {
+        background: $bg-hover;
+        color: $danger-color;
+      }
+    }
+  }
+
+  &__divider {
+    height: 1px;
+    background: $border-color;
+    margin: $spacing-xs 0;
   }
 }
 </style>

@@ -65,6 +65,11 @@ export const store = reactive({
     }
   },
 
+  async updateCategory(id: number, name: string) {
+    await db.updateCategory(id, name)
+    await this.fetchCategories()
+  },
+
   async selectCategory(id: number) {
     this.currentCategoryId = id
     localStorage.setItem(STORAGE_KEY, id.toString())
