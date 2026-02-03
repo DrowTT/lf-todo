@@ -4,12 +4,29 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import trayIcon from '../../resources/tray-icon.png?asset'
 import * as db from './db/database'
+import Store from 'electron-store'
+
+interface StoreType {
+  windowBounds: {
+    width: number
+    height: number
+    x: number
+    y: number
+  }
+}
+
+const store = new Store<StoreType>()
 
 function createWindow(): void {
+  // Restore window bounds
+  const bounds = store.get('windowBounds')
+
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: bounds?.width || 900,
+    height: bounds?.height || 670,
+    x: bounds?.x,
+    y: bounds?.y,
     minWidth: 400, // 最小宽度：左侧 100px + 右侧 300px
     minHeight: 500, // 最小高度
     show: false,
@@ -69,6 +86,12 @@ function createWindow(): void {
 
   // 窗口关闭时隐藏而不是退出
   mainWindow.on('close', (event) => {
+    // Save window bounds before hiding or closing
+    if (!mainWindow.isDestroyed()) {
+      const bounds = mainWindow.getBounds()
+      store.set('windowBounds', bounds)
+    }
+
     if (!isQuitting) {
       event.preventDefault()
       mainWindow.hide()
@@ -82,6 +105,11 @@ function createWindow(): void {
   })
 
   ipcMain.on('window:close', () => {
+    // Save bounds when manual close triggered from UI
+    if (!mainWindow.isDestroyed()) {
+      const bounds = mainWindow.getBounds()
+      store.set('windowBounds', bounds)
+    }
     mainWindow.hide() // 改为隐藏窗口而不是关闭
   })
 
