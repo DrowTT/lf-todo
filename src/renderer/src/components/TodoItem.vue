@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, nextTick } from 'vue'
 import { Task } from '../db'
 import { store } from '../store'
 
@@ -6,12 +7,51 @@ const props = defineProps<{
   task: Task
 }>()
 
+// 编辑状态
+const isEditing = ref(false)
+const editContent = ref('')
+const editInputRef = ref<HTMLTextAreaElement | null>(null)
+
 const handleToggle = () => {
   store.toggleTask(props.task.id)
 }
 
 const handleDelete = () => {
   store.deleteTask(props.task.id)
+}
+
+// 双击进入编辑模式
+// 自适应 textarea 高度
+const adjustHeight = () => {
+  const el = editInputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+const handleDblClick = () => {
+  isEditing.value = true
+  editContent.value = props.task.content
+  nextTick(() => {
+    adjustHeight()
+    editInputRef.value?.focus()
+    editInputRef.value?.select()
+  })
+}
+
+// 保存编辑
+const saveEdit = () => {
+  const trimmed = editContent.value.trim()
+  if (trimmed && trimmed !== props.task.content) {
+    store.updateTaskContent(props.task.id, trimmed)
+  }
+  isEditing.value = false
+}
+
+// 取消编辑
+const cancelEdit = () => {
+  isEditing.value = false
+  editContent.value = props.task.content
 }
 </script>
 
@@ -34,13 +74,24 @@ const handleDelete = () => {
       </svg>
     </div>
 
-    <!-- Content -->
-    <div class="todo-item__content">
-      {{ task.content }}
+    <!-- Content / Edit Input -->
+    <div v-if="isEditing" class="todo-item__edit-wrapper">
+      <textarea
+        ref="editInputRef"
+        v-model="editContent"
+        class="todo-item__edit-input"
+        maxlength="100"
+        rows="1"
+        @keydown.enter.exact.prevent="saveEdit"
+        @keyup.escape="cancelEdit"
+        @blur="saveEdit"
+        @input="adjustHeight"
+      />
     </div>
+    <div v-else class="todo-item__content" @dblclick="handleDblClick">{{ task.content }}</div>
 
     <!-- Delete Button -->
-    <button class="todo-item__delete" @click="handleDelete">
+    <button v-if="!isEditing" class="todo-item__delete" @click="handleDelete">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="todo-item__delete-icon"
@@ -120,6 +171,28 @@ const handleDelete = () => {
     color: $text-primary;
     line-height: 1.5;
     word-break: break-word;
+    user-select: text;
+    cursor: text;
+  }
+
+  &__edit-wrapper {
+    flex: 1;
+  }
+
+  &__edit-input {
+    width: 100%;
+    background: $bg-input;
+    color: $text-primary;
+    font-size: $font-sm;
+    line-height: 1.5;
+    padding: 0 $spacing-xs;
+    border: 1px solid $accent-color;
+    border-radius: $radius-sm;
+    outline: none;
+    box-sizing: border-box;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
   }
 
   &__delete {

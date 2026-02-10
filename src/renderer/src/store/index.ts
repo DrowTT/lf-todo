@@ -92,6 +92,12 @@ export const store = reactive({
     await this.fetchTasks()
   },
 
+  // 更新待办内容
+  async updateTaskContent(id: number, content: string) {
+    await db.updateTask(id, { content })
+    await this.fetchTasks()
+  },
+
   async clearCompletedTasks() {
     const completedTasks = this.tasks.filter((t) => t.is_completed)
     for (const task of completedTasks) {
