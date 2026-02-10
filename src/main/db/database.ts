@@ -195,3 +195,20 @@ export function toggleTaskComplete(id: number): void {
   const stmt = db.prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?')
   stmt.run(id)
 }
+
+/**
+ * 获取各分类的待完成任务数量
+ * 返回 { categoryId: pendingCount } 的映射
+ */
+export function getPendingTaskCounts(): Record<number, number> {
+  if (!db) throw new Error('数据库未初始化')
+  const stmt = db.prepare(
+    'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 GROUP BY category_id'
+  )
+  const rows = stmt.all() as { category_id: number; count: number }[]
+  const result: Record<number, number> = {}
+  for (const row of rows) {
+    result[row.category_id] = row.count
+  }
+  return result
+}

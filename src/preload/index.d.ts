@@ -36,6 +36,7 @@ interface API {
     updateTask: (id: number, updates: any) => Promise<void>
     deleteTask: (id: number) => Promise<void>
     toggleTaskComplete: (id: number) => Promise<void>
+    getPendingTaskCounts: () => Promise<Record<number, number>>
   }
 }
 

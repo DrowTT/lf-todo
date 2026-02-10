@@ -120,7 +120,12 @@ const cancelRename = () => {
             @click.stop
             ref="editInputRef"
           />
-          <span v-else class="category-item__name">{{ cat.name }}</span>
+          <template v-else>
+            <span class="category-item__name">{{ cat.name }}</span>
+            <span v-if="store.pendingCounts[cat.id]" class="category-item__badge">
+              {{ store.pendingCounts[cat.id] }}
+            </span>
+          </template>
         </li>
       </ul>
 
@@ -259,6 +264,8 @@ const cancelRename = () => {
 }
 
 .category-item {
+  display: flex;
+  align-items: center;
   padding: $spacing-sm $spacing-md;
   font-size: $font-sm;
   color: $text-secondary;
@@ -277,10 +284,25 @@ const cancelRename = () => {
   }
 
   &__name {
-    display: block;
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__badge {
+    flex-shrink: 0;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: $spacing-xs;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    color: $accent-color;
+    background: rgba($accent-color, 0.12);
+    border-radius: 9px;
   }
 }
 

@@ -164,6 +164,7 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('db:delete-task', async (_, id: number) => db.deleteTask(id))
   ipcMain.handle('db:toggle-task', async (_, id: number) => db.toggleTaskComplete(id))
+  ipcMain.handle('db:get-pending-counts', async () => db.getPendingTaskCounts())
 
   createWindow()
 

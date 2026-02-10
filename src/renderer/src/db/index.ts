@@ -34,5 +34,7 @@ export const db = {
   updateTask: (id: number, updates: Partial<Task>) =>
     window.api.db.updateTask(id, updates) as Promise<void>,
   deleteTask: (id: number) => window.api.db.deleteTask(id) as Promise<void>,
-  toggleTaskComplete: (id: number) => window.api.db.toggleTaskComplete(id) as Promise<void>
+  toggleTaskComplete: (id: number) => window.api.db.toggleTaskComplete(id) as Promise<void>,
+  getPendingTaskCounts: () =>
+    window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>
 }

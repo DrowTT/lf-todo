@@ -7,9 +7,11 @@ export const store = reactive({
   categories: [] as Category[],
   currentCategoryId: null as number | null,
   tasks: [] as Task[],
+  pendingCounts: {} as Record<number, number>,
 
   async fetchCategories() {
     this.categories = await db.getCategories()
+    await this.fetchPendingCounts()
 
     // 优先恢复上次选中的分类
     const savedCategoryId = localStorage.getItem(STORAGE_KEY)
@@ -28,6 +30,11 @@ export const store = reactive({
       this.currentCategoryId = this.categories[0].id
       await this.fetchTasks()
     }
+  },
+
+  // 获取各分类的待完成任务数
+  async fetchPendingCounts() {
+    this.pendingCounts = await db.getPendingTaskCounts()
   },
 
   async fetchTasks() {
@@ -80,16 +87,19 @@ export const store = reactive({
     if (!this.currentCategoryId) return
     await db.createTask(content, this.currentCategoryId)
     await this.fetchTasks()
+    await this.fetchPendingCounts()
   },
 
   async toggleTask(id: number) {
     await db.toggleTaskComplete(id)
     await this.fetchTasks()
+    await this.fetchPendingCounts()
   },
 
   async deleteTask(id: number) {
     await db.deleteTask(id)
     await this.fetchTasks()
+    await this.fetchPendingCounts()
   },
 
   // 更新待办内容
@@ -104,5 +114,6 @@ export const store = reactive({
       await db.deleteTask(task.id)
     }
     await this.fetchTasks()
+    await this.fetchPendingCounts()
   }
 })
