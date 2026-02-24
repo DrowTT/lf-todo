@@ -35,9 +35,18 @@ export function initDatabase(): void {
       category_id INTEGER NOT NULL,
       order_index INTEGER DEFAULT 0,
       created_at INTEGER DEFAULT (strftime('%s', 'now')),
+      parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
     )
   `)
+
+  // 对已有数据库做字段迁移（parent_id 可能不存在）
+  const columns = db.pragma('table_info(tasks)') as { name: string }[]
+  const hasParentId = columns.some((col) => col.name === 'parent_id')
+  if (!hasParentId) {
+    db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE')
+    console.log('迁移成功: tasks 表已添加 parent_id 字段')
+  }
 
   console.log('数据库初始化成功:', dbPath)
 }
@@ -116,6 +125,7 @@ export interface Task {
   category_id: number
   order_index: number
   created_at: number
+  parent_id: number | null
 }
 
 /**
@@ -123,10 +133,35 @@ export interface Task {
  */
 export function getTasksByCategory(categoryId: number): Task[] {
   if (!db) throw new Error('数据库未初始化')
+  // 只返回顶级任务（parent_id IS NULL）
   const stmt = db.prepare(
-    'SELECT * FROM tasks WHERE category_id = ? ORDER BY order_index DESC, id DESC'
+    'SELECT * FROM tasks WHERE category_id = ? AND parent_id IS NULL ORDER BY order_index DESC, id DESC'
   )
   return stmt.all(categoryId) as Task[]
+}
+
+/**
+ * 获取指定父任务的子任务列表
+ */
+export function getSubTasks(parentId: number): Task[] {
+  if (!db) throw new Error('数据库未初始化')
+  const stmt = db.prepare(
+    'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
+  )
+  return stmt.all(parentId) as Task[]
+}
+
+/**
+ * 创建子任务
+ */
+export function createSubTask(content: string, parentId: number): Task {
+  if (!db) throw new Error('数据库未初始化')
+  // 继承父任务的 category_id
+  const parent = getTaskById(parentId)
+  if (!parent) throw new Error(`父任务 ${parentId} 不存在`)
+  const stmt = db.prepare('INSERT INTO tasks (content, category_id, parent_id) VALUES (?, ?, ?)')
+  const info = stmt.run(content, parent.category_id, parentId)
+  return getTaskById(info.lastInsertRowid as number)!
 }
 
 /**
@@ -221,8 +256,9 @@ export function toggleTaskComplete(id: number): void {
  */
 export function getPendingTaskCounts(): Record<number, number> {
   if (!db) throw new Error('数据库未初始化')
+  // 只统计顶级任务（parent_id IS NULL）
   const stmt = db.prepare(
-    'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 GROUP BY category_id'
+    'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 AND parent_id IS NULL GROUP BY category_id'
   )
   const rows = stmt.all() as { category_id: number; count: number }[]
   const result: Record<number, number> = {}

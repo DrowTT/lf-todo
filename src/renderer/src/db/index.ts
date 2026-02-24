@@ -16,6 +16,7 @@ export interface Task {
   category_id: number
   order_index: number
   created_at: number
+  parent_id: number | null
 }
 
 // 数据库 API 代理（从 window.api.db）
@@ -37,5 +38,10 @@ export const db = {
   deleteTasks: (ids: number[]) => window.api.db.deleteTasks(ids) as Promise<void>,
   toggleTaskComplete: (id: number) => window.api.db.toggleTaskComplete(id) as Promise<void>,
   getPendingTaskCounts: () =>
-    window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>
+    window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>,
+
+  // SubTask 操作
+  getSubTasks: (parentId: number) => window.api.db.getSubTasks(parentId) as Promise<Task[]>,
+  createSubTask: (content: string, parentId: number) =>
+    window.api.db.createSubTask(content, parentId) as Promise<Task>
 }

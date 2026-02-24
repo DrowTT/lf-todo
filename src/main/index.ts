@@ -167,6 +167,12 @@ app.whenReady().then(() => {
   ipcMain.handle('db:delete-tasks', async (_, ids: number[]) => db.deleteTasks(ids))
   ipcMain.handle('db:get-pending-counts', async () => db.getPendingTaskCounts())
 
+  // SubTask 相关
+  ipcMain.handle('db:get-subtasks', async (_, parentId: number) => db.getSubTasks(parentId))
+  ipcMain.handle('db:create-subtask', async (_, content: string, parentId: number) =>
+    db.createSubTask(content, parentId)
+  )
+
   createWindow()
 
   app.on('activate', function () {
