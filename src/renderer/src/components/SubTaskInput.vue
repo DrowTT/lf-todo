@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { store } from '../store'
+import { useAutoHeight } from '../composables/useAutoHeight'
 
 const props = defineProps<{
   parentId: number
 }>()
 
-const inputRef = ref<HTMLInputElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const content = ref('')
 
 // 提交子任务
@@ -15,19 +16,23 @@ const handleSubmit = async () => {
   if (!trimmed) return
   await store.addSubTask(trimmed, props.parentId)
   content.value = ''
-  inputRef.value?.focus()
+  textareaRef.value?.focus()
 }
+
+const { adjustHeight } = useAutoHeight(textareaRef)
 </script>
 
 <template>
   <div class="subtask-input">
     <span class="subtask-input__icon">+</span>
-    <input
-      ref="inputRef"
+    <textarea
+      ref="textareaRef"
+      rows="1"
       v-model="content"
       class="subtask-input__field"
       placeholder="添加子任务…"
       maxlength="200"
+      @input="adjustHeight"
       @keydown.enter.exact.prevent="handleSubmit"
     />
   </div>

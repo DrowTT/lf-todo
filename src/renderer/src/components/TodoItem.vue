@@ -3,6 +3,7 @@ import { ref, nextTick, computed } from 'vue'
 import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
+import { useAutoHeight } from '../composables/useAutoHeight'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
 
@@ -50,13 +51,7 @@ const handleToggleExpand = () => {
   store.toggleExpand(props.task.id)
 }
 
-// 自适应 textarea 高度
-const adjustHeight = () => {
-  const el = editInputRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
-}
+const { adjustHeight } = useAutoHeight(editInputRef)
 
 // 双击进入编辑模式
 const handleDblClick = () => {

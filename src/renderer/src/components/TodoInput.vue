@@ -1,17 +1,11 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { store } from '../store'
+import { useAutoHeight } from '../composables/useAutoHeight'
 
 const content = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-
-// 根据内容自动撑开高度
-const adjustHeight = () => {
-  const el = textareaRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
-}
+const { adjustHeight } = useAutoHeight(textareaRef)
 
 const handleSubmit = async () => {
   if (!content.value.trim()) return

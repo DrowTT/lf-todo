@@ -10,17 +10,17 @@
         @click="handleTogglePin"
         title="置顶"
       >
-        📌
+        <IconPin />
       </button>
       <button
         class="title-bar__btn title-bar__btn--minimize"
         @click="handleMinimize"
         title="最小化"
       >
-        ➖
+        <IconMinimize />
       </button>
       <button class="title-bar__btn title-bar__btn--close" @click="handleClose" title="关闭">
-        ✕
+        <IconClose />
       </button>
     </div>
   </div>
@@ -28,6 +28,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import IconPin from '@renderer/components/icons/IconPin.vue'
+import IconMinimize from '@renderer/components/icons/IconMinimize.vue'
+import IconClose from '@renderer/components/icons/IconClose.vue'
 
 const isAlwaysOnTop = ref(false)
 
@@ -124,13 +127,7 @@ onMounted(() => {
       }
     }
 
-    &--minimize {
-      font-size: $font-lg;
-    }
-
     &--close {
-      font-size: $font-lg;
-
       &:hover {
         background: $danger-color;
         color: white;
