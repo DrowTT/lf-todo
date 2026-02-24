@@ -138,9 +138,9 @@ const cancelEdit = () => {
         </span>
       </div>
 
-      <!-- 展开/收起按钮：UX7 仅在有子任务或已展开时显示 -->
+      <!-- 展开/收起按钮：hover 时始终可见，以便创建第一个子任务 -->
       <button
-        v-if="!isEditing && (subTaskProgress || isExpanded)"
+        v-if="!isEditing"
         class="todo-item__expand"
         :class="{ 'todo-item__expand--active': isExpanded }"
         @click="handleToggleExpand"

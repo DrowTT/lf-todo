@@ -27,10 +27,6 @@ export const store = reactive({
 
   // ─── P2：pendingCounts 改为本地 getter，彻底消除冗余 IPC ───
   get pendingCounts(): Record<number, number> {
-    const result: Record<number, number> = {}
-    // 从当前已加载的 tasks 及各分类统计（重新加载分类后才会准确）
-    // 注意：此处只能统计"当前已拉取的任务"，分类徽标的精准性依赖 fetchCategories 后的一次初始查询
-    // 如需跨分类精准数字，保留一份 _pendingCountsCache，仅在分类维度写操作时局部更新
     return this._pendingCountsCache
   },
 
