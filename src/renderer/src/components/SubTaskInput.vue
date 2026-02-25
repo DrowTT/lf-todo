@@ -60,6 +60,7 @@ const { adjustHeight } = useAutoHeight(textareaRef)
     background: transparent;
     border: none;
     outline: none;
+    resize: none;
     color: $text-secondary;
     font-size: $font-xs;
     font-family: inherit;
