@@ -22,7 +22,10 @@ export function useContextMenu<T = number>() {
 
   const open = (e: MouseEvent, data: T) => {
     e.preventDefault()
-    menu.value = { visible: true, x: e.clientX, y: e.clientY, data }
+    // 优化 #8：边界检测，防止菜单溢出窗口（140px 为菜单估算宽度，80px 为估算高度）
+    const x = Math.min(e.clientX, window.innerWidth - 140)
+    const y = Math.min(e.clientY, window.innerHeight - 80)
+    menu.value = { visible: true, x, y, data }
   }
 
   const close = () => {

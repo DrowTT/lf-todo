@@ -61,6 +61,7 @@ export const store = {
     }
   },
 
+  /** @forwarding 纯转发，调用方也可直接 import { categoryStore } */
   async updateCategory(id: number, name: string) {
     await categoryStore.updateCategory(id, name)
   },
@@ -102,6 +103,7 @@ export const store = {
     subTaskStore.removeTask(id, categoryId)
   },
 
+  /** @forwarding 纯转发，调用方也可直接 import { taskStore } */
   async updateTaskContent(id: number, content: string) {
     await taskStore.updateTaskContent(id, content)
   },
@@ -115,6 +117,7 @@ export const store = {
   },
 
   // ─── SubTask Actions ─────────────────────────────────────────
+  /** @forwarding 纯转发，调用方也可直接 import { subTaskStore } */
   async fetchSubTasks(parentId: number) {
     await subTaskStore.fetchSubTasks(parentId)
   },
@@ -126,17 +129,18 @@ export const store = {
   },
 
   async addSubTask(content: string, parentId: number) {
-    await subTaskStore.addSubTask(content, parentId, taskStore.tasks)
+    await subTaskStore.addSubTask(content, parentId)
   },
 
   async toggleSubTask(id: number, parentId: number) {
-    await subTaskStore.toggleSubTask(id, parentId, taskStore.tasks)
+    await subTaskStore.toggleSubTask(id, parentId)
   },
 
   async deleteSubTask(id: number, parentId: number) {
-    await subTaskStore.deleteSubTask(id, parentId, taskStore.tasks)
+    await subTaskStore.deleteSubTask(id, parentId)
   },
 
+  /** @forwarding 纯转发，调用方也可直接 import { subTaskStore } */
   async updateSubTaskContent(id: number, parentId: number, content: string) {
     await subTaskStore.updateSubTaskContent(id, parentId, content)
   }

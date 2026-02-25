@@ -5,17 +5,14 @@ import { useAutoHeight } from '../composables/useAutoHeight'
 
 const content = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const { adjustHeight } = useAutoHeight(textareaRef)
+const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
 const handleSubmit = async () => {
   if (!content.value.trim()) return
   // UX2：currentCategoryId 为 null 时组件根本不渲染，此判断是死代码，直接移除
   await store.addTask(content.value.trim())
   content.value = ''
-  nextTick(() => {
-    const el = textareaRef.value
-    if (el) el.style.height = 'auto'
-  })
+  nextTick(resetHeight)
 }
 </script>
 

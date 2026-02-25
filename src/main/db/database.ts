@@ -5,6 +5,15 @@ import path from 'path'
 let db: Database.Database | null = null
 
 /**
+ * 获取已初始化的数据库实例，未初始化时抛出错误
+ * 消除各函数中重复的 if (!db) throw 判断（优化 #12）
+ */
+function getDb(): Database.Database {
+  if (!db) throw new Error('数据库未初始化')
+  return db
+}
+
+/**
  * 初始化数据库并创建表结构
  */
 export function initDatabase(): void {
@@ -74,8 +83,7 @@ export interface Category {
  * 获取所有分类
  */
 export function getAllCategories(): Category[] {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('SELECT * FROM categories ORDER BY order_index, id')
+  const stmt = getDb().prepare('SELECT * FROM categories ORDER BY order_index, id')
   return stmt.all() as Category[]
 }
 
@@ -83,8 +91,7 @@ export function getAllCategories(): Category[] {
  * 创建分类
  */
 export function createCategory(name: string): Category {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('INSERT INTO categories (name) VALUES (?)')
+  const stmt = getDb().prepare('INSERT INTO categories (name) VALUES (?)')
   const info = stmt.run(name)
   return getCategoryById(info.lastInsertRowid as number)!
 }
@@ -93,8 +100,7 @@ export function createCategory(name: string): Category {
  * 根据 ID 获取分类
  */
 export function getCategoryById(id: number): Category | undefined {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('SELECT * FROM categories WHERE id = ?')
+  const stmt = getDb().prepare('SELECT * FROM categories WHERE id = ?')
   return stmt.get(id) as Category | undefined
 }
 
@@ -102,8 +108,7 @@ export function getCategoryById(id: number): Category | undefined {
  * 更新分类
  */
 export function updateCategory(id: number, name: string): void {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('UPDATE categories SET name = ? WHERE id = ?')
+  const stmt = getDb().prepare('UPDATE categories SET name = ? WHERE id = ?')
   stmt.run(name, id)
 }
 
@@ -111,8 +116,7 @@ export function updateCategory(id: number, name: string): void {
  * 删除分类（级联删除关联任务）
  */
 export function deleteCategory(id: number): void {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('DELETE FROM categories WHERE id = ?')
+  const stmt = getDb().prepare('DELETE FROM categories WHERE id = ?')
   stmt.run(id)
 }
 
@@ -121,7 +125,8 @@ export function deleteCategory(id: number): void {
 export interface Task {
   id: number
   content: string
-  is_completed: number
+  /** SQLite 存 0/1，查询出口统一映射为 boolean（优化 #1） */
+  is_completed: boolean
   category_id: number
   order_index: number
   created_at: number
@@ -132,12 +137,22 @@ export interface Task {
 }
 
 /**
+ * 将数据库原始行映射为类型安全的 Task 对象
+ * better-sqlite3 不自动转换 boolean，在此统一处理（优化 #1）
+ */
+function mapTask(raw: Record<string, unknown>): Task {
+  return {
+    ...(raw as Omit<Task, 'is_completed'>),
+    is_completed: raw.is_completed === 1
+  }
+}
+
+/**
  * 根据分类 ID 获取任务列表
  */
 export function getTasksByCategory(categoryId: number): Task[] {
-  if (!db) throw new Error('数据库未初始化')
   // LEFT JOIN 带出子任务统计，初始加载即可显示进度 badge
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     SELECT t.*,
       COUNT(s.id) AS subtask_total,
       SUM(CASE WHEN s.is_completed = 1 THEN 1 ELSE 0 END) AS subtask_done
@@ -147,29 +162,29 @@ export function getTasksByCategory(categoryId: number): Task[] {
     GROUP BY t.id
     ORDER BY t.order_index DESC, t.id DESC
   `)
-  return stmt.all(categoryId) as Task[]
+  return (stmt.all(categoryId) as Record<string, unknown>[]).map(mapTask)
 }
 
 /**
  * 获取指定父任务的子任务列表
  */
 export function getSubTasks(parentId: number): Task[] {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare(
+  const stmt = getDb().prepare(
     'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
   )
-  return stmt.all(parentId) as Task[]
+  return (stmt.all(parentId) as Record<string, unknown>[]).map(mapTask)
 }
 
 /**
  * 创建子任务
  */
 export function createSubTask(content: string, parentId: number): Task {
-  if (!db) throw new Error('数据库未初始化')
   // 继承父任务的 category_id
   const parent = getTaskById(parentId)
   if (!parent) throw new Error(`父任务 ${parentId} 不存在`)
-  const stmt = db.prepare('INSERT INTO tasks (content, category_id, parent_id) VALUES (?, ?, ?)')
+  const stmt = getDb().prepare(
+    'INSERT INTO tasks (content, category_id, parent_id) VALUES (?, ?, ?)'
+  )
   const info = stmt.run(content, parent.category_id, parentId)
   return getTaskById(info.lastInsertRowid as number)!
 }
@@ -178,8 +193,7 @@ export function createSubTask(content: string, parentId: number): Task {
  * 创建任务
  */
 export function createTask(content: string, categoryId: number): Task {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)')
+  const stmt = getDb().prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)')
   const info = stmt.run(content, categoryId)
   return getTaskById(info.lastInsertRowid as number)!
 }
@@ -188,75 +202,78 @@ export function createTask(content: string, categoryId: number): Task {
  * 根据 ID 获取任务
  */
 export function getTaskById(id: number): Task | undefined {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('SELECT * FROM tasks WHERE id = ?')
-  return stmt.get(id) as Task | undefined
+  const stmt = getDb().prepare('SELECT * FROM tasks WHERE id = ?')
+  const raw = stmt.get(id)
+  return raw ? mapTask(raw as Record<string, unknown>) : undefined
+}
+
+// ─── updateTask 独立 prepare 语句（优化 #13，避免动态拼 SQL 导致 prepared cache 失效）
+// 延迟初始化，避免在 db 未就绪时执行
+let _stmtUpdateContent: Database.Statement | null = null
+let _stmtUpdateIsCompleted: Database.Statement | null = null
+let _stmtUpdateOrderIndex: Database.Statement | null = null
+
+function getUpdateContentStmt(): Database.Statement {
+  if (!_stmtUpdateContent)
+    _stmtUpdateContent = getDb().prepare('UPDATE tasks SET content = ? WHERE id = ?')
+  return _stmtUpdateContent
+}
+
+function getUpdateIsCompletedStmt(): Database.Statement {
+  if (!_stmtUpdateIsCompleted)
+    _stmtUpdateIsCompleted = getDb().prepare('UPDATE tasks SET is_completed = ? WHERE id = ?')
+  return _stmtUpdateIsCompleted
+}
+
+function getUpdateOrderIndexStmt(): Database.Statement {
+  if (!_stmtUpdateOrderIndex)
+    _stmtUpdateOrderIndex = getDb().prepare('UPDATE tasks SET order_index = ? WHERE id = ?')
+  return _stmtUpdateOrderIndex
 }
 
 /**
- * 更新任务
+ * 更新任务（拆分为独立 prepare 语句以复用缓存）
  */
 export function updateTask(
   id: number,
   updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
 ): void {
-  if (!db) throw new Error('数据库未初始化')
-
-  const fields: string[] = []
-  const values: any[] = []
-
   if (updates.content !== undefined) {
-    fields.push('content = ?')
-    values.push(updates.content)
+    getUpdateContentStmt().run(updates.content, id)
   }
   if (updates.is_completed !== undefined) {
-    fields.push('is_completed = ?')
-    values.push(updates.is_completed)
+    // 写入时将 boolean 转回 SQLite INTEGER（优化 #1）
+    getUpdateIsCompletedStmt().run(updates.is_completed ? 1 : 0, id)
   }
   if (updates.order_index !== undefined) {
-    fields.push('order_index = ?')
-    values.push(updates.order_index)
+    getUpdateOrderIndexStmt().run(updates.order_index, id)
   }
-
-  if (fields.length === 0) return
-
-  values.push(id)
-  const stmt = db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`)
-  stmt.run(...values)
 }
 
 /**
  * 删除任务
  */
 export function deleteTask(id: number): void {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('DELETE FROM tasks WHERE id = ?')
+  const stmt = getDb().prepare('DELETE FROM tasks WHERE id = ?')
   stmt.run(id)
 }
 
 /**
- * 批量删除任务（事务处理）
+ * 批量删除任务（优化 #14：改用 IN 子句，比事务循环更简洁）
  */
 export function deleteTasks(ids: number[]): void {
-  if (!db) throw new Error('数据库未初始化')
   if (ids.length === 0) return
-
-  const deleteOne = db.prepare('DELETE FROM tasks WHERE id = ?')
-  const deleteBatch = db.transaction((taskIds: number[]) => {
-    for (const id of taskIds) {
-      deleteOne.run(id)
-    }
-  })
-
-  deleteBatch(ids)
+  const placeholders = ids.map(() => '?').join(',')
+  getDb()
+    .prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`)
+    .run(...ids)
 }
 
 /**
  * 切换任务完成状态
  */
 export function toggleTaskComplete(id: number): void {
-  if (!db) throw new Error('数据库未初始化')
-  const stmt = db.prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?')
+  const stmt = getDb().prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?')
   stmt.run(id)
 }
 
@@ -265,9 +282,8 @@ export function toggleTaskComplete(id: number): void {
  * 返回 { categoryId: pendingCount } 的映射
  */
 export function getPendingTaskCounts(): Record<number, number> {
-  if (!db) throw new Error('数据库未初始化')
   // 只统计顶级任务（parent_id IS NULL）
-  const stmt = db.prepare(
+  const stmt = getDb().prepare(
     'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 AND parent_id IS NULL GROUP BY category_id'
   )
   const rows = stmt.all() as { category_id: number; count: number }[]

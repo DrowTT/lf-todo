@@ -11,9 +11,9 @@ const { sidebarWidth, startResize } = useSidebarResize()
 </script>
 
 <template>
-  <div class="app-container font-sans">
+  <div class="app-container">
     <TitleBar />
-    <div class="app-content flex flex-1 overflow-hidden relative">
+    <div class="app-content">
       <div :style="{ width: sidebarWidth + 'px' }" class="sidebar-wrapper">
         <CategoryList />
       </div>
@@ -38,6 +38,13 @@ const { sidebarWidth, startResize } = useSidebarResize()
   height: 100vh;
   background: $bg-primary;
   color: $text-primary;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
 }
 
 .sidebar-wrapper {

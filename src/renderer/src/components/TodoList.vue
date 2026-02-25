@@ -16,10 +16,7 @@ const completedCount = computed(() => {
   return store.tasks.filter((t) => t.is_completed).length
 })
 
-// P3：提取为 computed，避免模板内联计算
-const pendingCount = computed(() => {
-  return store.tasks.filter((t) => !t.is_completed).length
-})
+// 优化 #9：统一数据源为 pendingCounts，与侧栏 badge 保持一致，消除数字闪烁
 
 const handleClearCompleted = async () => {
   const confirmed = await confirm(`确认删除 ${completedCount.value} 个已完成的待办吗?`)
@@ -38,7 +35,7 @@ const handleClearCompleted = async () => {
       </h1>
       <div class="todo-list__actions">
         <span class="todo-list__count" v-if="store.currentCategoryId">
-          {{ pendingCount }} 待办
+          {{ store.pendingCounts[store.currentCategoryId] ?? 0 }} 待办
         </span>
         <button
           v-if="store.currentCategoryId"

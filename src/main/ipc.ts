@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import * as db from './db/database'
+import type { Task } from './db/database'
 
 /**
  * 注册所有数据库相关的 IPC 处理器。
@@ -19,8 +20,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('db:create-task', async (_, content: string, categoryId: number) =>
     db.createTask(content, categoryId)
   )
-  ipcMain.handle('db:update-task', async (_, id: number, updates: any) =>
-    db.updateTask(id, updates)
+  ipcMain.handle(
+    'db:update-task',
+    async (
+      _,
+      id: number,
+      updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
+    ) => db.updateTask(id, updates)
   )
   ipcMain.handle('db:delete-task', async (_, id: number) => db.deleteTask(id))
   ipcMain.handle('db:toggle-task', async (_, id: number) => db.toggleTaskComplete(id))
