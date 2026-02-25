@@ -1,5 +1,15 @@
 /**
  * SQLite 数据库封装层 - 渲染进程侧类型定义
+ *
+ * 📌 架构说明（可测试性 - K 项）：
+ * 此模块直接依赖 window.api.db（全局 side effect），没有依赖注入机制。
+ * 在 Vitest / Jest 单元测试中，无法直接 mock window.api，
+ * 因此当前架构不支持对 store 层进行隔离式单元测试。
+ *
+ * 生产规模应用的改进路径：
+ * 1. 将 db 改为工厂函数参数，通过 provide/inject 向下传递
+ * 2. 测试时注入 mock adapter 替代真实 IPC 调用
+ * 参考：https://vitest.dev/guide/mocking.html
  */
 
 export interface Category {

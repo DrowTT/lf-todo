@@ -1,42 +1,46 @@
-import { categoryStore } from './category'
-import { taskStore } from './task'
-import { subTaskStore } from './subtask'
+import { useCategoryStore } from './category'
+import { useTaskStore } from './task'
+import { useSubTaskStore } from './subtask'
 
 /**
  * 统一协调入口：聚合三个业务域子 store 并暴露兼容原有调用方的接口。
  *
  * 外部组件继续 `import { store } from '../store'` 即可，无需感知内部拆分。
+ * 各 useXxxStore() 在函数体内按需调用（Pinia 要求在 setup 上下文内调用，
+ * 聚合层的方法在运行时调用时 pinia 实例已初始化，因此此处可安全调用）。
  */
 export const store = {
   // ─── Category ───────────────────────────────────────────────
   get categories() {
-    return categoryStore.categories
+    return useCategoryStore().categories
   },
   get currentCategoryId() {
-    return categoryStore.currentCategoryId
+    return useCategoryStore().currentCategoryId
   },
 
   // ─── Task ───────────────────────────────────────────────────
   get tasks() {
-    return taskStore.tasks
+    return useTaskStore().tasks
   },
   get isLoading() {
-    return taskStore.isLoading
+    return useTaskStore().isLoading
   },
   get pendingCounts() {
-    return taskStore.pendingCounts
+    return useTaskStore().pendingCounts
   },
 
   // ─── SubTask ────────────────────────────────────────────────
   get subTasksMap() {
-    return subTaskStore.subTasksMap
+    return useSubTaskStore().subTasksMap
   },
   get expandedTaskIds() {
-    return subTaskStore.expandedTaskIds
+    return useSubTaskStore().expandedTaskIds
   },
 
   // ─── Category Actions ────────────────────────────────────────
   async fetchCategories() {
+    const categoryStore = useCategoryStore()
+    const taskStore = useTaskStore()
     await categoryStore.fetchCategories()
     await taskStore.initPendingCounts()
     if (categoryStore.currentCategoryId) {
@@ -45,36 +49,37 @@ export const store = {
   },
 
   async addCategory(name: string) {
-    await categoryStore.addCategory(name)
-    if (categoryStore.currentCategoryId) {
+    await useCategoryStore().addCategory(name)
+    if (useCategoryStore().currentCategoryId) {
       await this.fetchTasks()
     }
   },
 
   async deleteCategory(id: number) {
-    taskStore.removePendingCount(id)
-    await categoryStore.deleteCategory(id)
-    if (categoryStore.currentCategoryId) {
+    useTaskStore().removePendingCount(id)
+    await useCategoryStore().deleteCategory(id)
+    if (useCategoryStore().currentCategoryId) {
       await this.fetchTasks()
     } else {
-      taskStore.clearTasks()
+      useTaskStore().clearTasks()
     }
   },
 
-  /** @forwarding 纯转发，调用方也可直接 import { categoryStore } */
   async updateCategory(id: number, name: string) {
-    await categoryStore.updateCategory(id, name)
+    await useCategoryStore().updateCategory(id, name)
   },
 
   async selectCategory(id: number) {
-    categoryStore.selectCategory(id)
-    subTaskStore.reset()
+    useCategoryStore().selectCategory(id)
+    useSubTaskStore().reset()
     await this.fetchTasks()
   },
 
   // ─── Task Actions ────────────────────────────────────────────
   async fetchTasks() {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = useCategoryStore().currentCategoryId
+    const taskStore = useTaskStore()
+    const subTaskStore = useSubTaskStore()
     if (!categoryId) {
       taskStore.clearTasks()
       return
@@ -85,63 +90,60 @@ export const store = {
   },
 
   async addTask(content: string) {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = useCategoryStore().currentCategoryId
     if (!categoryId) return
-    await taskStore.addTask(content, categoryId)
+    await useTaskStore().addTask(content, categoryId)
   },
 
   async toggleTask(id: number) {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = useCategoryStore().currentCategoryId
     if (!categoryId) return
-    await taskStore.toggleTask(id, categoryId)
+    await useTaskStore().toggleTask(id, categoryId)
   },
 
   async deleteTask(id: number) {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = useCategoryStore().currentCategoryId
     if (!categoryId) return
-    await taskStore.deleteTask(id, categoryId)
-    subTaskStore.removeTask(id, categoryId)
+    await useTaskStore().deleteTask(id, categoryId)
+    useSubTaskStore().removeTask(id, categoryId)
   },
 
-  /** @forwarding 纯转发，调用方也可直接 import { taskStore } */
   async updateTaskContent(id: number, content: string) {
-    await taskStore.updateTaskContent(id, content)
+    await useTaskStore().updateTaskContent(id, content)
   },
 
   async clearCompletedTasks() {
-    const categoryId = categoryStore.currentCategoryId
-    const completedIds = await taskStore.clearCompletedTasks()
+    const categoryId = useCategoryStore().currentCategoryId
+    const completedIds = await useTaskStore().clearCompletedTasks()
     if (completedIds && categoryId) {
-      subTaskStore.removeCompletedTasks(completedIds, categoryId)
+      useSubTaskStore().removeCompletedTasks(completedIds, categoryId)
     }
   },
 
   // ─── SubTask Actions ─────────────────────────────────────────
-  /** @forwarding 纯转发，调用方也可直接 import { subTaskStore } */
   async fetchSubTasks(parentId: number) {
-    await subTaskStore.fetchSubTasks(parentId)
+    await useSubTaskStore().fetchSubTasks(parentId)
   },
 
   async toggleExpand(taskId: number) {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = useCategoryStore().currentCategoryId
     if (!categoryId) return
-    await subTaskStore.toggleExpand(taskId, categoryId)
+    await useSubTaskStore().toggleExpand(taskId, categoryId)
   },
 
   async addSubTask(content: string, parentId: number) {
-    await subTaskStore.addSubTask(content, parentId)
+    await useSubTaskStore().addSubTask(content, parentId)
   },
 
   async toggleSubTask(id: number, parentId: number) {
-    await subTaskStore.toggleSubTask(id, parentId)
+    await useSubTaskStore().toggleSubTask(id, parentId)
   },
 
   async deleteSubTask(id: number, parentId: number) {
-    await subTaskStore.deleteSubTask(id, parentId)
+    await useSubTaskStore().deleteSubTask(id, parentId)
   },
 
-  /** @forwarding 纯转发，调用方也可直接 import { subTaskStore } */
   async updateSubTaskContent(id: number, parentId: number, content: string) {
-    await subTaskStore.updateSubTaskContent(id, parentId, content)
+    await useSubTaskStore().updateSubTaskContent(id, parentId, content)
   }
 }

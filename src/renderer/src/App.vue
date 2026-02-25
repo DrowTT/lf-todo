@@ -7,7 +7,7 @@ import ToastMessage from './components/ToastMessage.vue'
 import { useConfirm } from './composables/useConfirm'
 import { useSidebarResize } from './composables/useSidebarResize'
 
-const { state, handleConfirm, handleCancel } = useConfirm()
+const { current, handleConfirm, handleCancel } = useConfirm()
 const { sidebarWidth, startResize } = useSidebarResize()
 </script>
 
@@ -22,8 +22,8 @@ const { sidebarWidth, startResize } = useSidebarResize()
       <TodoList />
     </div>
     <ConfirmDialog
-      :visible="state.visible"
-      :message="state.message"
+      :visible="current !== null"
+      :message="current?.message ?? ''"
       @confirm="handleConfirm"
       @cancel="handleCancel"
     />

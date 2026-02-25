@@ -1,6 +1,7 @@
-import { reactive } from 'vue'
+import { ref } from 'vue'
+import { defineStore } from 'pinia'
 import { db, Task } from '../db'
-import { taskStore } from './task'
+import { useTaskStore } from './task'
 import { useToast } from '../composables/useToast'
 
 // ─── 展开状态持久化辅助 ─────────────────────────────────────────
@@ -20,70 +21,78 @@ function saveExpandedIds(categoryId: number, ids: Set<number>) {
 }
 // ────────────────────────────────────────────────────────────────
 
-const toast = useToast()
+/**
+ * 子任务 Store（Pinia setup store）
+ *
+ * expandedTaskIds 使用 ref 包裹 Set 而非直接放入 reactive，
+ * 避免 reactive 内嵌 Set 在某些边缘场景下响应跟踪丢失的问题。
+ * 通过 ref 包裹，每次 .add() / .delete() 只需重新赋值包装对象即可
+ * 触发依赖收集（参见 toggleExpand 实现）。
+ */
+export const useSubTaskStore = defineStore('subTask', () => {
+  const subTasksMap = ref<Record<number, Task[]>>({})
+  // 用 ref 包裹 Set，通过替换整个 Set 触发响应（确保视图更新）
+  const expandedTaskIds = ref(new Set<number>())
 
-export const subTaskStore = reactive({
-  subTasksMap: {} as Record<number, Task[]>,
-  expandedTaskIds: new Set<number>(),
+  const toast = useToast()
 
-  reset() {
-    this.subTasksMap = {}
-    this.expandedTaskIds = new Set()
-  },
+  function reset() {
+    subTasksMap.value = {}
+    expandedTaskIds.value = new Set()
+  }
 
-  loadExpandedForCategory(categoryId: number) {
-    this.expandedTaskIds = loadExpandedIds(categoryId)
-  },
+  function loadExpandedForCategory(categoryId: number) {
+    expandedTaskIds.value = loadExpandedIds(categoryId)
+  }
 
-  _persistExpanded(categoryId: number) {
-    saveExpandedIds(categoryId, this.expandedTaskIds)
-  },
+  function _persistExpanded(categoryId: number) {
+    saveExpandedIds(categoryId, expandedTaskIds.value)
+  }
 
-  async fetchSubTasks(parentId: number) {
+  async function fetchSubTasks(parentId: number) {
     try {
-      this.subTasksMap[parentId] = await db.getSubTasks(parentId)
+      subTasksMap.value[parentId] = await db.getSubTasks(parentId)
     } catch (e) {
       console.error('[subTaskStore] fetchSubTasks 失败:', e)
       throw e
     }
-  },
+  }
 
-  /** 优化 #5：并行加载所有已展开子任务，避免 N 次串行 IPC 往返 */
-  async fetchExpandedSubTasks(expandedIds: Set<number>) {
-    const needed = [...expandedIds].filter((id) => !this.subTasksMap[id])
-    await Promise.all(needed.map((id) => this.fetchSubTasks(id)))
-  },
+  /** 并行加载所有已展开子任务，避免 N 次串行 IPC 往返（优化 #5） */
+  async function fetchExpandedSubTasks(expandedIds: Set<number>) {
+    const needed = [...expandedIds].filter((id) => !subTasksMap.value[id])
+    await Promise.all(needed.map((id) => fetchSubTasks(id)))
+  }
 
-  async toggleExpand(taskId: number, categoryId: number) {
-    // Vue 3 reactive 对 Set 有原生代理支持，直接 .add()/.delete() 即可触发联动
-    // 参考：https://vuejs.org/guide/extras/reactivity-in-depth.html
-    if (this.expandedTaskIds.has(taskId)) {
-      this.expandedTaskIds.delete(taskId)
+  async function toggleExpand(taskId: number, categoryId: number) {
+    if (expandedTaskIds.value.has(taskId)) {
+      // 替换整个 Set 以确保 Vue 响应系统感知变更
+      const next = new Set(expandedTaskIds.value)
+      next.delete(taskId)
+      expandedTaskIds.value = next
     } else {
-      if (!this.subTasksMap[taskId]) {
+      if (!subTasksMap.value[taskId]) {
         try {
-          await this.fetchSubTasks(taskId)
-        } catch (e) {
+          await fetchSubTasks(taskId)
+        } catch {
           toast.show('加载子任务失败，请重试')
           return
         }
       }
-      this.expandedTaskIds.add(taskId)
+      expandedTaskIds.value = new Set(expandedTaskIds.value).add(taskId)
     }
-    this._persistExpanded(categoryId)
-  },
+    _persistExpanded(categoryId)
+  }
 
-  /**
-   * 优化 #2：直接引用 taskStore.tasks，消除 tasks 参数透传和 (parent as any) 强转
-   */
-  async addSubTask(content: string, parentId: number) {
+  async function addSubTask(content: string, parentId: number) {
     try {
       const newSubTask = await db.createSubTask(content, parentId)
-      if (!this.subTasksMap[parentId]) {
-        this.subTasksMap[parentId] = []
+      if (!subTasksMap.value[parentId]) {
+        subTasksMap.value[parentId] = []
       }
-      this.subTasksMap[parentId] = [...this.subTasksMap[parentId], newSubTask]
+      subTasksMap.value[parentId] = [...subTasksMap.value[parentId], newSubTask]
       // 更新父任务统计字段
+      const taskStore = useTaskStore()
       const parent = taskStore.tasks.find((t) => t.id === parentId)
       if (parent) {
         parent.subtask_total = (parent.subtask_total ?? 0) + 1
@@ -93,15 +102,16 @@ export const subTaskStore = reactive({
       toast.show('创建子任务失败，请重试')
       throw e
     }
-  },
+  }
 
-  async toggleSubTask(id: number, parentId: number) {
-    const list = this.subTasksMap[parentId]
+  async function toggleSubTask(id: number, parentId: number) {
+    const list = subTasksMap.value[parentId]
     const sub = list?.find((t) => t.id === id)
     if (!sub) return
     const newCompleted = !sub.is_completed
     // 乐观更新 UI — fire-and-forget
     sub.is_completed = newCompleted
+    const taskStore = useTaskStore()
     const parent = taskStore.tasks.find((t) => t.id === parentId)
     if (parent) {
       parent.subtask_done = (parent.subtask_done ?? 0) + (newCompleted ? 1 : -1)
@@ -109,14 +119,15 @@ export const subTaskStore = reactive({
     db.toggleTaskComplete(id).catch((e) =>
       console.error('[subTaskStore] toggleSubTask IPC 失败:', e)
     )
-  },
+  }
 
-  async deleteSubTask(id: number, parentId: number) {
-    const list = this.subTasksMap[parentId]
+  async function deleteSubTask(id: number, parentId: number) {
+    const list = subTasksMap.value[parentId]
     if (!list) return
     const sub = list.find((t) => t.id === id)
     // 乐观删除 UI — fire-and-forget
-    this.subTasksMap[parentId] = list.filter((t) => t.id !== id)
+    subTasksMap.value[parentId] = list.filter((t) => t.id !== id)
+    const taskStore = useTaskStore()
     const parent = taskStore.tasks.find((t) => t.id === parentId)
     if (parent) {
       parent.subtask_total = Math.max(0, (parent.subtask_total ?? 0) - 1)
@@ -125,31 +136,51 @@ export const subTaskStore = reactive({
       }
     }
     db.deleteTask(id).catch((e) => console.error('[subTaskStore] deleteSubTask IPC 失败:', e))
-  },
+  }
 
-  async updateSubTaskContent(id: number, parentId: number, content: string) {
-    const list = this.subTasksMap[parentId]
+  async function updateSubTaskContent(id: number, parentId: number, content: string) {
+    const list = subTasksMap.value[parentId]
     const sub = list?.find((t) => t.id === id)
     if (sub) sub.content = content
     // 乐观更新 UI — fire-and-forget
     db.updateTask(id, { content }).catch((e) =>
       console.error('[subTaskStore] updateSubTaskContent IPC 失败:', e)
     )
-  },
+  }
 
-  removeTask(id: number, categoryId: number) {
-    delete this.subTasksMap[id]
-    if (this.expandedTaskIds.has(id)) {
-      this.expandedTaskIds.delete(id)
-      this._persistExpanded(categoryId)
+  function removeTask(id: number, categoryId: number) {
+    delete subTasksMap.value[id]
+    if (expandedTaskIds.value.has(id)) {
+      const next = new Set(expandedTaskIds.value)
+      next.delete(id)
+      expandedTaskIds.value = next
+      _persistExpanded(categoryId)
     }
-  },
+  }
 
-  removeCompletedTasks(ids: number[], categoryId: number) {
+  function removeCompletedTasks(ids: number[], categoryId: number) {
+    const next = new Set(expandedTaskIds.value)
     ids.forEach((id) => {
-      delete this.subTasksMap[id]
-      this.expandedTaskIds.delete(id)
+      delete subTasksMap.value[id]
+      next.delete(id)
     })
-    this._persistExpanded(categoryId)
+    expandedTaskIds.value = next
+    _persistExpanded(categoryId)
+  }
+
+  return {
+    subTasksMap,
+    expandedTaskIds,
+    reset,
+    loadExpandedForCategory,
+    fetchSubTasks,
+    fetchExpandedSubTasks,
+    toggleExpand,
+    addSubTask,
+    toggleSubTask,
+    deleteSubTask,
+    updateSubTaskContent,
+    removeTask,
+    removeCompletedTasks
   }
 })

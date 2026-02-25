@@ -1,112 +1,124 @@
-import { reactive } from 'vue'
+import { ref } from 'vue'
+import { defineStore } from 'pinia'
 import { db, Task } from '../db'
 import { useToast } from '../composables/useToast'
 
-const toast = useToast()
-
-export const taskStore = reactive({
-  tasks: [] as Task[],
-  isLoading: false,
+/**
+ * 任务 Store（Pinia setup store）
+ */
+export const useTaskStore = defineStore('task', () => {
+  const tasks = ref<Task[]>([])
+  const isLoading = ref(false)
 
   // ─── pendingCounts（初始从 IPC 拉取，后续本地维护，消除冗余 IPC）
-  pendingCounts: {} as Record<number, number>,
+  const pendingCounts = ref<Record<number, number>>({})
 
-  _adjustPendingCount(categoryId: number, delta: number) {
-    const cur = this.pendingCounts[categoryId] ?? 0
-    this.pendingCounts[categoryId] = Math.max(0, cur + delta)
-  },
+  const toast = useToast()
 
-  async initPendingCounts() {
+  function _adjustPendingCount(categoryId: number, delta: number) {
+    const cur = pendingCounts.value[categoryId] ?? 0
+    pendingCounts.value[categoryId] = Math.max(0, cur + delta)
+  }
+
+  async function initPendingCounts() {
     try {
-      this.pendingCounts = await db.getPendingTaskCounts()
+      pendingCounts.value = await db.getPendingTaskCounts()
     } catch (e) {
       console.error('[taskStore] initPendingCounts 失败:', e)
       // 初始化失败不阻塞主流程，仅记录日志
     }
-  },
+  }
 
-  async fetchTasks(categoryId: number) {
-    this.isLoading = true
+  async function fetchTasks(categoryId: number) {
+    isLoading.value = true
     try {
-      this.tasks = await db.getTasks(categoryId)
+      tasks.value = await db.getTasks(categoryId)
       // 以实际数据校正当前分类的 pending 数
-      const pending = this.tasks.filter((t) => !t.is_completed && t.parent_id === null).length
-      this.pendingCounts[categoryId] = pending
+      const pending = tasks.value.filter((t) => !t.is_completed && t.parent_id === null).length
+      pendingCounts.value[categoryId] = pending
     } catch (e) {
       console.error('[taskStore] fetchTasks 失败:', e)
       toast.show('加载任务列表失败，请重试')
       throw e
     } finally {
-      this.isLoading = false
+      isLoading.value = false
     }
-  },
+  }
 
-  clearTasks() {
-    this.tasks = []
-  },
+  function clearTasks() {
+    tasks.value = []
+  }
 
-  async addTask(content: string, categoryId: number) {
+  async function addTask(content: string, categoryId: number) {
     try {
       const newTask = await db.createTask(content, categoryId)
       // 乐观插入（ORDER BY order_index DESC，新任务排最前）
-      this.tasks.unshift({
-        ...newTask,
-        subtask_total: 0,
-        subtask_done: 0
-      })
-      this._adjustPendingCount(categoryId, 1)
+      tasks.value.unshift({ ...newTask, subtask_total: 0, subtask_done: 0 })
+      _adjustPendingCount(categoryId, 1)
     } catch (e) {
       console.error('[taskStore] addTask 失败:', e)
       toast.show('创建任务失败，请重试')
       throw e
     }
-  },
+  }
 
-  async toggleTask(id: number, categoryId: number) {
-    const task = this.tasks.find((t) => t.id === id)
+  async function toggleTask(id: number, categoryId: number) {
+    const task = tasks.value.find((t) => t.id === id)
     if (!task) return
     const newCompleted = !task.is_completed
     // 乐观更新 UI — fire-and-forget
     task.is_completed = newCompleted
-    this._adjustPendingCount(categoryId, newCompleted ? -1 : 1)
+    _adjustPendingCount(categoryId, newCompleted ? -1 : 1)
     db.toggleTaskComplete(id).catch((e) => console.error('[taskStore] toggleTask IPC 失败:', e))
-  },
+  }
 
-  async deleteTask(id: number, categoryId: number) {
-    const idx = this.tasks.findIndex((t) => t.id === id)
+  async function deleteTask(id: number, categoryId: number) {
+    const idx = tasks.value.findIndex((t) => t.id === id)
     if (idx === -1) return
-    const task = this.tasks[idx]
-    if (!task.is_completed) {
-      this._adjustPendingCount(categoryId, -1)
-    }
+    const task = tasks.value[idx]
+    if (!task.is_completed) _adjustPendingCount(categoryId, -1)
     // 乐观删除 UI — fire-and-forget
-    this.tasks.splice(idx, 1)
+    tasks.value.splice(idx, 1)
     db.deleteTask(id).catch((e) => console.error('[taskStore] deleteTask IPC 失败:', e))
-  },
+  }
 
-  async updateTaskContent(id: number, content: string) {
-    const task = this.tasks.find((t) => t.id === id)
+  async function updateTaskContent(id: number, content: string) {
+    const task = tasks.value.find((t) => t.id === id)
     if (task) task.content = content
     // 乐观更新 UI — fire-and-forget
     db.updateTask(id, { content }).catch((e) =>
       console.error('[taskStore] updateTaskContent IPC 失败:', e)
     )
-  },
+  }
 
-  async clearCompletedTasks() {
-    const completedIds = this.tasks.filter((t) => t.is_completed).map((t) => t.id)
-    if (completedIds.length === 0) return
+  async function clearCompletedTasks() {
+    const completedIds = tasks.value.filter((t) => t.is_completed).map((t) => t.id)
+    if (completedIds.length === 0) return undefined
     const completedSet = new Set(completedIds)
     // 乐观删除 UI — fire-and-forget
-    this.tasks = this.tasks.filter((t) => !completedSet.has(t.id))
+    tasks.value = tasks.value.filter((t) => !completedSet.has(t.id))
     db.deleteTasks(completedIds).catch((e) =>
       console.error('[taskStore] clearCompletedTasks IPC 失败:', e)
     )
-    // pendingCounts 只计未完成任务，无需调整
     return completedIds
-  },
+  }
 
-  removePendingCount(id: number) {
-    delete this.pendingCounts[id]
+  function removePendingCount(id: number) {
+    delete pendingCounts.value[id]
+  }
+
+  return {
+    tasks,
+    isLoading,
+    pendingCounts,
+    initPendingCounts,
+    fetchTasks,
+    clearTasks,
+    addTask,
+    toggleTask,
+    deleteTask,
+    updateTaskContent,
+    clearCompletedTasks,
+    removePendingCount
   }
 })
