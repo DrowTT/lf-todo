@@ -1,36 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
+import { useContextMenu } from '../composables/useContextMenu'
+import IconPlus from './icons/IconPlus.vue'
 
 const { confirm } = useConfirm()
+const {
+  menu: contextMenu,
+  open: openContextMenu,
+  close: closeContextMenu
+} = useContextMenu<number>()
+
+onMounted(() => store.fetchCategories())
 
 const newCategoryName = ref('')
 const isAdding = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
 
-// 右键菜单状态
-const contextMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0,
-  categoryId: null as number | null
-})
-
 // 重命名状态
 const editingCategoryId = ref<number | null>(null)
 const editingName = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
-
-onMounted(() => {
-  store.fetchCategories()
-  // 点击其他地方关闭右键菜单
-  document.addEventListener('click', closeContextMenu)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', closeContextMenu)
-})
 
 const handleAddCategory = async () => {
   if (!newCategoryName.value.trim()) {
@@ -48,32 +39,18 @@ const startAdding = async () => {
   inputRef.value?.focus()
 }
 
-const handleContextMenu = (e: MouseEvent, id: number) => {
-  e.preventDefault()
-  contextMenu.value = {
-    visible: true,
-    x: e.clientX,
-    y: e.clientY,
-    categoryId: id
-  }
-}
-
-const closeContextMenu = () => {
-  contextMenu.value.visible = false
-}
-
 const handleDeleteCategory = async () => {
-  if (contextMenu.value.categoryId === null) return
+  if (contextMenu.value.data === null) return
   const confirmed = await confirm('确认删除该分类及其所有待办吗?')
   if (confirmed) {
-    await store.deleteCategory(contextMenu.value.categoryId)
+    await store.deleteCategory(contextMenu.value.data)
   }
   closeContextMenu()
 }
 
 const handleRenameClick = async () => {
-  if (contextMenu.value.categoryId === null) return
-  const category = store.categories.find((c) => c.id === contextMenu.value.categoryId)
+  if (contextMenu.value.data === null) return
+  const category = store.categories.find((c) => c.id === contextMenu.value.data)
   if (category) {
     editingCategoryId.value = category.id
     editingName.value = category.name
@@ -108,7 +85,7 @@ const cancelRename = () => {
           class="category-item"
           :class="{ 'category-item--active': store.currentCategoryId === cat.id }"
           @click="store.selectCategory(cat.id)"
-          @contextmenu="handleContextMenu($event, cat.id)"
+          @contextmenu="openContextMenu($event, cat.id)"
         >
           <input
             v-if="editingCategoryId === cat.id"
@@ -145,20 +122,7 @@ const cancelRename = () => {
 
     <div class="category-list__footer">
       <button v-if="!isAdding" @click="startAdding" class="category-list__add-btn">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="category-list__add-icon"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 4v16m8-8H4"
-          />
-        </svg>
+        <IconPlus class="category-list__add-icon" />
         新建分类
       </button>
     </div>

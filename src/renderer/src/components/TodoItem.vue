@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
-import { useAutoHeight } from '../composables/useAutoHeight'
+import { useInlineEdit } from '../composables/useInlineEdit'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
+import IconCheck from './icons/IconCheck.vue'
+import IconChevron from './icons/IconChevron.vue'
+import IconTrash from './icons/IconTrash.vue'
 
 const { confirm } = useConfirm()
 
 const props = defineProps<{
   task: Task
 }>()
-
-// 编辑状态
-const isEditing = ref(false)
-const editContent = ref('')
-const editInputRef = ref<HTMLTextAreaElement | null>(null)
 
 // 是否已展开子任务
 const isExpanded = computed(() => store.expandedTaskIds.has(props.task.id))
@@ -31,63 +29,26 @@ const subTaskProgress = computed(() => {
     if (list.length === 0) return null
     return { done: list.filter((t) => t.is_completed).length, total: list.length }
   }
-  // 未展开时用 SQL 带出的统计字段（初始加载即可显示）
   const total = props.task.subtask_total
   if (!total) return null
   return { done: props.task.subtask_done, total }
 })
 
-const handleToggle = () => {
-  store.toggleTask(props.task.id)
-}
+const handleToggle = () => store.toggleTask(props.task.id)
+const handleToggleExpand = () => store.toggleExpand(props.task.id)
 
 const handleDelete = async () => {
-  // UX1：危险操作需确认
   const ok = await confirm('确认删除该任务吗？')
   if (ok) store.deleteTask(props.task.id)
 }
 
-const handleToggleExpand = () => {
-  store.toggleExpand(props.task.id)
-}
-
-const { adjustHeight } = useAutoHeight(editInputRef)
-
-// 双击进入编辑模式
-const handleDblClick = () => {
-  isEditing.value = true
-  editContent.value = props.task.content
-  nextTick(() => {
-    adjustHeight()
-    editInputRef.value?.focus()
-    editInputRef.value?.select()
-  })
-}
-
-// 保存编辑
-const saveEdit = () => {
-  const trimmed = editContent.value.trim()
-  if (trimmed && trimmed !== props.task.content) {
-    store.updateTaskContent(props.task.id, trimmed)
-  }
-  isEditing.value = false
-}
-
-// UX4：blur 时若内容未变化，直接取消而不触发 IPC
-const onBlur = () => {
-  const trimmed = editContent.value.trim()
-  if (!trimmed || trimmed === props.task.content) {
-    cancelEdit()
-  } else {
-    saveEdit()
-  }
-}
-
-// 取消编辑
-const cancelEdit = () => {
-  isEditing.value = false
-  editContent.value = props.task.content
-}
+const editInputRef = ref<HTMLTextAreaElement | null>(null)
+const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEdit, onBlur } =
+  useInlineEdit(
+    editInputRef,
+    () => props.task.content,
+    (content) => store.updateTaskContent(props.task.id, content)
+  )
 </script>
 
 <template>
@@ -96,19 +57,7 @@ const cancelEdit = () => {
     <div class="todo-item" :class="{ 'todo-item--completed': task.is_completed }">
       <!-- Checkbox -->
       <div class="todo-item__checkbox" @click="handleToggle">
-        <svg
-          v-if="task.is_completed"
-          xmlns="http://www.w3.org/2000/svg"
-          class="todo-item__check-icon"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        <IconCheck v-if="task.is_completed" class="todo-item__check-icon" />
       </div>
 
       <!-- Content / Edit Input -->
@@ -141,36 +90,12 @@ const cancelEdit = () => {
         @click="handleToggleExpand"
         title="展开子任务"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="todo-item__expand-icon"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M7.293 4.293a1 1 0 011.414 0L14 9.586l-5.293 5.293a1 1 0 01-1.414-1.414L11.586 9.5 7.293 5.207a1 1 0 010-1.414z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        <IconChevron class="todo-item__expand-icon" />
       </button>
 
       <!-- Delete Button -->
       <button v-if="!isEditing" class="todo-item__delete" @click="handleDelete">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="todo-item__delete-icon"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-          />
-        </svg>
+        <IconTrash class="todo-item__delete-icon" />
       </button>
     </div>
 

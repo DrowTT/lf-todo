@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
-import { useAutoHeight } from '../composables/useAutoHeight'
+import { useInlineEdit } from '../composables/useInlineEdit'
+import IconCheck from './icons/IconCheck.vue'
+import IconXMark from './icons/IconXMark.vue'
 
 const { confirm } = useConfirm()
 
@@ -12,77 +14,27 @@ const props = defineProps<{
   parentId: number
 }>()
 
-// 编辑状态
-const isEditing = ref(false)
-const editContent = ref('')
-const editInputRef = ref<HTMLTextAreaElement | null>(null)
-
-const handleToggle = () => {
-  store.toggleSubTask(props.task.id, props.parentId)
-}
+const handleToggle = () => store.toggleSubTask(props.task.id, props.parentId)
 
 const handleDelete = async () => {
-  // UX1：子任务删除也需确认
   const ok = await confirm('确认删除该子任务吗？')
   if (ok) store.deleteSubTask(props.task.id, props.parentId)
 }
 
-const { adjustHeight } = useAutoHeight(editInputRef)
-
-// 双击进入编辑模式
-const handleDblClick = () => {
-  isEditing.value = true
-  editContent.value = props.task.content
-  nextTick(() => {
-    adjustHeight()
-    editInputRef.value?.focus()
-    editInputRef.value?.select()
-  })
-}
-
-// 保存编辑
-const saveEdit = () => {
-  const trimmed = editContent.value.trim()
-  if (trimmed && trimmed !== props.task.content) {
-    store.updateSubTaskContent(props.task.id, props.parentId, trimmed)
-  }
-  isEditing.value = false
-}
-
-// UX4：blur 时内容未变化则直接取消，不触发 IPC
-const onBlur = () => {
-  const trimmed = editContent.value.trim()
-  if (!trimmed || trimmed === props.task.content) {
-    cancelEdit()
-  } else {
-    saveEdit()
-  }
-}
-
-// 取消编辑
-const cancelEdit = () => {
-  isEditing.value = false
-  editContent.value = props.task.content
-}
+const editInputRef = ref<HTMLTextAreaElement | null>(null)
+const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEdit, onBlur } =
+  useInlineEdit(
+    editInputRef,
+    () => props.task.content,
+    (content) => store.updateSubTaskContent(props.task.id, props.parentId, content)
+  )
 </script>
 
 <template>
   <div class="subtask-item" :class="{ 'subtask-item--completed': task.is_completed }">
     <!-- Checkbox -->
     <div class="subtask-item__checkbox" @click="handleToggle">
-      <svg
-        v-if="task.is_completed"
-        xmlns="http://www.w3.org/2000/svg"
-        class="subtask-item__check-icon"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-          clip-rule="evenodd"
-        />
-      </svg>
+      <IconCheck v-if="task.is_completed" class="subtask-item__check-icon" />
     </div>
 
     <!-- Content / Edit Input -->
@@ -103,20 +55,7 @@ const cancelEdit = () => {
 
     <!-- Delete Button -->
     <button v-if="!isEditing" class="subtask-item__delete" @click="handleDelete">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="subtask-item__delete-icon"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M6 18L18 6M6 6l12 12"
-        />
-      </svg>
+      <IconXMark class="subtask-item__delete-icon" />
     </button>
   </div>
 </template>

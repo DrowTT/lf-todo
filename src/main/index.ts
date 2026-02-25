@@ -5,6 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import trayIcon from '../../resources/tray-icon.png?asset'
 import * as db from './db/database'
 import Store from 'electron-store'
+import { registerIpcHandlers } from './ipc'
 
 interface StoreType {
   windowBounds: {
@@ -145,33 +146,8 @@ app.whenReady().then(() => {
   // 初始化数据库
   db.initDatabase()
 
-  // 注册数据库 IPC 处理器
-  // Category 相关
-  ipcMain.handle('db:get-categories', async () => db.getAllCategories())
-  ipcMain.handle('db:create-category', async (_, name: string) => db.createCategory(name))
-  ipcMain.handle('db:update-category', async (_, id: number, name: string) =>
-    db.updateCategory(id, name)
-  )
-  ipcMain.handle('db:delete-category', async (_, id: number) => db.deleteCategory(id))
-
-  // Task 相关
-  ipcMain.handle('db:get-tasks', async (_, categoryId: number) => db.getTasksByCategory(categoryId))
-  ipcMain.handle('db:create-task', async (_, content: string, categoryId: number) =>
-    db.createTask(content, categoryId)
-  )
-  ipcMain.handle('db:update-task', async (_, id: number, updates: any) =>
-    db.updateTask(id, updates)
-  )
-  ipcMain.handle('db:delete-task', async (_, id: number) => db.deleteTask(id))
-  ipcMain.handle('db:toggle-task', async (_, id: number) => db.toggleTaskComplete(id))
-  ipcMain.handle('db:delete-tasks', async (_, ids: number[]) => db.deleteTasks(ids))
-  ipcMain.handle('db:get-pending-counts', async () => db.getPendingTaskCounts())
-
-  // SubTask 相关
-  ipcMain.handle('db:get-subtasks', async (_, parentId: number) => db.getSubTasks(parentId))
-  ipcMain.handle('db:create-subtask', async (_, content: string, parentId: number) =>
-    db.createSubTask(content, parentId)
-  )
+  // 注册所有数据库 IPC 处理器
+  registerIpcHandlers()
 
   createWindow()
 
