@@ -10,7 +10,7 @@ interface Category {
 interface Task {
   id: number
   content: string
-  is_completed: number
+  is_completed: boolean
   category_id: number
   order_index: number
   created_at: number
@@ -36,7 +36,10 @@ interface API {
     // Task 操作
     getTasks: (categoryId: number) => Promise<Task[]>
     createTask: (content: string, categoryId: number) => Promise<Task>
-    updateTask: (id: number, updates: any) => Promise<void>
+    updateTask: (
+      id: number,
+      updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
+    ) => Promise<void>
     deleteTask: (id: number) => Promise<void>
     deleteTasks: (ids: number[]) => Promise<void>
     toggleTaskComplete: (id: number) => Promise<void>

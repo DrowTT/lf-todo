@@ -13,8 +13,89 @@ function getDb(): Database.Database {
   return db
 }
 
+// ==================== 迁移机制 ====================
+
+interface Migration {
+  version: number
+  description: string
+  /** 向上迁移的 SQL 语句（可含多条，用分号分隔） */
+  up: string
+}
+
 /**
- * 初始化数据库并创建表结构
+ * 按版本号有序排列的迁移脚本。
+ * 新增字段/表时，追加一条新 Migration 记录即可；
+ * 当前版本由 PRAGMA user_version 持久化存储，重启后自动跳过已执行的迁移。
+ *
+ * 行业标准：version-based migration（参考 Flyway / Liquibase 思路的轻量实现）
+ */
+const migrations: Migration[] = [
+  {
+    version: 1,
+    description: '创建 categories 表',
+    up: `
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        order_index INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `
+  },
+  {
+    version: 2,
+    description: '创建 tasks 表（含外键约束）',
+    up: `
+      CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        is_completed INTEGER DEFAULT 0,
+        category_id INTEGER NOT NULL,
+        order_index INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+      )
+    `
+  },
+  {
+    version: 3,
+    description: '为旧版 tasks 表补充 parent_id 字段（新建库中 v2 已包含，此迁移为兼容存量数据库）',
+    up: `ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE`
+  }
+]
+
+/**
+ * 按序执行未执行过的迁移脚本，并更新 PRAGMA user_version。
+ * - 利用 SQLite 内置的 user_version pragma 存储当前 schema 版本，无需额外迁移表。
+ * - 每条迁移在独立事务中执行，失败时自动回滚并向上抛出。
+ */
+function runMigrations(database: Database.Database): void {
+  const currentVersion = (database.pragma('user_version') as { user_version: number }[])[0]
+    .user_version
+
+  const pending = migrations.filter((m) => m.version > currentVersion)
+  if (pending.length === 0) return
+
+  for (const m of pending) {
+    // 将每条迁移包裹在事务中，保证原子性
+    database.transaction(() => {
+      // v3 的 ALTER TABLE 在新建库上会失败（列已存在），用 try/catch 安全跳过
+      try {
+        database.exec(m.up)
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        // 仅忽略「列已存在」错误，其他错误继续向上抛出
+        if (!msg.includes('duplicate column name')) throw e
+      }
+      database.pragma(`user_version = ${m.version}`)
+      console.log(`[DB 迁移] v${m.version}: ${m.description}`)
+    })()
+  }
+}
+
+/**
+ * 初始化数据库：打开连接 → 启用外键 → 执行迁移 → 准备 statements
  */
 export function initDatabase(): void {
   const userDataPath = app.getPath('userData')
@@ -22,39 +103,17 @@ export function initDatabase(): void {
 
   db = new Database(dbPath)
 
-  // 启用外键约束
+  // 启用外键约束（必须在迁移前设置）
   db.pragma('foreign_keys = ON')
 
-  // 创建分类表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      order_index INTEGER DEFAULT 0,
-      created_at INTEGER DEFAULT (strftime('%s', 'now'))
-    )
-  `)
+  // 按版本号顺序执行所有待执行迁移
+  runMigrations(db)
 
-  // 创建任务表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT NOT NULL,
-      is_completed INTEGER DEFAULT 0,
-      category_id INTEGER NOT NULL,
-      order_index INTEGER DEFAULT 0,
-      created_at INTEGER DEFAULT (strftime('%s', 'now')),
-      parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-    )
-  `)
-
-  // 对已有数据库做字段迁移（parent_id 可能不存在）
-  const columns = db.pragma('table_info(tasks)') as { name: string }[]
-  const hasParentId = columns.some((col) => col.name === 'parent_id')
-  if (!hasParentId) {
-    db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE')
-    console.log('迁移成功: tasks 表已添加 parent_id 字段')
+  // 初始化 updateTask 专用 prepared statements（避免每次调用重复 prepare）
+  stmts = {
+    updateContent: db.prepare('UPDATE tasks SET content = ? WHERE id = ?'),
+    updateCompleted: db.prepare('UPDATE tasks SET is_completed = ? WHERE id = ?'),
+    updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?')
   }
 
   console.log('数据库初始化成功:', dbPath)
@@ -207,29 +266,12 @@ export function getTaskById(id: number): Task | undefined {
   return raw ? mapTask(raw as Record<string, unknown>) : undefined
 }
 
-// ─── updateTask 独立 prepare 语句（优化 #13，避免动态拼 SQL 导致 prepared cache 失效）
-// 延迟初始化，避免在 db 未就绪时执行
-let _stmtUpdateContent: Database.Statement | null = null
-let _stmtUpdateIsCompleted: Database.Statement | null = null
-let _stmtUpdateOrderIndex: Database.Statement | null = null
-
-function getUpdateContentStmt(): Database.Statement {
-  if (!_stmtUpdateContent)
-    _stmtUpdateContent = getDb().prepare('UPDATE tasks SET content = ? WHERE id = ?')
-  return _stmtUpdateContent
-}
-
-function getUpdateIsCompletedStmt(): Database.Statement {
-  if (!_stmtUpdateIsCompleted)
-    _stmtUpdateIsCompleted = getDb().prepare('UPDATE tasks SET is_completed = ? WHERE id = ?')
-  return _stmtUpdateIsCompleted
-}
-
-function getUpdateOrderIndexStmt(): Database.Statement {
-  if (!_stmtUpdateOrderIndex)
-    _stmtUpdateOrderIndex = getDb().prepare('UPDATE tasks SET order_index = ? WHERE id = ?')
-  return _stmtUpdateOrderIndex
-}
+// ─── updateTask 专用 statements（在 initDatabase() 尾部一次性 prepare，优化 #13）
+let stmts: {
+  updateContent: Database.Statement
+  updateCompleted: Database.Statement
+  updateOrderIndex: Database.Statement
+} | null = null
 
 /**
  * 更新任务（拆分为独立 prepare 语句以复用缓存）
@@ -238,15 +280,16 @@ export function updateTask(
   id: number,
   updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
 ): void {
+  if (!stmts) throw new Error('数据库未初始化')
   if (updates.content !== undefined) {
-    getUpdateContentStmt().run(updates.content, id)
+    stmts.updateContent.run(updates.content, id)
   }
   if (updates.is_completed !== undefined) {
     // 写入时将 boolean 转回 SQLite INTEGER（优化 #1）
-    getUpdateIsCompletedStmt().run(updates.is_completed ? 1 : 0, id)
+    stmts.updateCompleted.run(updates.is_completed ? 1 : 0, id)
   }
   if (updates.order_index !== undefined) {
-    getUpdateOrderIndexStmt().run(updates.order_index, id)
+    stmts.updateOrderIndex.run(updates.order_index, id)
   }
 }
 
@@ -287,9 +330,5 @@ export function getPendingTaskCounts(): Record<number, number> {
     'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 AND parent_id IS NULL GROUP BY category_id'
   )
   const rows = stmt.all() as { category_id: number; count: number }[]
-  const result: Record<number, number> = {}
-  for (const row of rows) {
-    result[row.category_id] = row.count
-  }
-  return result
+  return Object.fromEntries(rows.map((r) => [r.category_id, r.count]))
 }

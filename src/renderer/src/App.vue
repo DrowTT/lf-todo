@@ -3,6 +3,7 @@ import TitleBar from './layout/TitleBar.vue'
 import CategoryList from './components/CategoryList.vue'
 import TodoList from './components/TodoList.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import ToastMessage from './components/ToastMessage.vue'
 import { useConfirm } from './composables/useConfirm'
 import { useSidebarResize } from './composables/useSidebarResize'
 
@@ -26,6 +27,8 @@ const { sidebarWidth, startResize } = useSidebarResize()
       @confirm="handleConfirm"
       @cancel="handleCancel"
     />
+    <!-- 全局操作结果提示 -->
+    <ToastMessage />
   </div>
 </template>
 

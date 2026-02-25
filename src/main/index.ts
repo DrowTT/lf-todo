@@ -27,6 +27,8 @@ if (!gotTheLock) {
 
 // 模块级引用，供 second-instance 事件使用
 let mainWindow: BrowserWindow | null = null
+// 模块级引用，防止 JavaScript GC 回收导致托盘图标消失（Electron 官方已知问题）
+let tray: Tray | null = null
 
 function createWindow(): void {
   // Restore window bounds
@@ -46,7 +48,7 @@ function createWindow(): void {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true // 启用沙箱：Electron 安全最佳实践第一条，限制渲染进程的系统访问能力
     }
   })
 
@@ -69,7 +71,7 @@ function createWindow(): void {
   let isQuitting = false
 
   // 创建系统托盘
-  const tray = new Tray(trayIcon)
+  tray = new Tray(trayIcon)
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '显示',

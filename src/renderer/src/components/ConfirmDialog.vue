@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps<{
   message: string
@@ -11,6 +11,8 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const containerRef = ref<HTMLElement | null>(null)
+
 const handleConfirm = () => {
   emit('confirm')
 }
@@ -19,29 +21,26 @@ const handleCancel = () => {
   emit('cancel')
 }
 
-const handleKeydown = (e: KeyboardEvent) => {
-  if (!props.visible) return
-  if (e.key === 'Enter') {
-    handleConfirm()
-  } else if (e.key === 'Escape') {
-    handleCancel()
+// 弹窗出现时自动聚焦到容器，使内部 keydown 能够捕获键盘事件
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) nextTick(() => containerRef.value?.focus())
   }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleKeydown)
-})
+)
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="dialog">
-      <div v-if="visible" class="dialog-overlay" @click="handleCancel">
-        <div class="dialog-container" @click.stop>
+      <div
+        v-if="visible"
+        class="dialog-overlay"
+        @click="handleCancel"
+        @keydown.enter.prevent="handleConfirm"
+        @keydown.escape="handleCancel"
+      >
+        <div class="dialog-container" @click.stop tabindex="-1" ref="containerRef">
           <div class="dialog-content">
             <p class="dialog-message">{{ message }}</p>
             <div class="dialog-actions">

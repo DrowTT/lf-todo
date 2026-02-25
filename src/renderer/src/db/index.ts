@@ -21,8 +21,8 @@ export interface Task {
   subtask_done: number
 }
 
-/** 将 SQLite 返回的原始行（is_completed 为 0/1）统一映射为 boolean */
-const normalize = (t: any): Task => ({ ...t, is_completed: !!t.is_completed })
+// 主进程 mapTask 出口已完成 is_completed 的 boolean 映射（SQLite 0/1 → boolean），
+// IPC structuredClone 序列化不会将 boolean 还原为 0/1，renderer 侧无需再次 normalize。
 
 // 数据库 API 代理（从 window.api.db）
 export const db = {
@@ -34,10 +34,9 @@ export const db = {
   deleteCategory: (id: number) => window.api.db.deleteCategory(id) as Promise<void>,
 
   // Task 操作
-  getTasks: (categoryId: number) =>
-    (window.api.db.getTasks(categoryId) as Promise<any[]>).then((rows) => rows.map(normalize)),
+  getTasks: (categoryId: number) => window.api.db.getTasks(categoryId) as Promise<Task[]>,
   createTask: (content: string, categoryId: number) =>
-    (window.api.db.createTask(content, categoryId) as Promise<any>).then(normalize),
+    window.api.db.createTask(content, categoryId) as Promise<Task>,
   updateTask: (id: number, updates: Partial<Task>) =>
     window.api.db.updateTask(id, updates) as Promise<void>,
   deleteTask: (id: number) => window.api.db.deleteTask(id) as Promise<void>,
@@ -47,8 +46,7 @@ export const db = {
     window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>,
 
   // SubTask 操作
-  getSubTasks: (parentId: number) =>
-    (window.api.db.getSubTasks(parentId) as Promise<any[]>).then((rows) => rows.map(normalize)),
+  getSubTasks: (parentId: number) => window.api.db.getSubTasks(parentId) as Promise<Task[]>,
   createSubTask: (content: string, parentId: number) =>
-    (window.api.db.createSubTask(content, parentId) as Promise<any>).then(normalize)
+    window.api.db.createSubTask(content, parentId) as Promise<Task>
 }

@@ -3,7 +3,8 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 const MIN_SIDEBAR_WIDTH = 100 // 左侧最小宽度
 const MIN_TODO_WIDTH = 300 // 右侧最小宽度
 const DEFAULT_WIDTH = 180
-const STORAGE_KEY = 'sidebar-width'
+// 统一使用 lf-todo: 前缀（与 categoryStore、subtask.ts 保持一致的命名规范）
+const STORAGE_KEY = 'lf-todo:sidebar-width'
 
 /**
  * 侧边栏拖拽 resize composable

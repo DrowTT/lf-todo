@@ -8,34 +8,29 @@ import type { Task } from './db/database'
  */
 export function registerIpcHandlers(): void {
   // ─── Category ──────────────────────────────────────────────────
-  ipcMain.handle('db:get-categories', async () => db.getAllCategories())
-  ipcMain.handle('db:create-category', async (_, name: string) => db.createCategory(name))
-  ipcMain.handle('db:update-category', async (_, id: number, name: string) =>
-    db.updateCategory(id, name)
-  )
-  ipcMain.handle('db:delete-category', async (_, id: number) => db.deleteCategory(id))
+  ipcMain.handle('db:get-categories', () => db.getAllCategories())
+  ipcMain.handle('db:create-category', (_, name: string) => db.createCategory(name))
+  ipcMain.handle('db:update-category', (_, id: number, name: string) => db.updateCategory(id, name))
+  ipcMain.handle('db:delete-category', (_, id: number) => db.deleteCategory(id))
 
   // ─── Task ───────────────────────────────────────────────────────
-  ipcMain.handle('db:get-tasks', async (_, categoryId: number) => db.getTasksByCategory(categoryId))
-  ipcMain.handle('db:create-task', async (_, content: string, categoryId: number) =>
+  ipcMain.handle('db:get-tasks', (_, categoryId: number) => db.getTasksByCategory(categoryId))
+  ipcMain.handle('db:create-task', (_, content: string, categoryId: number) =>
     db.createTask(content, categoryId)
   )
   ipcMain.handle(
     'db:update-task',
-    async (
-      _,
-      id: number,
-      updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
-    ) => db.updateTask(id, updates)
+    (_, id: number, updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>) =>
+      db.updateTask(id, updates)
   )
-  ipcMain.handle('db:delete-task', async (_, id: number) => db.deleteTask(id))
-  ipcMain.handle('db:toggle-task', async (_, id: number) => db.toggleTaskComplete(id))
-  ipcMain.handle('db:delete-tasks', async (_, ids: number[]) => db.deleteTasks(ids))
-  ipcMain.handle('db:get-pending-counts', async () => db.getPendingTaskCounts())
+  ipcMain.handle('db:delete-task', (_, id: number) => db.deleteTask(id))
+  ipcMain.handle('db:toggle-task', (_, id: number) => db.toggleTaskComplete(id))
+  ipcMain.handle('db:delete-tasks', (_, ids: number[]) => db.deleteTasks(ids))
+  ipcMain.handle('db:get-pending-counts', () => db.getPendingTaskCounts())
 
   // ─── SubTask ────────────────────────────────────────────────────
-  ipcMain.handle('db:get-subtasks', async (_, parentId: number) => db.getSubTasks(parentId))
-  ipcMain.handle('db:create-subtask', async (_, content: string, parentId: number) =>
+  ipcMain.handle('db:get-subtasks', (_, parentId: number) => db.getSubTasks(parentId))
+  ipcMain.handle('db:create-subtask', (_, content: string, parentId: number) =>
     db.createSubTask(content, parentId)
   )
 }
