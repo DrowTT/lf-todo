@@ -18,12 +18,22 @@ interface StoreType {
 
 const store = new Store<StoreType>()
 
+// 单实例锁：防止重复启动
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  // 已有实例在运行，直接退出当前进程
+  app.quit()
+}
+
+// 模块级引用，供 second-instance 事件使用
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   // Restore window bounds
   const bounds = store.get('windowBounds')
 
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  // 用局部 const win 创建窗口，避免 TS 对模块级 null 的误判
+  const win = new BrowserWindow({
     width: bounds?.width || 900,
     height: bounds?.height || 670,
     x: bounds?.x,
@@ -40,15 +50,18 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  // 赋值给模块级变量，供 second-instance 事件使用
+  mainWindow = win
+
+  win.on('ready-to-show', () => {
+    win.show()
     // 开发模式下打开 DevTools
     if (is.dev) {
-      mainWindow.webContents.openDevTools()
+      win.webContents.openDevTools()
     }
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
@@ -61,7 +74,7 @@ function createWindow(): void {
     {
       label: '显示',
       click: () => {
-        mainWindow.show()
+        win.show()
       }
     },
     {
@@ -78,57 +91,66 @@ function createWindow(): void {
 
   // 托盘图标点击事件 - 显示并聚焦窗口
   tray.on('click', () => {
-    mainWindow.show()
-    mainWindow.focus()
+    win.show()
+    win.focus()
   })
 
   // 窗口关闭时隐藏而不是退出
-  mainWindow.on('close', (event) => {
+  win.on('close', (event) => {
     // Save window bounds before hiding or closing
-    if (!mainWindow.isDestroyed()) {
-      const bounds = mainWindow.getBounds()
+    if (!win.isDestroyed()) {
+      const bounds = win.getBounds()
       store.set('windowBounds', bounds)
     }
 
     if (!isQuitting) {
       event.preventDefault()
-      mainWindow.hide()
+      win.hide()
     }
     return false
   })
 
   // 窗口控制 IPC 处理器
   ipcMain.on('window:minimize', () => {
-    mainWindow.minimize()
+    win.minimize()
   })
 
   ipcMain.on('window:close', () => {
     // Save bounds when manual close triggered from UI
-    if (!mainWindow.isDestroyed()) {
-      const bounds = mainWindow.getBounds()
+    if (!win.isDestroyed()) {
+      const bounds = win.getBounds()
       store.set('windowBounds', bounds)
     }
-    mainWindow.hide() // 改为隐藏窗口而不是关闭
+    win.hide() // 改为隐藏窗口而不是关闭
   })
 
   ipcMain.on('window:toggle-always-on-top', () => {
-    const flag = !mainWindow.isAlwaysOnTop()
-    mainWindow.setAlwaysOnTop(flag)
-    mainWindow.webContents.send('window:always-on-top-changed', flag)
+    const flag = !win.isAlwaysOnTop()
+    win.setAlwaysOnTop(flag)
+    win.webContents.send('window:always-on-top-changed', flag)
   })
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
+// 当第二个实例尝试启动时，将已有窗口显示并聚焦
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
+
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
