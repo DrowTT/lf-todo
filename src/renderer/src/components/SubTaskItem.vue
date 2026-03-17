@@ -4,8 +4,7 @@ import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
-import IconCheck from './icons/IconCheck.vue'
-import IconXMark from './icons/IconXMark.vue'
+import { Check, X } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
 
@@ -34,7 +33,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   <div class="subtask-item" :class="{ 'subtask-item--completed': task.is_completed }">
     <!-- Checkbox -->
     <div class="subtask-item__checkbox" @click="handleToggle">
-      <IconCheck v-if="task.is_completed" class="subtask-item__check-icon" />
+      <Check v-if="task.is_completed" class="subtask-item__check-icon" :size="9" />
     </div>
 
     <!-- Content / Edit Input -->
@@ -55,7 +54,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
     <!-- Delete Button -->
     <button v-if="!isEditing" class="subtask-item__delete" @click="handleDelete">
-      <IconXMark class="subtask-item__delete-icon" />
+      <X class="subtask-item__delete-icon" :size="11" />
     </button>
   </div>
 </template>
@@ -67,12 +66,11 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   display: flex;
   align-items: flex-start;
   gap: $spacing-xs;
-  padding: 4px $spacing-sm 4px 28px; // 左侧缩进 28px 形成层级感
-  border-bottom: 1px solid rgba($border-color, 0.6);
+  padding: $spacing-xs $spacing-md $spacing-xs $spacing-sm;
   transition: background-color $transition-fast;
 
   &:hover {
-    background: rgba($bg-hover, 0.5);
+    background: $accent-soft;
 
     .subtask-item__delete {
       opacity: 1;
@@ -82,16 +80,33 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   &--completed {
     .subtask-item__content {
       color: $text-muted;
+      text-decoration: line-through;
+      text-decoration-color: rgba($text-muted, 0.3);
+    }
+
+    .subtask-item__checkbox {
+      background: $text-muted;
+      border-color: $text-muted;
+
+      // 已完成状态 hover 应加深颜色
+      &:hover {
+        background: darken($text-muted, 12%);
+        border-color: darken($text-muted, 12%);
+      }
+    }
+
+    .subtask-item__check-icon {
+      color: #FFFFFF;
     }
   }
 
   &__checkbox {
     flex-shrink: 0;
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     margin-top: 2px;
-    border: 1px solid $text-secondary;
-    border-radius: $radius-sm;
+    border: 1.5px solid $border-light;
+    border-radius: 3px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -99,19 +114,14 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     background: transparent;
     transition: all $transition-fast;
 
-    .subtask-item--completed & {
-      border-color: $text-muted;
+    &:hover {
+      border-color: $accent-color;
     }
   }
 
   &__check-icon {
     width: 9px;
     height: 9px;
-    color: $text-secondary;
-
-    .subtask-item--completed & {
-      color: $text-muted;
-    }
   }
 
   &__content {
@@ -134,7 +144,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     color: $text-primary;
     font-size: $font-xs;
     line-height: 1.5;
-    padding: 0 $spacing-xs;
+    padding: 1px $spacing-sm;
     border: 1px solid $accent-color;
     border-radius: $radius-sm;
     outline: none;
@@ -142,6 +152,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     resize: none;
     overflow: hidden;
     font-family: inherit;
+    box-shadow: 0 0 0 2px $accent-soft;
   }
 
   &__delete {
@@ -153,9 +164,11 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     color: $text-muted;
     cursor: pointer;
     transition: all $transition-fast;
+    border-radius: $radius-sm;
 
     &:hover {
       color: $danger-color;
+      background: rgba($danger-color, 0.08);
     }
   }
 

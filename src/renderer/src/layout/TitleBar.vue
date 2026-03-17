@@ -10,17 +10,17 @@
         @click="handleTogglePin"
         title="置顶"
       >
-        <IconPin />
+        <Pin :size="15" style="transform: rotate(45deg)" />
       </button>
       <button
         class="title-bar__btn title-bar__btn--minimize"
         @click="handleMinimize"
         title="最小化"
       >
-        <IconMinimize />
+        <Minus :size="14" />
       </button>
       <button class="title-bar__btn title-bar__btn--close" @click="handleClose" title="关闭">
-        <IconClose />
+        <X :size="14" />
       </button>
     </div>
   </div>
@@ -28,9 +28,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import IconPin from '@renderer/components/icons/IconPin.vue'
-import IconMinimize from '@renderer/components/icons/IconMinimize.vue'
-import IconClose from '@renderer/components/icons/IconClose.vue'
+import { Pin, Minus, X } from 'lucide-vue-next'
 
 const isAlwaysOnTop = ref(false)
 
@@ -71,8 +69,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 30px;
-  background: $bg-secondary;
+  height: 36px;
+  background: $bg-sidebar;
   color: $text-primary;
   user-select: none;
   border-bottom: 1px solid $border-color;
@@ -82,13 +80,14 @@ onMounted(() => {
     display: flex;
     align-items: center;
     height: 100%;
-    padding-left: $spacing-md;
+    padding-left: $spacing-lg;
     -webkit-app-region: drag;
   }
 
   &__title {
     font-size: $font-sm;
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.5px;
     color: $text-secondary;
   }
 
@@ -102,28 +101,29 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
+    width: 46px;
     height: 100%;
     background: transparent;
     border: none;
-    color: $text-primary;
+    color: $text-muted;
     font-size: $font-sm;
     cursor: pointer;
-    transition: background-color $transition-fast;
+    transition: all $transition-fast;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(0, 0, 0, 0.06);
+      color: $text-primary;
     }
 
     &--pin {
       &.is-active {
-        // background: rgba(76, 175, 80, 0.25);
-        background: rgba(61, 79, 92, 0.75);
-        color: $success-color;
+        background: $accent-soft;
+        color: $accent-color;
       }
 
       &:hover {
-        background: rgba(61, 79, 92, 0.35);
+        background: $accent-soft;
+        color: $accent-color;
       }
     }
 

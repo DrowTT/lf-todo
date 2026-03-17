@@ -11,42 +11,46 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const containerRef = ref<HTMLElement | null>(null)
+const contentRef = ref<HTMLElement | null>(null)
 
-const handleConfirm = () => {
+const handleConfirm = (): void => {
   emit('confirm')
 }
 
-const handleCancel = () => {
+const handleCancel = (): void => {
   emit('cancel')
 }
 
-// 弹窗出现时自动聚焦到容器，使内部 keydown 能够捕获键盘事件
+// 弹窗出现时自动聚焦，使 keydown 能捕获
 watch(
   () => props.visible,
   (val) => {
-    if (val) nextTick(() => containerRef.value?.focus())
+    if (val) nextTick(() => contentRef.value?.focus())
   }
 )
 </script>
 
 <template>
   <Teleport to="body">
-    <Transition name="dialog">
+    <!-- 遮罩层：独立元素，只做 opacity 动画，无 backdrop-filter -->
+    <Transition name="fade">
+      <div v-if="visible" class="dialog-overlay" @click="handleCancel" />
+    </Transition>
+
+    <!-- 弹窗容器：独立元素，只做 transform 动画，不做 opacity -->
+    <Transition name="slide">
       <div
         v-if="visible"
-        class="dialog-overlay"
-        @click="handleCancel"
+        class="dialog-wrapper"
+        @click.self="handleCancel"
         @keydown.enter.prevent="handleConfirm"
         @keydown.escape="handleCancel"
       >
-        <div class="dialog-container" @click.stop tabindex="-1" ref="containerRef">
-          <div class="dialog-content">
-            <p class="dialog-message">{{ message }}</p>
-            <div class="dialog-actions">
-              <button @click="handleCancel" class="dialog-btn dialog-btn--cancel">取消</button>
-              <button @click="handleConfirm" class="dialog-btn dialog-btn--confirm">确认</button>
-            </div>
+        <div ref="contentRef" class="dialog-content" tabindex="-1" @click.stop>
+          <p class="dialog-message">{{ message }}</p>
+          <div class="dialog-actions">
+            <button class="dialog-btn dialog-btn--cancel" @click="handleCancel">取消</button>
+            <button class="dialog-btn dialog-btn--confirm" @click="handleConfirm">确认</button>
           </div>
         </div>
       </div>
@@ -57,34 +61,48 @@ watch(
 <style scoped lang="scss">
 @use '../styles/variables' as *;
 
+/* 遮罩层 — 独立层，自带 backdrop-filter 模糊整个背景 */
 .dialog-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background-color: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 9998;
+}
+
+/* 弹窗外层定位容器 — 不对 opacity 动画，所以不影响子元素的 backdrop-filter */
+.dialog-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
 }
 
-.dialog-container {
-  min-width: 300px;
-  max-width: 400px;
-}
-
+/* 弹窗本体 — 毛玻璃效果 */
 .dialog-content {
-  background: $bg-secondary;
-  border: 1px solid $border-color;
-  border-radius: $radius-md;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  padding: $spacing-xl;
+  min-width: 320px;
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: $radius-xl;
+  box-shadow: $shadow-lg;
+  padding: $spacing-2xl;
+  outline: none;
 }
 
 .dialog-message {
-  font-size: $font-md;
+  font-size: $font-lg;
   color: $text-primary;
   line-height: 1.6;
   margin-bottom: $spacing-xl;
@@ -98,51 +116,73 @@ watch(
 }
 
 .dialog-btn {
-  padding: $spacing-sm $spacing-lg;
-  border-radius: $radius-sm;
+  padding: $spacing-sm $spacing-xl;
+  border-radius: $radius-md;
   font-size: $font-sm;
+  font-weight: 500;
   cursor: pointer;
-  transition: all $transition-fast;
-  border: 1px solid $border-color;
-  background: transparent;
-  color: $text-secondary;
-
-  &:hover {
-    background: $bg-hover;
-    color: $text-primary;
-  }
+  transition: all $transition-normal;
+  border: none;
 
   &--cancel {
-    // 使用默认样式
+    background: rgba(0, 0, 0, 0.05);
+    color: $text-secondary;
+    border: 1px solid $border-color;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: $text-primary;
+    }
   }
 
   &--confirm {
-    color: $text-primary;
-    border-color: $text-secondary;
+    background: $accent-color;
+    color: white;
 
     &:hover {
-      background: $bg-hover;
-      border-color: $text-primary;
+      background: $accent-hover;
+      box-shadow: 0 0 12px $accent-glow;
     }
   }
 }
 
-// 过渡动画
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity $transition-normal;
-
-  .dialog-container {
-    transition: transform $transition-normal;
-  }
+/* 遮罩层动画 — 用 background-color 过渡（入场），opacity+background（离场） */
+.fade-enter-active {
+  transition: background-color $transition-slow;
 }
 
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
+.fade-leave-active {
+  transition:
+    background-color 0.2s ease,
+    opacity 0.2s ease;
+}
 
-  .dialog-container {
-    transform: scale(0.9);
-  }
+.fade-enter-from {
+  background-color: transparent;
+}
+
+.fade-leave-to {
+  background-color: transparent;
+  opacity: 0;
+}
+
+/* 弹窗动画 — 入场：仅 transform；离场：transform + opacity 同步淡出 */
+.slide-enter-active {
+  transition: transform $transition-spring;
+}
+
+.slide-leave-active {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.slide-enter-from {
+  transform: translateY(12px) scale(0.97);
+}
+
+.slide-leave-to {
+  transform: translateY(8px) scale(0.97);
+  opacity: 0;
 }
 </style>

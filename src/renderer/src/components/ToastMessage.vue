@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleAlert, CircleCheck, Info } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 
 const { message, hide } = useToast()
@@ -8,21 +9,9 @@ const { message, hide } = useToast()
   <Transition name="toast">
     <div v-if="message" class="toast" :class="`toast--${message.type}`" @click="hide">
       <span class="toast-icon">
-        <svg v-if="message.type === 'error'" viewBox="0 0 16 16" fill="currentColor">
-          <path
-            d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 10.5h-1.5v-1.5h1.5v1.5zm0-3h-1.5V4h1.5v4.5z"
-          />
-        </svg>
-        <svg v-else-if="message.type === 'success'" viewBox="0 0 16 16" fill="currentColor">
-          <path
-            d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm3.22 5.03-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 3.47-3.47a.75.75 0 1 1 1.06 1.06z"
-          />
-        </svg>
-        <svg v-else viewBox="0 0 16 16" fill="currentColor">
-          <path
-            d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 10.5h-1.5v-1.5h1.5v1.5zm0-3h-1.5V5h1.5v3.5z"
-          />
-        </svg>
+        <CircleAlert v-if="message.type === 'error'" :size="16" />
+        <CircleCheck v-else-if="message.type === 'success'" :size="16" />
+        <Info v-else :size="16" />
       </span>
       <span class="toast-text">{{ message.text }}</span>
     </div>
@@ -40,23 +29,30 @@ const { message, hide } = useToast()
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  padding: $spacing-sm $spacing-lg;
+  padding: $spacing-md $spacing-lg;
   border-radius: $radius-lg;
   font-size: $font-md;
-  color: #fff;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  max-width: 320px;
+  max-width: 360px;
   word-break: break-word;
 
+  // 通用毛玻璃底层
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: $shadow-lg;
+
   &--error {
-    background: #c0392b;
+    background: rgba(239, 68, 68, 0.85);
+    color: white;
   }
   &--success {
-    background: #27ae60;
+    background: rgba(34, 197, 94, 0.85);
+    color: white;
   }
   &--info {
-    background: $accent-color;
+    background: rgba(59, 130, 246, 0.85);
+    color: white;
   }
 }
 
@@ -70,16 +66,21 @@ const { message, hide } = useToast()
   }
 }
 
+.toast-text {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 // 进出动画
 .toast-enter-active,
 .toast-leave-active {
   transition:
-    opacity $transition-normal,
-    transform $transition-normal;
+    opacity $transition-slow,
+    transform $transition-spring;
 }
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(16px) scale(0.95);
 }
 </style>

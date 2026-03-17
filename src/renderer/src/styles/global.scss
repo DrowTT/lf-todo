@@ -1,11 +1,15 @@
-/* 
- * 全局样式入口
- * Sass 变量和自定义样式
+/**
+ * 全局样式入口 — Arctic Blue 主题
  */
 @use './variables' as *;
 
+/* Google Fonts 引入 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
 /* 全局重置 */
-* {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -19,12 +23,14 @@ body {
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: $bg-primary;
+  background: $bg-deep;
   color: $text-primary;
+  line-height: 1.5;
+  font-size: $font-md;
 }
 
 #app {
@@ -32,10 +38,22 @@ body {
   height: 100%;
 }
 
+/* 文本选区颜色 */
+::selection {
+  background: rgba($accent-color, 0.15);
+  color: $text-primary;
+}
+
+/* Focus-visible 全局高亮 */
+:focus-visible {
+  outline: 2px solid $accent-color;
+  outline-offset: 2px;
+}
+
 /* 全局滚动条样式 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -43,10 +61,32 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: $border-color;
-  border-radius: $radius-sm;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  transition: background $transition-normal;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: $border-light;
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* 全局链接重置 */
+a {
+  color: $accent-color;
+  text-decoration: none;
+}
+
+/* 全局按钮重置 */
+button {
+  font-family: inherit;
+}
+
+/* 列表重置 */
+ul, ol {
+  list-style: none;
+}
+
+/* 输入框重置 */
+input, textarea {
+  font-family: inherit;
 }

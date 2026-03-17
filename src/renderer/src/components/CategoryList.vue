@@ -3,7 +3,7 @@ import { ref, nextTick, onMounted } from 'vue'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useContextMenu } from '../composables/useContextMenu'
-import IconPlus from './icons/IconPlus.vue'
+import { Plus } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
 const {
@@ -75,7 +75,9 @@ const cancelRename = () => {
 
 <template>
   <div class="category-list">
-    <div class="category-list__header">分类</div>
+    <div class="category-list__header">
+      <span class="category-list__header-label">分类</span>
+    </div>
 
     <div class="category-list__content">
       <ul>
@@ -83,16 +85,20 @@ const cancelRename = () => {
           v-for="cat in store.categories"
           :key="cat.id"
           class="category-item"
-          :class="{ 'category-item--active': store.currentCategoryId === cat.id }"
-          @click="store.selectCategory(cat.id)"
+          :class="{
+            'category-item--active': store.currentCategoryId === cat.id,
+            'category-item--editing': editingCategoryId === cat.id
+          }"
+          @click="editingCategoryId !== cat.id && store.selectCategory(cat.id)"
           @contextmenu="openContextMenu($event, cat.id)"
         >
           <input
             v-if="editingCategoryId === cat.id"
             v-model="editingName"
-            class="category-list__input category-list__input--inline"
+            class="category-item__edit-input"
             maxlength="6"
             @keyup.enter="handleRenameConfirm"
+            @keyup.escape="cancelRename"
             @blur="handleRenameConfirm"
             @click.stop
             ref="editInputRef"
@@ -122,7 +128,7 @@ const cancelRename = () => {
 
     <div class="category-list__footer">
       <button v-if="!isAdding" @click="startAdding" class="category-list__add-btn">
-        <IconPlus class="category-list__add-icon" />
+        <Plus class="category-list__add-icon" :size="12" />
         新建分类
       </button>
     </div>
@@ -150,54 +156,63 @@ const cancelRename = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* width: 180px;  Removed for resizable sidebar */
-  background: $bg-secondary;
-  border-right: 1px solid $border-color;
+  background: $bg-sidebar;
+  border-right: 1px solid $border-subtle;
 
   &__header {
-    padding: $spacing-md;
+    padding: $spacing-lg $spacing-lg $spacing-sm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__header-label {
     font-size: $font-xs;
     font-weight: 600;
     color: $text-muted;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
   }
 
   &__content {
     flex: 1;
     overflow-y: auto;
+    padding: $spacing-xs 0;
   }
 
   &__footer {
-    padding: $spacing-sm;
-    border-top: 1px solid $border-color;
+    padding: $spacing-sm $spacing-md;
+    border-top: 1px solid $border-subtle;
   }
 
   &__add-btn {
     display: flex;
     align-items: center;
     width: 100%;
-    padding: $spacing-sm;
+    padding: $spacing-sm $spacing-md;
     background: transparent;
-    border: none;
+    border: 1px dashed $border-light;
+    border-radius: $radius-md;
     font-size: $font-sm;
-    color: $text-secondary;
+    color: $text-muted;
     cursor: pointer;
-    transition: color $transition-fast;
+    transition: all $transition-normal;
 
     &:hover {
-      color: $text-primary;
+      color: $accent-color;
+      border-color: $accent-color;
+      background: $accent-soft;
     }
   }
 
   &__add-icon {
     width: 12px;
     height: 12px;
-    margin-right: $spacing-xs;
+    margin-right: $spacing-sm;
   }
 
   &__input-wrapper {
-    padding: 0 $spacing-sm $spacing-xs;
+    padding: $spacing-xs $spacing-md;
   }
 
   &__input {
@@ -205,24 +220,19 @@ const cancelRename = () => {
     background: $bg-input;
     color: $text-primary;
     font-size: $font-sm;
-    padding: $spacing-xs $spacing-sm;
-    border: 1px solid $border-color;
-    border-radius: $radius-sm;
+    padding: $spacing-sm $spacing-md;
+    border: 1px solid $border-light;
+    border-radius: $radius-md;
     outline: none;
-    transition: border-color $transition-fast;
+    transition: all $transition-fast;
 
     &:focus {
       border-color: $accent-color;
+      box-shadow: 0 0 0 3px $accent-soft;
     }
 
     &::placeholder {
       color: $text-muted;
-    }
-
-    &--inline {
-      padding: 0 $spacing-xs;
-      height: 20px;
-      font-size: $font-sm;
     }
   }
 }
@@ -230,21 +240,35 @@ const cancelRename = () => {
 .category-item {
   display: flex;
   align-items: center;
-  padding: $spacing-sm $spacing-md;
+  padding: $spacing-sm $spacing-lg;
+  margin: 0 $spacing-sm;
   font-size: $font-sm;
   color: $text-secondary;
   cursor: pointer;
-  transition: all $transition-fast;
+  border-radius: $radius-md;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  position: relative;
 
   &:hover {
-    background: $bg-hover;
+    background: $accent-soft;
     color: $text-primary;
   }
 
   &--active {
-    background: $bg-hover;
+    background: $accent-soft;
     color: $text-primary;
-    border-left: 2px solid $accent-color;
+
+    // 左侧 accent 指示条
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 20%;
+      bottom: 20%;
+      width: 3px;
+      background: $accent-color;
+      border-radius: 0 2px 2px 0;
+    }
   }
 
   &__name {
@@ -256,29 +280,54 @@ const cancelRename = () => {
 
   &__badge {
     flex-shrink: 0;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    margin-left: $spacing-xs;
-    font-size: 11px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: $spacing-sm;
+    font-size: $font-xs;
     font-weight: 600;
-    line-height: 18px;
+    line-height: 20px;
     text-align: center;
     color: $accent-color;
-    background: rgba($accent-color, 0.12);
-    border-radius: 9px;
+    background: $accent-soft;
+    border-radius: 10px;
+  }
+  &--editing {
+    padding: $spacing-xs $spacing-md;
+    margin: 0;
+  }
+
+  // inline 重命名输入框 — 与新建分类输入框样式一致
+  &__edit-input {
+    width: 100%;
+    background: $bg-input;
+    color: $text-primary;
+    font-size: $font-sm;
+    padding: $spacing-sm $spacing-md;
+    border: 1px solid $border-light;
+    border-radius: $radius-md;
+    outline: none;
+    font-family: inherit;
+    transition: all $transition-fast;
+
+    &:focus {
+      border-color: $accent-color;
+      box-shadow: 0 0 0 3px $accent-soft;
+    }
   }
 }
 
 .context-menu {
   position: fixed;
   z-index: 1000;
-  background: $bg-secondary;
-  border: 1px solid $border-color;
-  border-radius: $radius-md;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  padding: $spacing-xs 0;
-  min-width: 120px;
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  -webkit-backdrop-filter: $glass-blur;
+  border: $glass-border;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-lg;
+  padding: $spacing-xs;
+  min-width: 140px;
 
   &__item {
     display: block;
@@ -286,6 +335,7 @@ const cancelRename = () => {
     padding: $spacing-sm $spacing-md;
     background: transparent;
     border: none;
+    border-radius: $radius-sm;
     text-align: left;
     font-size: $font-sm;
     color: $text-primary;
@@ -293,21 +343,21 @@ const cancelRename = () => {
     transition: background-color $transition-fast;
 
     &:hover {
-      background: $bg-hover;
-      color: $text-primary;
+      background: rgba(0, 0, 0, 0.04);
     }
 
     &--danger {
+      color: $danger-color;
+
       &:hover {
-        background: $bg-hover;
-        color: $danger-color;
+        background: rgba($danger-color, 0.1);
       }
     }
   }
 
   &__divider {
     height: 1px;
-    background: $border-color;
+    background: $border-subtle;
     margin: $spacing-xs 0;
   }
 }

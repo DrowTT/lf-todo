@@ -35,7 +35,8 @@ const handleClearCompleted = async () => {
       </h1>
       <div class="todo-list__actions">
         <span class="todo-list__count" v-if="store.currentCategoryId">
-          {{ store.pendingCounts[store.currentCategoryId] ?? 0 }} 待办
+          <span class="todo-list__count-num">{{ store.pendingCounts[store.currentCategoryId] ?? 0 }}</span>
+          <span class="todo-list__count-label">待办</span>
         </span>
         <button
           v-if="store.currentCategoryId"
@@ -56,12 +57,20 @@ const handleClearCompleted = async () => {
     <div class="todo-list__content">
       <!-- UX3：切换分类期间显示 loading 预占位层 -->
       <div v-if="store.isLoading" class="todo-list__loading">
-        <span class="todo-list__spinner" />
+        <div class="todo-list__spinner">
+          <div class="todo-list__spinner-dot"></div>
+          <div class="todo-list__spinner-dot"></div>
+          <div class="todo-list__spinner-dot"></div>
+        </div>
       </div>
       <template v-else>
-        <div v-if="!store.currentCategoryId" class="todo-list__empty">请选择或创建一个分类</div>
+        <div v-if="!store.currentCategoryId" class="todo-list__empty">
+          <div class="todo-list__empty-icon">📋</div>
+          <div class="todo-list__empty-text">请选择或创建一个分类</div>
+        </div>
         <div v-else-if="store.tasks.length === 0" class="todo-list__empty">
-          暂无任务,快去添加一个吧~
+          <div class="todo-list__empty-icon">✨</div>
+          <div class="todo-list__empty-text">暂无任务，快去添加一个吧~</div>
         </div>
         <div v-else>
           <TodoItem v-for="task in store.tasks" :key="task.id" :task="task" />
@@ -85,14 +94,15 @@ const handleClearCompleted = async () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: $spacing-md $spacing-lg;
-    border-bottom: 1px solid $border-color;
+    padding: $spacing-lg $spacing-xl;
+    background: rgba($bg-sidebar, 0.3);
   }
 
   &__title {
-    font-size: $font-lg;
-    font-weight: 500;
+    font-size: $font-xl;
+    font-weight: 600;
     color: $text-primary;
+    letter-spacing: 0.3px;
   }
 
   &__actions {
@@ -102,48 +112,73 @@ const handleClearCompleted = async () => {
   }
 
   &__count {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    padding: $spacing-xs $spacing-md;
+    background: $accent-soft;
+    border-radius: 12px;
+  }
+
+  &__count-num {
+    font-size: $font-lg;
+    font-weight: 600;
+    color: $accent-color;
+  }
+
+  &__count-label {
     font-size: $font-xs;
     color: $text-muted;
   }
 
   &__clear-btn {
-    padding: $spacing-xs $spacing-sm;
+    padding: $spacing-xs $spacing-md;
     background: transparent;
-    border: 1px solid $border-color;
-    border-radius: $radius-sm;
+    border: 1px solid $border-light;
+    border-radius: $radius-md;
     font-size: $font-xs;
-    color: $text-secondary;
+    color: $text-muted;
     cursor: pointer;
-    transition: all $transition-fast;
+    transition: all $transition-normal;
 
     &:hover:not(:disabled) {
       border-color: $danger-color;
       color: $danger-color;
-      background: rgba($danger-color, 0.1);
+      background: rgba($danger-color, 0.08);
     }
 
     &:disabled {
-      opacity: 0.4;
+      opacity: 0.3;
       cursor: not-allowed;
-      color: $text-muted;
     }
   }
 
   &__content {
     flex: 1;
     overflow-y: auto;
+    padding: $spacing-xs 0;
   }
 
   &__empty {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 200px;
+    height: 240px;
+    gap: $spacing-md;
+  }
+
+  &__empty-icon {
+    font-size: 32px;
+    opacity: 0.6;
+  }
+
+  &__empty-text {
     font-size: $font-sm;
     color: $text-muted;
   }
 
-  // UX3：loading 占位层
+  // Loading 动画 — 三点弹跳
   &__loading {
     display: flex;
     align-items: center;
@@ -151,21 +186,36 @@ const handleClearCompleted = async () => {
     height: 200px;
   }
 
-  // UX3：旋转 spinner
   &__spinner {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid $border-color;
-    border-top-color: $accent-color;
+    display: flex;
+    gap: 6px;
+  }
+
+  &__spinner-dot {
+    width: 8px;
+    height: 8px;
+    background: $accent-color;
     border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+    animation: bounce 1.2s ease-in-out infinite;
+
+    &:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.3s;
+    }
   }
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
   }
 }
 </style>

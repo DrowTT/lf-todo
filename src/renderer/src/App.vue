@@ -39,7 +39,7 @@ const { sidebarWidth, startResize } = useSidebarResize()
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: $bg-primary;
+  background: $bg-deep;
   color: $text-primary;
 }
 
@@ -53,7 +53,6 @@ const { sidebarWidth, startResize } = useSidebarResize()
 .sidebar-wrapper {
   height: 100%;
   flex-shrink: 0;
-  // CategoryList inside will fill this width
 }
 
 /* 拖拽条样式 */
@@ -61,10 +60,25 @@ const { sidebarWidth, startResize } = useSidebarResize()
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10px; /* 加宽感应区域 */
+  width: 12px;
   cursor: col-resize;
   background: transparent;
   z-index: 99;
-  transform: translateX(-50%); /* 居中于边界线 */
+  transform: translateX(-50%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: transparent;
+    transition: background $transition-normal;
+  }
+
+  &:hover::after {
+    background: $accent-color;
+  }
 }
 </style>

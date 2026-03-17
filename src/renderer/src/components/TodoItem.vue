@@ -6,9 +6,7 @@ import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
-import IconCheck from './icons/IconCheck.vue'
-import IconChevron from './icons/IconChevron.vue'
-import IconTrash from './icons/IconTrash.vue'
+import { Check, ChevronRight, Trash2 } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
 
@@ -52,12 +50,12 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 </script>
 
 <template>
-  <div class="todo-item-wrapper">
+  <div class="todo-item-wrapper" :class="{ 'todo-item-wrapper--expanded': isExpanded }">
     <!-- 主行 -->
     <div class="todo-item" :class="{ 'todo-item--completed': task.is_completed }">
       <!-- Checkbox -->
       <div class="todo-item__checkbox" @click="handleToggle">
-        <IconCheck v-if="task.is_completed" class="todo-item__check-icon" />
+        <Check v-if="task.is_completed" class="todo-item__check-icon" :size="12" />
       </div>
 
       <!-- Content / Edit Input -->
@@ -82,7 +80,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
         </span>
       </div>
 
-      <!-- 展开/收起按钮：hover 时始终可见，以便创建第一个子任务 -->
+      <!-- 展开/收起按钮 -->
       <button
         v-if="!isEditing"
         class="todo-item__expand"
@@ -90,20 +88,22 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
         @click="handleToggleExpand"
         title="展开子任务"
       >
-        <IconChevron class="todo-item__expand-icon" />
+        <ChevronRight class="todo-item__expand-icon" :size="12" />
       </button>
 
       <!-- Delete Button -->
       <button v-if="!isEditing" class="todo-item__delete" @click="handleDelete">
-        <IconTrash class="todo-item__delete-icon" />
+        <Trash2 class="todo-item__delete-icon" :size="14" />
       </button>
     </div>
 
-    <!-- 子任务展开区域 -->
-    <div v-if="isExpanded" class="todo-item__subtasks">
-      <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parentId="task.id" />
-      <SubTaskInput :parentId="task.id" />
-    </div>
+    <!-- 子任务展开区域（滑入动画） -->
+    <Transition name="subtasks-slide">
+      <div v-if="isExpanded" class="todo-item__subtasks">
+        <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parentId="task.id" />
+        <SubTaskInput :parentId="task.id" />
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -111,18 +111,33 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 @use '../styles/variables' as *;
 
 .todo-item-wrapper {
-  border-bottom: 1px solid $border-color;
+  // 始终保持透明边框预占位，避免展开时布局跳动
+  border: 1px solid transparent;
+  border-bottom-color: $border-subtle;
+  border-radius: $radius-md;
+  transition:
+    border-color $transition-normal,
+    background-color $transition-normal,
+    box-shadow $transition-normal;
+
+  // 展开子任务时，只变色不变尺寸
+  &--expanded {
+    background: $bg-elevated;
+    border-color: $border-color;
+    box-shadow: $shadow-sm;
+  }
 }
 
 .todo-item {
   display: flex;
   align-items: flex-start;
   gap: $spacing-sm;
-  padding: $spacing-sm $spacing-md;
+  padding: $spacing-md $spacing-xl $spacing-md $spacing-lg;
   transition: background-color $transition-fast;
+  position: relative;
 
   &:hover {
-    background: $bg-hover;
+    background: $accent-soft;
 
     .todo-item__delete,
     .todo-item__expand {
@@ -133,18 +148,32 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   &--completed {
     .todo-item__content {
       color: $text-muted;
+      text-decoration: line-through;
+      text-decoration-color: rgba($text-muted, 0.4);
+    }
+
+    .todo-item__checkbox {
+      background: $accent-color;
+      border-color: $accent-color;
+
+      // 已完成状态 hover 应加深蓝色，而非变浅
+      &:hover {
+        background: darken($accent-color, 10%);
+        border-color: darken($accent-color, 10%);
+      }
+    }
+
+    .todo-item__check-icon {
+      color: #FFFFFF;
     }
   }
 
   &__checkbox {
     flex-shrink: 0;
-    // 单行文字行高 18px（12px * 1.5），padding 各 8px，共 34px；
-    // checkbox 16px，居中需 margin-top = (34 - 16) / 2 - 8 = 1px
-    // 多行时保持在顶部是自然行为（flex-start）
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     margin-top: 1px;
-    border: 1px solid $text-primary;
+    border: 1.5px solid $border-light;
     border-radius: $radius-sm;
     cursor: pointer;
     display: flex;
@@ -153,26 +182,22 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     background: transparent;
     transition: all $transition-fast;
 
-    .todo-item--completed & {
-      border-color: $text-muted;
+    &:hover {
+      border-color: $accent-color;
+      background: $accent-soft;
     }
   }
 
   &__check-icon {
     width: 12px;
     height: 12px;
-    color: $text-primary;
-
-    .todo-item--completed & {
-      color: $text-muted;
-    }
   }
 
   &__content {
     flex: 1;
-    font-size: $font-sm;
+    font-size: $font-md;
     color: $text-primary;
-    line-height: 1.5;
+    line-height: 1.6;
     word-break: break-word;
     user-select: text;
     cursor: text;
@@ -184,12 +209,13 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
   &__progress {
     font-size: $font-xs;
-    color: $text-muted;
-    background: rgba($border-color, 0.8);
+    color: $accent-color;
+    background: $accent-soft;
     border-radius: 10px;
-    padding: 0 5px;
-    line-height: 1.6;
+    padding: 1px 8px;
+    line-height: 1.5;
     flex-shrink: 0;
+    font-weight: 500;
   }
 
   &__edit-wrapper {
@@ -200,16 +226,17 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     width: 100%;
     background: $bg-input;
     color: $text-primary;
-    font-size: $font-sm;
-    line-height: 1.5;
-    padding: 0 $spacing-xs;
+    font-size: $font-md;
+    line-height: 1.6;
+    padding: 2px $spacing-sm;
     border: 1px solid $accent-color;
-    border-radius: $radius-sm;
+    border-radius: $radius-md;
     outline: none;
     box-sizing: border-box;
     resize: none;
     overflow: hidden;
     font-family: inherit;
+    box-shadow: 0 0 0 3px $accent-soft;
   }
 
   // 展开按钮
@@ -222,6 +249,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     color: $text-muted;
     cursor: pointer;
     transition: all $transition-fast;
+    border-radius: $radius-sm;
 
     &--active {
       opacity: 1 !important;
@@ -234,6 +262,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
     &:hover {
       color: $accent-color;
+      background: $accent-soft;
     }
   }
 
@@ -252,9 +281,11 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     color: $text-muted;
     cursor: pointer;
     transition: all $transition-fast;
+    border-radius: $radius-sm;
 
     &:hover {
       color: $danger-color;
+      background: rgba($danger-color, 0.08);
     }
   }
 
@@ -265,8 +296,31 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
   // 子任务展开区域
   &__subtasks {
-    background: rgba($bg-secondary, 0.4);
-    border-top: 1px dashed rgba($border-color, 0.6);
+    padding: $spacing-xs 0 $spacing-xs $spacing-xl;
+    margin: 0 $spacing-sm $spacing-xs;
+    background: $bg-deep;
+    border-top: 1px solid $border-color;
+    border-radius: 0 0 $radius-sm $radius-sm;
+    overflow: hidden;
   }
+}
+
+// 子任务区域滑入滑出动画
+.subtasks-slide-enter-active {
+  transition: all $transition-normal;
+}
+
+.subtasks-slide-leave-active {
+  transition: all $transition-fast;
+}
+
+.subtasks-slide-enter-from,
+.subtasks-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 </style>

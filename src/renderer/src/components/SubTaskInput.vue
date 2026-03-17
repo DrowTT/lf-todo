@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { store } from '../store'
 import { useAutoHeight } from '../composables/useAutoHeight'
 
@@ -16,12 +16,13 @@ const handleSubmit = async () => {
   if (!trimmed) return
   await store.addSubTask(trimmed, props.parentId)
   content.value = ''
+  nextTick(resetHeight)
   textareaRef.value?.focus()
 }
 
-const { adjustHeight } = useAutoHeight(textareaRef)
+const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
-// 挂载时同步初始化高度，避免首次输入时因 rows="1" 与实际行高不一致导致跳动
+// 挂载时同步初始化高度
 onMounted(() => adjustHeight())
 </script>
 
@@ -48,14 +49,16 @@ onMounted(() => adjustHeight())
   display: flex;
   align-items: center;
   gap: $spacing-xs;
-  padding: 4px $spacing-sm 4px 28px; // 与 SubTaskItem 一致的左缩进
+  padding: $spacing-xs $spacing-md $spacing-xs $spacing-sm;
 
   &__icon {
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: $font-md;
     color: $text-muted;
     line-height: 1;
     user-select: none;
+    width: 14px;
+    text-align: center;
   }
 
   &__field {
@@ -69,6 +72,8 @@ onMounted(() => adjustHeight())
     font-size: $font-xs;
     font-family: inherit;
     padding: 0;
+    line-height: 1.5;
+    transition: color $transition-fast;
 
     &::placeholder {
       color: $text-muted;
