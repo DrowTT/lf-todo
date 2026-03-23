@@ -1,11 +1,17 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import trayIcon from '../../resources/tray-icon.png?asset'
 import * as db from './db/database'
 import Store from 'electron-store'
+import { writeFileSync } from 'fs'
 import { registerIpcHandlers } from './ipc'
+
+interface AutoCleanupConfig {
+  enabled: boolean
+  days: number
+}
 
 interface StoreType {
   windowBounds: {
@@ -15,6 +21,9 @@ interface StoreType {
     y: number
   }
   alwaysOnTop: boolean
+  autoLaunch: boolean
+  closeToTray: boolean
+  autoCleanup: AutoCleanupConfig
 }
 
 const store = new Store<StoreType>()
@@ -104,15 +113,16 @@ function createWindow(): void {
     win.focus()
   })
 
-  // 窗口关闭时隐藏而不是退出
+  // 窗口关闭时根据设置决定是隐藏到托盘还是退出
   win.on('close', (event) => {
-    // Save window bounds before hiding or closing
+    // 保存窗口位置和尺寸
     if (!win.isDestroyed()) {
       const bounds = win.getBounds()
       store.set('windowBounds', bounds)
     }
 
-    if (!isQuitting) {
+    const closeToTray = store.get('closeToTray', true)
+    if (!isQuitting && closeToTray) {
       event.preventDefault()
       win.hide()
     }
@@ -125,12 +135,18 @@ function createWindow(): void {
   })
 
   ipcMain.on('window:close', () => {
-    // Save bounds when manual close triggered from UI
+    // 保存窗口位置和尺寸
     if (!win.isDestroyed()) {
       const bounds = win.getBounds()
       store.set('windowBounds', bounds)
     }
-    win.hide() // 改为隐藏窗口而不是关闭
+    const closeToTray = store.get('closeToTray', true)
+    if (closeToTray) {
+      win.hide() // 最小化到托盘
+    } else {
+      isQuitting = true
+      app.quit() // 直接退出
+    }
   })
 
   ipcMain.on('window:toggle-always-on-top', () => {
@@ -154,6 +170,63 @@ function createWindow(): void {
   })
   win.on('unmaximize', () => {
     win.webContents.send('window:maximized-changed', false)
+  })
+
+  // ─── 设置中心 IPC handlers ──────────────────────────────────────
+
+  // 获取所有设置
+  ipcMain.handle('settings:get-all', () => {
+    return {
+      autoLaunch: store.get('autoLaunch', false),
+      closeToTray: store.get('closeToTray', true),
+      autoCleanup: store.get('autoCleanup', { enabled: false, days: 7 })
+    }
+  })
+
+  // 开机自启
+  ipcMain.handle('settings:set-auto-launch', (_, enabled: boolean) => {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      // Windows 下不需要额外参数，Electron 自动处理注册表
+    })
+    store.set('autoLaunch', enabled)
+    return enabled
+  })
+
+  // 关闭窗口行为
+  ipcMain.handle('settings:set-close-to-tray', (_, enabled: boolean) => {
+    store.set('closeToTray', enabled)
+    return enabled
+  })
+
+  // 自动清理配置
+  ipcMain.handle('settings:set-auto-cleanup', (_, config: AutoCleanupConfig) => {
+    store.set('autoCleanup', config)
+    return config
+  })
+
+  // 数据导出
+  ipcMain.handle('settings:export-data', async () => {
+    const result = await dialog.showSaveDialog(win, {
+      title: '导出待办数据',
+      defaultPath: `极简待办-数据导出-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return false
+    const data = db.exportAllData()
+    writeFileSync(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
+    return true
+  })
+
+  // 应用信息
+  ipcMain.handle('settings:get-app-info', () => {
+    return {
+      name: app.getName(),
+      version: app.getVersion(),
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      node: process.versions.node
+    }
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -193,6 +266,16 @@ app.whenReady().then(() => {
 
   // 初始化数据库
   db.initDatabase()
+
+  // 启动时执行自动清理（如果已启用）
+  const cleanupConfig = store.get('autoCleanup', { enabled: false, days: 7 })
+  if (cleanupConfig.enabled && cleanupConfig.days > 0) {
+    const cutoffTimestamp = Math.floor(Date.now() / 1000) - cleanupConfig.days * 86400
+    const deletedCount = db.deleteCompletedTasksBefore(cutoffTimestamp)
+    if (deletedCount > 0) {
+      console.log(`[自动清理] 已删除 ${deletedCount} 条过期已完成任务`)
+    }
+  }
 
   // 注册所有数据库 IPC 处理器
   registerIpcHandlers()

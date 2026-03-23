@@ -3,7 +3,11 @@ import { ref, nextTick, onMounted } from 'vue'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useContextMenu } from '../composables/useContextMenu'
-import { Plus } from 'lucide-vue-next'
+import { Plus, Settings } from 'lucide-vue-next'
+
+const emit = defineEmits<{
+  'open-settings': []
+}>()
 
 const { confirm } = useConfirm()
 const {
@@ -131,6 +135,11 @@ const cancelRename = () => {
         <Plus class="category-list__add-icon" :size="12" />
         新建分类
       </button>
+      <div class="category-list__footer-divider"></div>
+      <button class="category-list__settings-btn" @click="emit('open-settings')">
+        <Settings :size="14" />
+        <span>设置</span>
+      </button>
     </div>
 
     <!-- 右键菜单 -->
@@ -183,6 +192,32 @@ const cancelRename = () => {
   &__footer {
     padding: $spacing-sm $spacing-md;
     border-top: 1px solid $border-subtle;
+  }
+
+  &__footer-divider {
+    height: 1px;
+    background: $border-subtle;
+    margin: $spacing-xs 0;
+  }
+
+  &__settings-btn {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    width: 100%;
+    padding: $spacing-sm $spacing-md;
+    background: transparent;
+    border: none;
+    border-radius: $radius-md;
+    font-size: $font-sm;
+    color: $text-muted;
+    cursor: pointer;
+    transition: all $transition-normal;
+
+    &:hover {
+      color: $accent-color;
+      background: $accent-soft;
+    }
   }
 
   &__add-btn {

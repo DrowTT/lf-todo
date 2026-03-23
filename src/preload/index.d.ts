@@ -19,6 +19,25 @@ interface Task {
   subtask_done: number
 }
 
+interface AutoCleanupConfig {
+  enabled: boolean
+  days: number
+}
+
+interface SettingsData {
+  autoLaunch: boolean
+  closeToTray: boolean
+  autoCleanup: AutoCleanupConfig
+}
+
+interface AppInfo {
+  name: string
+  version: string
+  electron: string
+  chrome: string
+  node: string
+}
+
 interface API {
   window: {
     minimize: () => void
@@ -53,6 +72,14 @@ interface API {
     getSubTasks: (parentId: number) => Promise<Task[]>
     createSubTask: (content: string, parentId: number) => Promise<Task>
     batchCompleteSubTasks: (parentId: number) => Promise<number>
+  }
+  settings: {
+    getAll: () => Promise<SettingsData>
+    setAutoLaunch: (enabled: boolean) => Promise<boolean>
+    setCloseToTray: (enabled: boolean) => Promise<boolean>
+    setAutoCleanup: (config: AutoCleanupConfig) => Promise<AutoCleanupConfig>
+    exportData: () => Promise<boolean>
+    getAppInfo: () => Promise<AppInfo>
   }
 }
 

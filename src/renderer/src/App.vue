@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import TitleBar from './layout/TitleBar.vue'
 import CategoryList from './components/CategoryList.vue'
 import TodoList from './components/TodoList.vue'
+import SettingsPanel from './components/SettingsPanel.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ToastMessage from './components/ToastMessage.vue'
 import { useConfirm } from './composables/useConfirm'
@@ -9,6 +11,9 @@ import { useSidebarResize } from './composables/useSidebarResize'
 
 const { current, handleConfirm, handleCancel } = useConfirm()
 const { sidebarWidth, startResize } = useSidebarResize()
+
+// 设置面板显隐状态
+const showSettings = ref(false)
 </script>
 
 <template>
@@ -16,7 +21,7 @@ const { sidebarWidth, startResize } = useSidebarResize()
     <TitleBar />
     <div class="app-content">
       <div :style="{ width: sidebarWidth + 'px' }" class="sidebar-wrapper">
-        <CategoryList />
+        <CategoryList @open-settings="showSettings = true" />
       </div>
       <div class="resizer" :style="{ left: sidebarWidth + 'px' }" @mousedown="startResize"></div>
       <TodoList />
@@ -29,6 +34,8 @@ const { sidebarWidth, startResize } = useSidebarResize()
     />
     <!-- 全局操作结果提示 -->
     <ToastMessage />
+    <!-- 设置面板 -->
+    <SettingsPanel :visible="showSettings" @close="showSettings = false" />
   </div>
 </template>
 

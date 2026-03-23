@@ -41,6 +41,15 @@ const api = {
       ipcRenderer.invoke('db:create-subtask', content, parentId),
     batchCompleteSubTasks: (parentId: number) =>
       ipcRenderer.invoke('db:batch-complete-subtasks', parentId)
+  },
+  settings: {
+    getAll: () => ipcRenderer.invoke('settings:get-all'),
+    setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('settings:set-auto-launch', enabled),
+    setCloseToTray: (enabled: boolean) => ipcRenderer.invoke('settings:set-close-to-tray', enabled),
+    setAutoCleanup: (config: { enabled: boolean; days: number }) =>
+      ipcRenderer.invoke('settings:set-auto-cleanup', config),
+    exportData: () => ipcRenderer.invoke('settings:export-data'),
+    getAppInfo: () => ipcRenderer.invoke('settings:get-app-info')
   }
 }
 

@@ -339,3 +339,30 @@ export function reorderTasks(orderedIds: number[]): void {
     }
   })()
 }
+
+/**
+ * 删除指定时间戳之前已完成的任务（用于自动清理功能）
+ * 仅删除顶级任务（parent_id IS NULL），子任务通过 CASCADE 自动删除
+ */
+export function deleteCompletedTasksBefore(timestamp: number): number {
+  const result = getDb()
+    .prepare(
+      'DELETE FROM tasks WHERE is_completed = 1 AND parent_id IS NULL AND created_at < ?'
+    )
+    .run(timestamp)
+  return result.changes
+}
+
+/**
+ * 导出所有分类和任务数据（用于数据导出功能）
+ */
+export function exportAllData(): { categories: Category[]; tasks: Task[] } {
+  const categories = getStmts().getAllCategories.all() as Category[]
+  const allTasks = getDb()
+    .prepare('SELECT * FROM tasks ORDER BY category_id, order_index DESC, id DESC')
+    .all() as Record<string, unknown>[]
+  return {
+    categories,
+    tasks: allTasks.map(mapTask)
+  }
+}
