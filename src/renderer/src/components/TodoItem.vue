@@ -50,20 +50,20 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 </script>
 
 <template>
-  <div class="todo-item-wrapper" :class="{ 'todo-item-wrapper--expanded': isExpanded }">
+  <div class="card" :class="{ 'card--open': isExpanded, 'card--done': task.is_completed }">
     <!-- 主行 -->
-    <div class="todo-item" :class="{ 'todo-item--completed': task.is_completed }">
-      <!-- Checkbox -->
-      <div class="todo-item__checkbox" @click="handleToggle">
-        <Check v-if="task.is_completed" class="todo-item__check-icon" :size="12" />
-      </div>
+    <div class="card__row">
+      <!-- 勾选框 -->
+      <button class="card__check" :class="{ 'card__check--on': task.is_completed }" @click="handleToggle">
+        <Check v-if="task.is_completed" class="card__check-svg" :size="12" />
+      </button>
 
-      <!-- Content / Edit Input -->
-      <div v-if="isEditing" class="todo-item__edit-wrapper">
+      <!-- 内容 / 编辑 -->
+      <div v-if="isEditing" class="card__edit-wrap">
         <textarea
           ref="editInputRef"
           v-model="editContent"
-          class="todo-item__edit-input"
+          class="card__edit-area"
           maxlength="100"
           rows="1"
           @keydown.enter.exact.prevent="saveEdit"
@@ -72,34 +72,34 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
           @input="adjustHeight"
         />
       </div>
-      <div v-else class="todo-item__content" @dblclick="handleDblClick">
+      <div v-else class="card__text" @dblclick="handleDblClick">
         {{ task.content }}
-        <!-- 子任务进度 badge -->
-        <span v-if="subTaskProgress" class="todo-item__progress">
+        <!-- 子任务进度 -->
+        <span v-if="subTaskProgress" class="card__progress">
           {{ subTaskProgress.done }}/{{ subTaskProgress.total }}
         </span>
       </div>
 
-      <!-- 展开/收起按钮 -->
+      <!-- 展开 -->
       <button
         v-if="!isEditing"
-        class="todo-item__expand"
-        :class="{ 'todo-item__expand--active': isExpanded }"
+        class="card__action card__toggle"
+        :class="{ 'card__toggle--on': isExpanded }"
         @click="handleToggleExpand"
         title="展开子任务"
       >
-        <ChevronRight class="todo-item__expand-icon" :size="12" />
+        <ChevronRight class="card__toggle-svg" :size="14" />
       </button>
 
-      <!-- Delete Button -->
-      <button v-if="!isEditing" class="todo-item__delete" @click="handleDelete">
-        <Trash2 class="todo-item__delete-icon" :size="14" />
+      <!-- 删除 -->
+      <button v-if="!isEditing" class="card__action card__del" @click="handleDelete">
+        <Trash2 :size="14" />
       </button>
     </div>
 
-    <!-- 子任务展开区域（滑入动画） -->
-    <Transition name="subtasks-slide">
-      <div v-if="isExpanded" class="todo-item__subtasks">
+    <!-- 子任务区域 -->
+    <Transition name="sub-slide">
+      <div v-if="isExpanded" class="card__subs">
         <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parentId="task.id" />
         <SubTaskInput :parentId="task.id" />
       </div>
@@ -110,212 +110,220 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 <style scoped lang="scss">
 @use '../styles/variables' as *;
 
-.todo-item-wrapper {
-  // 始终保持透明边框预占位，避免展开时布局跳动
-  border: 1px solid transparent;
-  border-bottom-color: $border-subtle;
-  border-radius: $radius-md;
-  transition:
-    border-color $transition-normal,
-    background-color $transition-normal,
-    box-shadow $transition-normal;
-
-  // 展开子任务时，只变色不变尺寸
-  &--expanded {
-    background: $bg-elevated;
-    border-color: $border-color;
-    box-shadow: $shadow-sm;
-  }
-}
-
-.todo-item {
-  display: flex;
-  align-items: flex-start;
-  gap: $spacing-sm;
-  padding: $spacing-md $spacing-xl $spacing-md $spacing-lg;
-  transition: background-color $transition-fast;
+// ─── 卡片容器 ──────────────────────────────
+.card {
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.06),
+    0 6px 16px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  overflow: hidden;
+  cursor: default;
   position: relative;
 
+  // hover — 边框微调
   &:hover {
-    background: $accent-soft;
-
-    .todo-item__delete,
-    .todo-item__expand {
-      opacity: 1;
-    }
+    border-color: #CBD5E1;
+    box-shadow:
+      0 1px 3px rgba(15, 23, 42, 0.06),
+      0 6px 16px rgba(15, 23, 42, 0.04),
+      inset 0 0 0 1px rgba(37, 99, 235, 0.04);
   }
 
-  &--completed {
-    .todo-item__content {
-      color: $text-muted;
-      text-decoration: line-through;
-      text-decoration-color: rgba($text-muted, 0.4);
-    }
-
-    .todo-item__checkbox {
-      background: $accent-color;
-      border-color: $accent-color;
-
-      // 已完成状态 hover 应加深蓝色，而非变浅
-      &:hover {
-        background: darken($accent-color, 10%);
-        border-color: darken($accent-color, 10%);
-      }
-    }
-
-    .todo-item__check-icon {
-      color: #FFFFFF;
-    }
-  }
-
-  &__checkbox {
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    margin-top: 1px;
-    border: 1.5px solid $border-light;
-    border-radius: $radius-sm;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    transition: all $transition-fast;
+  // 展开态 — 蓝色光晕（强调条不显示，已有边框）
+  &--open {
+    border-color: rgba(37, 99, 235, 0.3);
+    box-shadow:
+      0 2px 8px rgba(37, 99, 235, 0.08),
+      0 0 0 1px rgba(37, 99, 235, 0.06);
 
     &:hover {
-      border-color: $accent-color;
-      background: $accent-soft;
+      border-color: rgba(37, 99, 235, 0.35);
     }
   }
 
-  &__check-icon {
-    width: 12px;
-    height: 12px;
-  }
-
-  &__content {
-    flex: 1;
-    font-size: $font-md;
-    color: $text-primary;
-    line-height: 1.6;
-    word-break: break-word;
-    user-select: text;
-    cursor: text;
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: $spacing-xs;
-  }
-
-  &__progress {
-    font-size: $font-xs;
-    color: $accent-color;
-    background: $accent-soft;
-    border-radius: 10px;
-    padding: 1px 8px;
-    line-height: 1.5;
-    flex-shrink: 0;
-    font-weight: 500;
-  }
-
-  &__edit-wrapper {
-    flex: 1;
-  }
-
-  &__edit-input {
-    width: 100%;
-    background: $bg-input;
-    color: $text-primary;
-    font-size: $font-md;
-    line-height: 1.6;
-    padding: 2px $spacing-sm;
-    border: 1px solid $accent-color;
-    border-radius: $radius-md;
-    outline: none;
-    box-sizing: border-box;
-    resize: none;
-    overflow: hidden;
-    font-family: inherit;
-    box-shadow: 0 0 0 3px $accent-soft;
-  }
-
-  // 展开按钮
-  &__expand {
-    flex-shrink: 0;
-    opacity: 0;
-    padding: $spacing-xs;
-    background: transparent;
-    border: none;
-    color: $text-muted;
-    cursor: pointer;
-    transition: all $transition-fast;
-    border-radius: $radius-sm;
-
-    &--active {
-      opacity: 1 !important;
-      color: $accent-color;
-
-      .todo-item__expand-icon {
-        transform: rotate(90deg);
-      }
-    }
-
-    &:hover {
-      color: $accent-color;
-      background: $accent-soft;
-    }
-  }
-
-  &__expand-icon {
-    width: 12px;
-    height: 12px;
-    transition: transform $transition-fast;
-  }
-
-  &__delete {
-    flex-shrink: 0;
-    opacity: 0;
-    padding: $spacing-xs;
-    background: transparent;
-    border: none;
-    color: $text-muted;
-    cursor: pointer;
-    transition: all $transition-fast;
-    border-radius: $radius-sm;
-
-    &:hover {
-      color: $danger-color;
-      background: rgba($danger-color, 0.08);
-    }
-  }
-
-  &__delete-icon {
-    width: 14px;
-    height: 14px;
-  }
-
-  // 子任务展开区域
-  &__subtasks {
-    padding: $spacing-xs 0 $spacing-xs $spacing-xl;
-    margin: 0 $spacing-sm $spacing-xs;
-    background: $bg-deep;
-    border-top: 1px solid $border-color;
-    border-radius: 0 0 $radius-sm $radius-sm;
-    overflow: hidden;
+  // 已完成态 — 降低存在感
+  &--done {
+    opacity: 0.7;
+    &:hover { opacity: 1; }
   }
 }
 
-// 子任务区域滑入滑出动画
-.subtasks-slide-enter-active {
-  transition: all $transition-normal;
+// ─── 主行 ──────────────────────────────────
+.card__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    .card__action { opacity: 1; }
+  }
 }
 
-.subtasks-slide-leave-active {
-  transition: all $transition-fast;
+// ─── 勾选框 ────────────────────────────────
+.card__check {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 2px solid #CBD5E1;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  transition: all 0.2s ease;
+  padding: 0;
+
+  &:hover {
+    border-color: #2563EB;
+    background: rgba(37, 99, 235, 0.06);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+  }
+
+  &--on {
+    background: #2563EB;
+    border-color: #2563EB;
+
+    &:hover {
+      background: #1D4ED8;
+      border-color: #1D4ED8;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+  }
 }
 
-.subtasks-slide-enter-from,
-.subtasks-slide-leave-to {
+.card__check-svg {
+  color: #fff;
+}
+
+// ─── 文本 ──────────────────────────────────
+.card__text {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 450;
+  color: #0F172A;
+  line-height: 1.65;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .card--done & {
+    color: #94A3B8;
+    text-decoration: line-through;
+    text-decoration-color: rgba(148, 163, 184, 0.4);
+    font-weight: 400;
+  }
+}
+
+// 子任务进度 badge
+.card__progress {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563EB;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 100px;
+  padding: 2px 10px;
+  letter-spacing: 0.4px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+// ─── 编辑态 ────────────────────────────────
+.card__edit-wrap {
+  flex: 1;
+}
+
+.card__edit-area {
+  width: 100%;
+  background: #fff;
+  color: #0F172A;
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 4px 10px;
+  border: 2px solid #2563EB;
+  border-radius: 10px;
+  outline: none;
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+// ─── 操作按钮 ──────────────────────────────
+.card__action {
+  flex-shrink: 0;
+  opacity: 0;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-radius: 6px;
+}
+
+.card__toggle {
+  &--on {
+    opacity: 1 !important;
+    color: #2563EB;
+  }
+
+  &:hover {
+    color: #2563EB;
+    background: rgba(37, 99, 235, 0.08);
+  }
+}
+
+.card__toggle-svg {
+  display: block;
+  transition: transform 0.2s ease;
+
+  .card__toggle--on & {
+    transform: rotate(90deg);
+  }
+}
+
+.card__del {
+  &:hover {
+    color: #DC2626;
+    background: rgba(220, 38, 38, 0.08);
+  }
+}
+
+// ─── 子任务展开区域 ────────────────────────
+.card__subs {
+  margin: 0 12px 12px;
+  padding: 8px 4px 4px 14px;
+  background: #F0F4FA;
+  border-radius: 10px;
+  border-left: 3px solid rgba(37, 99, 235, 0.25);
+  overflow: hidden;
+}
+
+// ─── 子任务滑入/滑出动画 ──────────────────
+.sub-slide-enter-active {
+  transition: all 0.25s ease;
+}
+
+.sub-slide-leave-active {
+  transition: all 0.15s ease;
+}
+
+.sub-slide-enter-from,
+.sub-slide-leave-to {
   opacity: 0;
   max-height: 0;
   margin-top: 0;

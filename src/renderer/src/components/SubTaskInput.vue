@@ -27,13 +27,13 @@ onMounted(() => adjustHeight())
 </script>
 
 <template>
-  <div class="subtask-input">
-    <span class="subtask-input__icon">+</span>
+  <div class="sub-add">
+    <span class="sub-add__icon">+</span>
     <textarea
       ref="textareaRef"
       v-model="content"
       rows="1"
-      class="subtask-input__field"
+      class="sub-add__input"
       placeholder="添加子任务…"
       maxlength="200"
       @input="adjustHeight"
@@ -43,45 +43,38 @@ onMounted(() => adjustHeight())
 </template>
 
 <style scoped lang="scss">
-@use '../styles/variables' as *;
-
-.subtask-input {
+.sub-add {
   display: flex;
   align-items: center;
-  gap: $spacing-xs;
-  padding: $spacing-xs $spacing-md $spacing-xs $spacing-sm;
+  gap: 6px;
+  padding: 5px 8px;
+}
 
-  &__icon {
-    flex-shrink: 0;
-    font-size: $font-md;
-    color: $text-muted;
-    line-height: 1;
-    user-select: none;
-    width: 14px;
-    text-align: center;
-  }
+.sub-add__icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: #94A3B8;
+  line-height: 1;
+  user-select: none;
+  width: 16px;
+  text-align: center;
+}
 
-  &__field {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    resize: none;
-    overflow: hidden;
-    color: $text-secondary;
-    font-size: $font-xs;
-    font-family: inherit;
-    padding: 0;
-    line-height: 1.5;
-    transition: color $transition-fast;
+.sub-add__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  color: #475569;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 0;
+  line-height: 1.55;
+  transition: color 0.15s ease;
 
-    &::placeholder {
-      color: $text-muted;
-    }
-
-    &:focus {
-      color: $text-primary;
-    }
-  }
+  &::placeholder { color: #94A3B8; }
+  &:focus { color: #0F172A; }
 }
 </style>

@@ -16,8 +16,6 @@ const completedCount = computed(() => {
   return store.tasks.filter((t) => t.is_completed).length
 })
 
-// 优化 #9：统一数据源为 pendingCounts，与侧栏 badge 保持一致，消除数字闪烁
-
 const handleClearCompleted = async () => {
   const confirmed = await confirm(`确认删除 ${completedCount.value} 个已完成的待办吗?`)
   if (confirmed) {
@@ -27,52 +25,55 @@ const handleClearCompleted = async () => {
 </script>
 
 <template>
-  <div class="todo-list">
-    <!-- Header -->
-    <div class="todo-list__header">
-      <h1 class="todo-list__title">
+  <div class="todo-panel">
+    <!-- 顶栏 -->
+    <header class="todo-panel__header">
+      <h1 class="todo-panel__title">
         {{ currentCategoryName }}
       </h1>
-      <div class="todo-list__actions">
-        <span class="todo-list__count" v-if="store.currentCategoryId">
-          <span class="todo-list__count-num">{{ store.pendingCounts[store.currentCategoryId] ?? 0 }}</span>
-          <span class="todo-list__count-label">待办</span>
+      <div class="todo-panel__actions">
+        <span class="todo-panel__badge" v-if="store.currentCategoryId">
+          <span class="todo-panel__badge-num">{{ store.pendingCounts[store.currentCategoryId] ?? 0 }}</span>
+          <span class="todo-panel__badge-label">待办</span>
         </span>
         <button
           v-if="store.currentCategoryId"
           @click="handleClearCompleted"
           :disabled="completedCount === 0"
-          class="todo-list__clear-btn"
+          class="todo-panel__clear-btn"
           title="清空已完成"
         >
           清空已完成 ({{ completedCount }})
         </button>
       </div>
-    </div>
+    </header>
 
-    <!-- Input -->
+    <!-- 输入 -->
     <TodoInput v-if="store.currentCategoryId" />
 
-    <!-- List -->
-    <div class="todo-list__content">
-      <!-- UX3：切换分类期间显示 loading 预占位层 -->
-      <div v-if="store.isLoading" class="todo-list__loading">
-        <div class="todo-list__spinner">
-          <div class="todo-list__spinner-dot"></div>
-          <div class="todo-list__spinner-dot"></div>
-          <div class="todo-list__spinner-dot"></div>
+    <!-- 列表 -->
+    <div class="todo-panel__body">
+      <!-- 加载态 -->
+      <div v-if="store.isLoading" class="todo-panel__loading">
+        <div class="todo-panel__spinner">
+          <div class="todo-panel__dot"></div>
+          <div class="todo-panel__dot"></div>
+          <div class="todo-panel__dot"></div>
         </div>
       </div>
       <template v-else>
-        <div v-if="!store.currentCategoryId" class="todo-list__empty">
-          <div class="todo-list__empty-icon">📋</div>
-          <div class="todo-list__empty-text">请选择或创建一个分类</div>
+        <!-- 空态 -->
+        <div v-if="!store.currentCategoryId" class="todo-panel__empty">
+          <div class="todo-panel__empty-icon">📋</div>
+          <div class="todo-panel__empty-text">请选择或创建一个分类</div>
         </div>
-        <div v-else-if="store.tasks.length === 0" class="todo-list__empty">
-          <div class="todo-list__empty-icon">✨</div>
-          <div class="todo-list__empty-text">暂无任务，快去添加一个吧~</div>
+        <div v-else-if="store.tasks.length === 0" class="todo-panel__empty">
+          <div class="todo-panel__empty-icon">✨</div>
+          <div class="todo-panel__empty-text">暂无任务，快去添加一个吧~</div>
         </div>
-        <div v-else>
+
+        <!-- 卡片列表 -->
+        <div v-else class="todo-panel__cards">
           <TodoItem v-for="task in store.tasks" :key="task.id" :task="task" />
         </div>
       </template>
@@ -83,132 +84,140 @@ const handleClearCompleted = async () => {
 <style scoped lang="scss">
 @use '../styles/variables' as *;
 
-.todo-list {
+.todo-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
   flex: 1;
   background: $bg-primary;
+  overflow: hidden;
+}
 
-  &__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: $spacing-lg $spacing-xl;
-    background: rgba($bg-sidebar, 0.3);
+// ─── 顶栏 ──────────────────────────────────
+.todo-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-lg $spacing-xl;
+  background: linear-gradient(135deg, rgba($bg-sidebar, 0.35) 0%, rgba($bg-sidebar, 0.15) 100%);
+  border-bottom: 1px solid $border-subtle;
+}
+
+.todo-panel__title {
+  font-size: $font-xl;
+  font-weight: 700;
+  color: $text-primary;
+  letter-spacing: 0.5px;
+}
+
+.todo-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+}
+
+.todo-panel__badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: $spacing-xs $spacing-md;
+  background: $accent-soft;
+  border-radius: 20px;
+}
+
+.todo-panel__badge-num {
+  font-size: $font-lg;
+  font-weight: 700;
+  color: $accent-color;
+}
+
+.todo-panel__badge-label {
+  font-size: $font-xs;
+  color: $text-muted;
+}
+
+.todo-panel__clear-btn {
+  padding: $spacing-xs $spacing-md;
+  background: transparent;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
+  font-size: $font-xs;
+  color: $text-muted;
+  cursor: pointer;
+  transition: all $transition-normal;
+
+  &:hover:not(:disabled) {
+    border-color: $danger-color;
+    color: $danger-color;
+    background: rgba($danger-color, 0.06);
   }
 
-  &__title {
-    font-size: $font-xl;
-    font-weight: 600;
-    color: $text-primary;
-    letter-spacing: 0.3px;
-  }
-
-  &__actions {
-    display: flex;
-    align-items: center;
-    gap: $spacing-md;
-  }
-
-  &__count {
-    display: flex;
-    align-items: baseline;
-    gap: 3px;
-    padding: $spacing-xs $spacing-md;
-    background: $accent-soft;
-    border-radius: 12px;
-  }
-
-  &__count-num {
-    font-size: $font-lg;
-    font-weight: 600;
-    color: $accent-color;
-  }
-
-  &__count-label {
-    font-size: $font-xs;
-    color: $text-muted;
-  }
-
-  &__clear-btn {
-    padding: $spacing-xs $spacing-md;
-    background: transparent;
-    border: 1px solid $border-light;
-    border-radius: $radius-md;
-    font-size: $font-xs;
-    color: $text-muted;
-    cursor: pointer;
-    transition: all $transition-normal;
-
-    &:hover:not(:disabled) {
-      border-color: $danger-color;
-      color: $danger-color;
-      background: rgba($danger-color, 0.08);
-    }
-
-    &:disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
-    }
-  }
-
-  &__content {
-    flex: 1;
-    overflow-y: auto;
-    padding: $spacing-xs 0;
-  }
-
-  &__empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 240px;
-    gap: $spacing-md;
-  }
-
-  &__empty-icon {
-    font-size: 32px;
-    opacity: 0.6;
-  }
-
-  &__empty-text {
-    font-size: $font-sm;
-    color: $text-muted;
-  }
-
-  // Loading 动画 — 三点弹跳
-  &__loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-  }
-
-  &__spinner {
-    display: flex;
-    gap: 6px;
-  }
-
-  &__spinner-dot {
-    width: 8px;
-    height: 8px;
-    background: $accent-color;
-    border-radius: 50%;
-    animation: bounce 1.2s ease-in-out infinite;
-
-    &:nth-child(2) {
-      animation-delay: 0.15s;
-    }
-
-    &:nth-child(3) {
-      animation-delay: 0.3s;
-    }
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 }
 
-@keyframes bounce {
+// ─── 列表区域 — 浅蓝灰衬底 ──────────────────
+.todo-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  background: $bg-deep;
+}
+
+// 卡片容器 — grid 间距
+.todo-panel__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 32px;
+}
+
+// ─── 空态 ──────────────────────────────────
+.todo-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 240px;
+  gap: $spacing-md;
+}
+
+.todo-panel__empty-icon {
+  font-size: 36px;
+  opacity: 0.5;
+}
+
+.todo-panel__empty-text {
+  font-size: $font-sm;
+  color: $text-muted;
+}
+
+// ─── 加载态 ────────────────────────────────
+.todo-panel__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.todo-panel__spinner {
+  display: flex;
+  gap: 6px;
+}
+
+.todo-panel__dot {
+  width: 8px;
+  height: 8px;
+  background: $accent-color;
+  border-radius: 50%;
+  animation: dot-bounce 1.2s ease-in-out infinite;
+
+  &:nth-child(2) { animation-delay: 0.15s; }
+  &:nth-child(3) { animation-delay: 0.3s; }
+}
+
+@keyframes dot-bounce {
   0%, 80%, 100% {
     transform: translateY(0);
     opacity: 0.4;
