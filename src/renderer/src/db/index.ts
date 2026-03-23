@@ -52,11 +52,15 @@ export const db = {
   deleteTask: (id: number) => window.api.db.deleteTask(id) as Promise<void>,
   deleteTasks: (ids: number[]) => window.api.db.deleteTasks(ids) as Promise<void>,
   toggleTaskComplete: (id: number) => window.api.db.toggleTaskComplete(id) as Promise<void>,
+  setTaskCompleted: (id: number, completed: boolean) =>
+    window.api.db.setTaskCompleted(id, completed) as Promise<void>,
   getPendingTaskCounts: () =>
     window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>,
 
   // SubTask 操作
   getSubTasks: (parentId: number) => window.api.db.getSubTasks(parentId) as Promise<Task[]>,
   createSubTask: (content: string, parentId: number) =>
-    window.api.db.createSubTask(content, parentId) as Promise<Task>
+    window.api.db.createSubTask(content, parentId) as Promise<Task>,
+  batchCompleteSubTasks: (parentId: number) =>
+    window.api.db.batchCompleteSubTasks(parentId) as Promise<number>
 }

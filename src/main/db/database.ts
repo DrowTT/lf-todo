@@ -62,6 +62,14 @@ const migrations: Migration[] = [
     version: 3,
     description: '为旧版 tasks 表补充 parent_id 字段（新建库中 v2 已包含，此迁移为兼容存量数据库）',
     up: `ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE`
+  },
+  {
+    version: 4,
+    description: '为 tasks 表高频查询字段添加索引',
+    up: [
+      'CREATE INDEX IF NOT EXISTS idx_tasks_category_parent ON tasks(category_id, parent_id)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_parent_completed ON tasks(parent_id, is_completed)'
+    ].join(';')
   }
 ]
 
@@ -105,15 +113,54 @@ export function initDatabase(): void {
 
   // 启用外键约束（必须在迁移前设置）
   db.pragma('foreign_keys = ON')
+  // 启用 WAL 模式：提升读写并发性能 & 崩溃恢复安全性（better-sqlite3 官方推荐）
+  db.pragma('journal_mode = WAL')
 
   // 按版本号顺序执行所有待执行迁移
   runMigrations(db)
 
-  // 初始化 updateTask 专用 prepared statements（避免每次调用重复 prepare）
+  // 统一预编译所有高频 SQL（避免每次调用重复 prepare）
   stmts = {
+    // Category
+    getAllCategories: db.prepare('SELECT * FROM categories ORDER BY order_index, id'),
+    getCategoryById: db.prepare('SELECT * FROM categories WHERE id = ?'),
+    createCategory: db.prepare('INSERT INTO categories (name) VALUES (?)'),
+    updateCategory: db.prepare('UPDATE categories SET name = ? WHERE id = ?'),
+    deleteCategory: db.prepare('DELETE FROM categories WHERE id = ?'),
+    // Task 查询
+    getTasksByCategory: db.prepare(`
+      SELECT t.*,
+        COUNT(s.id) AS subtask_total,
+        SUM(CASE WHEN s.is_completed = 1 THEN 1 ELSE 0 END) AS subtask_done
+      FROM tasks t
+      LEFT JOIN tasks s ON s.parent_id = t.id
+      WHERE t.category_id = ? AND t.parent_id IS NULL
+      GROUP BY t.id
+      ORDER BY t.order_index DESC, t.id DESC
+    `),
+    getSubTasks: db.prepare(
+      'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
+    ),
+    getTaskById: db.prepare('SELECT * FROM tasks WHERE id = ?'),
+    // Task 写入
+    createTask: db.prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)'),
+    createSubTask: db.prepare(
+      'INSERT INTO tasks (content, category_id, parent_id) VALUES (?, (SELECT category_id FROM tasks WHERE id = ?), ?)'
+    ),
     updateContent: db.prepare('UPDATE tasks SET content = ? WHERE id = ?'),
     updateCompleted: db.prepare('UPDATE tasks SET is_completed = ? WHERE id = ?'),
-    updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?')
+    updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?'),
+    deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
+    toggleTaskComplete: db.prepare(
+      'UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?'
+    ),
+    batchCompleteSubTasks: db.prepare(
+      'UPDATE tasks SET is_completed = 1 WHERE parent_id = ? AND is_completed = 0'
+    ),
+    // 统计
+    getPendingTaskCounts: db.prepare(
+      'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 AND parent_id IS NULL GROUP BY category_id'
+    )
   }
 
   console.log('数据库初始化成功:', dbPath)
@@ -138,45 +185,25 @@ export interface Category {
   created_at: number
 }
 
-/**
- * 获取所有分类
- */
 export function getAllCategories(): Category[] {
-  const stmt = getDb().prepare('SELECT * FROM categories ORDER BY order_index, id')
-  return stmt.all() as Category[]
+  return getStmts().getAllCategories.all() as Category[]
 }
 
-/**
- * 创建分类
- */
 export function createCategory(name: string): Category {
-  const stmt = getDb().prepare('INSERT INTO categories (name) VALUES (?)')
-  const info = stmt.run(name)
+  const info = getStmts().createCategory.run(name)
   return getCategoryById(info.lastInsertRowid as number)!
 }
 
-/**
- * 根据 ID 获取分类
- */
 export function getCategoryById(id: number): Category | undefined {
-  const stmt = getDb().prepare('SELECT * FROM categories WHERE id = ?')
-  return stmt.get(id) as Category | undefined
+  return getStmts().getCategoryById.get(id) as Category | undefined
 }
 
-/**
- * 更新分类
- */
 export function updateCategory(id: number, name: string): void {
-  const stmt = getDb().prepare('UPDATE categories SET name = ? WHERE id = ?')
-  stmt.run(name, id)
+  getStmts().updateCategory.run(name, id)
 }
 
-/**
- * 删除分类（级联删除关联任务）
- */
 export function deleteCategory(id: number): void {
-  const stmt = getDb().prepare('DELETE FROM categories WHERE id = ?')
-  stmt.run(id)
+  getStmts().deleteCategory.run(id)
 }
 
 // ==================== Task CRUD ====================
@@ -206,103 +233,67 @@ function mapTask(raw: Record<string, unknown>): Task {
   }
 }
 
-/**
- * 根据分类 ID 获取任务列表
- */
 export function getTasksByCategory(categoryId: number): Task[] {
-  // LEFT JOIN 带出子任务统计，初始加载即可显示进度 badge
-  const stmt = getDb().prepare(`
-    SELECT t.*,
-      COUNT(s.id) AS subtask_total,
-      SUM(CASE WHEN s.is_completed = 1 THEN 1 ELSE 0 END) AS subtask_done
-    FROM tasks t
-    LEFT JOIN tasks s ON s.parent_id = t.id
-    WHERE t.category_id = ? AND t.parent_id IS NULL
-    GROUP BY t.id
-    ORDER BY t.order_index DESC, t.id DESC
-  `)
-  return (stmt.all(categoryId) as Record<string, unknown>[]).map(mapTask)
+  return (getStmts().getTasksByCategory.all(categoryId) as Record<string, unknown>[]).map(mapTask)
 }
 
-/**
- * 获取指定父任务的子任务列表
- */
 export function getSubTasks(parentId: number): Task[] {
-  const stmt = getDb().prepare(
-    'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
-  )
-  return (stmt.all(parentId) as Record<string, unknown>[]).map(mapTask)
+  return (getStmts().getSubTasks.all(parentId) as Record<string, unknown>[]).map(mapTask)
 }
 
 /**
- * 创建子任务
+ * 创建子任务 — 用子查询继承父任务的 category_id，避免额外 SELECT
  */
 export function createSubTask(content: string, parentId: number): Task {
-  // 继承父任务的 category_id
-  const parent = getTaskById(parentId)
-  if (!parent) throw new Error(`父任务 ${parentId} 不存在`)
-  const stmt = getDb().prepare(
-    'INSERT INTO tasks (content, category_id, parent_id) VALUES (?, ?, ?)'
-  )
-  const info = stmt.run(content, parent.category_id, parentId)
+  const info = getStmts().createSubTask.run(content, parentId, parentId)
   return getTaskById(info.lastInsertRowid as number)!
 }
 
-/**
- * 创建任务
- */
 export function createTask(content: string, categoryId: number): Task {
-  const stmt = getDb().prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)')
-  const info = stmt.run(content, categoryId)
+  const info = getStmts().createTask.run(content, categoryId)
   return getTaskById(info.lastInsertRowid as number)!
 }
 
-/**
- * 根据 ID 获取任务
- */
 export function getTaskById(id: number): Task | undefined {
-  const stmt = getDb().prepare('SELECT * FROM tasks WHERE id = ?')
-  const raw = stmt.get(id)
+  const raw = getStmts().getTaskById.get(id)
   return raw ? mapTask(raw as Record<string, unknown>) : undefined
 }
 
-// ─── updateTask 专用 statements（在 initDatabase() 尾部一次性 prepare，优化 #13）
-let stmts: {
-  updateContent: Database.Statement
-  updateCompleted: Database.Statement
-  updateOrderIndex: Database.Statement
-} | null = null
+// ─── 预编译 statements 对象（在 initDatabase() 中统一初始化）
+let stmts: Record<string, Database.Statement> | null = null
+
+/** 获取已初始化的 statements，未初始化时抛出错误 */
+function getStmts() {
+  if (!stmts) throw new Error('数据库未初始化')
+  return stmts
+}
 
 /**
- * 更新任务（拆分为独立 prepare 语句以复用缓存）
+ * 更新任务（按字段拆分为独立 prepared statement）
  */
 export function updateTask(
   id: number,
   updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
 ): void {
-  if (!stmts) throw new Error('数据库未初始化')
+  const s = getStmts()
   if (updates.content !== undefined) {
-    stmts.updateContent.run(updates.content, id)
+    s.updateContent.run(updates.content, id)
   }
   if (updates.is_completed !== undefined) {
-    // 写入时将 boolean 转回 SQLite INTEGER（优化 #1）
-    stmts.updateCompleted.run(updates.is_completed ? 1 : 0, id)
+    // 写入时将 boolean 转回 SQLite INTEGER
+    s.updateCompleted.run(updates.is_completed ? 1 : 0, id)
   }
   if (updates.order_index !== undefined) {
-    stmts.updateOrderIndex.run(updates.order_index, id)
+    s.updateOrderIndex.run(updates.order_index, id)
   }
 }
 
-/**
- * 删除任务
- */
 export function deleteTask(id: number): void {
-  const stmt = getDb().prepare('DELETE FROM tasks WHERE id = ?')
-  stmt.run(id)
+  getStmts().deleteTask.run(id)
 }
 
 /**
- * 批量删除任务（优化 #14：改用 IN 子句，比事务循环更简洁）
+ * 批量删除任务（IN 子句，动态参数无法预编译）
  */
 export function deleteTasks(ids: number[]): void {
   if (ids.length === 0) return
@@ -312,23 +303,26 @@ export function deleteTasks(ids: number[]): void {
     .run(...ids)
 }
 
-/**
- * 切换任务完成状态
- */
+/** 切换任务完成状态（用于用户手动点击） */
 export function toggleTaskComplete(id: number): void {
-  const stmt = getDb().prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?')
-  stmt.run(id)
+  getStmts().toggleTaskComplete.run(id)
 }
 
 /**
- * 获取各分类的待完成任务数量
- * 返回 { categoryId: pendingCount } 的映射
+ * 确定性设置任务完成状态（用于联动场景，避免 NOT 翻转的幂等性风险）
  */
+export function setTaskCompleted(id: number, completed: boolean): void {
+  getStmts().updateCompleted.run(completed ? 1 : 0, id)
+}
+
+/** 批量完成指定父任务下的所有未完成子任务 */
+export function batchCompleteSubTasks(parentId: number): number {
+  const info = getStmts().batchCompleteSubTasks.run(parentId)
+  return info.changes
+}
+
+/** 获取各分类的待完成任务数量 */
 export function getPendingTaskCounts(): Record<number, number> {
-  // 只统计顶级任务（parent_id IS NULL）
-  const stmt = getDb().prepare(
-    'SELECT category_id, COUNT(*) as count FROM tasks WHERE is_completed = 0 AND parent_id IS NULL GROUP BY category_id'
-  )
-  const rows = stmt.all() as { category_id: number; count: number }[]
+  const rows = getStmts().getPendingTaskCounts.all() as { category_id: number; count: number }[]
   return Object.fromEntries(rows.map((r) => [r.category_id, r.count]))
 }

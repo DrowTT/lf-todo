@@ -112,42 +112,50 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
 // ─── 卡片容器 ──────────────────────────────
 .card {
-  background: #fff;
-  border: 1px solid #E2E8F0;
+  background: $bg-elevated;
+  border: 1px solid $border-color;
   border-radius: 14px;
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.06),
     0 6px 16px rgba(15, 23, 42, 0.04);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease,
+    transform 0.25s ease;
   overflow: hidden;
   cursor: default;
   position: relative;
 
-  // hover — 边框微调
+  // hover — 微妙上浮 + 边框调整
   &:hover {
-    border-color: #CBD5E1;
+    border-color: $border-light;
+    transform: translateY(-1px);
     box-shadow:
-      0 1px 3px rgba(15, 23, 42, 0.06),
-      0 6px 16px rgba(15, 23, 42, 0.04),
-      inset 0 0 0 1px rgba(37, 99, 235, 0.04);
+      0 2px 6px rgba(15, 23, 42, 0.08),
+      0 8px 20px rgba(15, 23, 42, 0.06);
   }
 
-  // 展开态 — 蓝色光晕（强调条不显示，已有边框）
+  // 展开态 — 蓝色光晕
   &--open {
-    border-color: rgba(37, 99, 235, 0.3);
+    border-color: rgba($accent-color, 0.3);
     box-shadow:
-      0 2px 8px rgba(37, 99, 235, 0.08),
-      0 0 0 1px rgba(37, 99, 235, 0.06);
+      0 2px 8px rgba($accent-color, 0.08),
+      0 0 0 1px rgba($accent-color, 0.06);
 
     &:hover {
-      border-color: rgba(37, 99, 235, 0.35);
+      border-color: rgba($accent-color, 0.35);
+      transform: none;
     }
   }
 
-  // 已完成态 — 降低存在感
+  // 已完成态 — 柔化视觉
   &--done {
-    opacity: 0.7;
-    &:hover { opacity: 1; }
+    opacity: 0.65;
+    background: rgba($bg-elevated, 0.7);
+
+    &:hover {
+      opacity: 0.9;
+    }
   }
 }
 
@@ -170,32 +178,40 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   width: 22px;
   height: 22px;
   margin-top: 1px;
-  border: 2px solid #CBD5E1;
+  border: 2px solid $border-light;
   border-radius: 7px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  transition: all 0.2s ease;
+  background: $bg-elevated;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   padding: 0;
 
   &:hover {
-    border-color: #2563EB;
-    background: rgba(37, 99, 235, 0.06);
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+    border-color: $accent-color;
+    background: $accent-soft;
+    box-shadow: 0 0 0 4px rgba($accent-color, 0.08);
   }
 
+  // 勾选态 — 带微弹跳
   &--on {
-    background: #2563EB;
-    border-color: #2563EB;
+    background: $accent-color;
+    border-color: $accent-color;
+    animation: check-bounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
     &:hover {
-      background: #1D4ED8;
-      border-color: #1D4ED8;
-      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+      background: $accent-hover;
+      border-color: $accent-hover;
+      box-shadow: 0 0 0 4px rgba($accent-color, 0.12);
     }
   }
+}
+
+@keyframes check-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.2); }
+  100% { transform: scale(1); }
 }
 
 .card__check-svg {
@@ -205,9 +221,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 // ─── 文本 ──────────────────────────────────
 .card__text {
   flex: 1;
-  font-size: 14px;
+  font-size: $font-lg;
   font-weight: 450;
-  color: #0F172A;
+  color: $text-primary;
   line-height: 1.65;
   word-break: break-word;
   user-select: text;
@@ -218,9 +234,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   gap: 6px;
 
   .card--done & {
-    color: #94A3B8;
+    color: $text-muted;
     text-decoration: line-through;
-    text-decoration-color: rgba(148, 163, 184, 0.4);
+    text-decoration-color: rgba($text-muted, 0.4);
     font-weight: 400;
   }
 }
@@ -229,10 +245,10 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 .card__progress {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: $font-xs;
   font-weight: 600;
-  color: #2563EB;
-  background: rgba(37, 99, 235, 0.08);
+  color: $accent-color;
+  background: $accent-soft;
   border-radius: 100px;
   padding: 2px 10px;
   letter-spacing: 0.4px;
@@ -247,19 +263,19 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
 .card__edit-area {
   width: 100%;
-  background: #fff;
-  color: #0F172A;
-  font-size: 14px;
+  background: $bg-elevated;
+  color: $text-primary;
+  font-size: $font-lg;
   line-height: 1.65;
   padding: 4px 10px;
-  border: 2px solid #2563EB;
+  border: 2px solid $accent-color;
   border-radius: 10px;
   outline: none;
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
   font-family: inherit;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  box-shadow: $shadow-glow;
 }
 
 // ─── 操作按钮 ──────────────────────────────
@@ -269,7 +285,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   padding: 4px;
   background: transparent;
   border: none;
-  color: #94A3B8;
+  color: $text-muted;
   cursor: pointer;
   transition: all 0.15s ease;
   border-radius: 6px;
@@ -278,12 +294,12 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 .card__toggle {
   &--on {
     opacity: 1 !important;
-    color: #2563EB;
+    color: $accent-color;
   }
 
   &:hover {
-    color: #2563EB;
-    background: rgba(37, 99, 235, 0.08);
+    color: $accent-color;
+    background: $accent-soft;
   }
 }
 
@@ -298,8 +314,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
 .card__del {
   &:hover {
-    color: #DC2626;
-    background: rgba(220, 38, 38, 0.08);
+    color: $danger-color;
+    background: rgba($danger-color, 0.08);
   }
 }
 
@@ -307,9 +323,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 .card__subs {
   margin: 0 12px 12px;
   padding: 8px 4px 4px 14px;
-  background: #F0F4FA;
+  background: $bg-deep;
   border-radius: 10px;
-  border-left: 3px solid rgba(37, 99, 235, 0.25);
+  border-left: 3px solid rgba($accent-color, 0.25);
   overflow: hidden;
 }
 

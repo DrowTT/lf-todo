@@ -96,6 +96,14 @@ export const useSubTaskStore = defineStore('subTask', () => {
       const parent = taskStore.tasks.find((t) => t.id === parentId)
       if (parent) {
         parent.subtask_total = (parent.subtask_total ?? 0) + 1
+        // 规则3：在已完成的主待办下新增子待办时，自动取消主待办完成状态
+        if (parent.is_completed) {
+          parent.is_completed = false
+          taskStore._adjustPendingCount(parent.category_id, 1)
+          db.setTaskCompleted(parentId, false).catch((e) =>
+            console.error('[subTaskStore] 联动取消主待办完成 IPC 失败:', e)
+          )
+        }
       }
     } catch (e) {
       console.error('[subTaskStore] addSubTask 失败:', e)
@@ -115,6 +123,25 @@ export const useSubTaskStore = defineStore('subTask', () => {
     const parent = taskStore.tasks.find((t) => t.id === parentId)
     if (parent) {
       parent.subtask_done = (parent.subtask_done ?? 0) + (newCompleted ? 1 : -1)
+
+      // 规则2：所有子待办都完成时，自动完成主待办
+      const allDone = list!.every((t) => t.is_completed)
+      if (allDone && !parent.is_completed) {
+        parent.is_completed = true
+        taskStore._adjustPendingCount(parent.category_id, -1)
+        db.setTaskCompleted(parentId, true).catch((e) =>
+          console.error('[subTaskStore] 联动完成主待办 IPC 失败:', e)
+        )
+      }
+
+      // 规则3：取消子待办完成时，若主待办已完成则自动取消
+      if (!newCompleted && parent.is_completed) {
+        parent.is_completed = false
+        taskStore._adjustPendingCount(parent.category_id, 1)
+        db.setTaskCompleted(parentId, false).catch((e) =>
+          console.error('[subTaskStore] 联动取消主待办完成 IPC 失败:', e)
+        )
+      }
     }
     db.toggleTaskComplete(id).catch((e) =>
       console.error('[subTaskStore] toggleSubTask IPC 失败:', e)

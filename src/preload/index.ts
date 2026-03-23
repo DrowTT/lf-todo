@@ -26,12 +26,16 @@ const api = {
     deleteTask: (id: number) => ipcRenderer.invoke('db:delete-task', id),
     deleteTasks: (ids: number[]) => ipcRenderer.invoke('db:delete-tasks', ids),
     toggleTaskComplete: (id: number) => ipcRenderer.invoke('db:toggle-task', id),
+    setTaskCompleted: (id: number, completed: boolean) =>
+      ipcRenderer.invoke('db:set-task-completed', id, completed),
     getPendingTaskCounts: () => ipcRenderer.invoke('db:get-pending-counts'),
 
     // SubTask 操作
     getSubTasks: (parentId: number) => ipcRenderer.invoke('db:get-subtasks', parentId),
     createSubTask: (content: string, parentId: number) =>
-      ipcRenderer.invoke('db:create-subtask', content, parentId)
+      ipcRenderer.invoke('db:create-subtask', content, parentId),
+    batchCompleteSubTasks: (parentId: number) =>
+      ipcRenderer.invoke('db:batch-complete-subtasks', parentId)
   }
 }
 

@@ -25,6 +25,9 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle('db:delete-task', (_, id: number) => db.deleteTask(id))
   ipcMain.handle('db:toggle-task', (_, id: number) => db.toggleTaskComplete(id))
+  ipcMain.handle('db:set-task-completed', (_, id: number, completed: boolean) =>
+    db.setTaskCompleted(id, completed)
+  )
   ipcMain.handle('db:delete-tasks', (_, ids: number[]) => db.deleteTasks(ids))
   ipcMain.handle('db:get-pending-counts', () => db.getPendingTaskCounts())
 
@@ -32,5 +35,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('db:get-subtasks', (_, parentId: number) => db.getSubTasks(parentId))
   ipcMain.handle('db:create-subtask', (_, content: string, parentId: number) =>
     db.createSubTask(content, parentId)
+  )
+  ipcMain.handle('db:batch-complete-subtasks', (_, parentId: number) =>
+    db.batchCompleteSubTasks(parentId)
   )
 }

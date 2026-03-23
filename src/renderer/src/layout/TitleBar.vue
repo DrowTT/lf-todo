@@ -1,7 +1,10 @@
 <template>
   <div class="title-bar">
     <div class="title-bar__drag-area">
-      <div class="title-bar__title">极简待办</div>
+      <div class="title-bar__title">
+        <span class="title-bar__dot"></span>
+        极简待办
+      </div>
     </div>
     <div class="title-bar__controls">
       <button
@@ -85,10 +88,22 @@ onMounted(() => {
   }
 
   &__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: $font-sm;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
     color: $text-secondary;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $accent-color;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba($accent-color, 0.3);
   }
 
   &__controls {

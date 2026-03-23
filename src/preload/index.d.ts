@@ -43,11 +43,13 @@ interface API {
     deleteTask: (id: number) => Promise<void>
     deleteTasks: (ids: number[]) => Promise<void>
     toggleTaskComplete: (id: number) => Promise<void>
+    setTaskCompleted: (id: number, completed: boolean) => Promise<void>
     getPendingTaskCounts: () => Promise<Record<number, number>>
 
     // SubTask 操作
     getSubTasks: (parentId: number) => Promise<Task[]>
     createSubTask: (content: string, parentId: number) => Promise<Task>
+    batchCompleteSubTasks: (parentId: number) => Promise<number>
   }
 }
 

@@ -60,6 +60,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 </template>
 
 <style scoped lang="scss">
+@use '../styles/variables' as *;
+
 .sub {
   display: flex;
   align-items: flex-start;
@@ -69,25 +71,25 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   transition: background-color 0.15s ease;
 
   &:hover {
-    background: rgba(37, 99, 235, 0.04);
+    background: $accent-soft;
 
     .sub__del { opacity: 1; }
   }
 
   &--done {
     .sub__text {
-      color: #94A3B8;
+      color: $text-muted;
       text-decoration: line-through;
-      text-decoration-color: rgba(148, 163, 184, 0.3);
+      text-decoration-color: rgba($text-muted, 0.3);
     }
 
     .sub__check {
-      background: #94A3B8;
-      border-color: #94A3B8;
+      background: $text-muted;
+      border-color: $text-muted;
 
       &:hover {
-        background: #64748B;
-        border-color: #64748B;
+        background: $text-secondary;
+        border-color: $text-secondary;
       }
     }
 
@@ -101,23 +103,23 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  border: 1.5px solid #CBD5E1;
+  border: 1.5px solid $border-light;
   border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: $bg-elevated;
   transition: all 0.15s ease;
   padding: 0;
 
   &:hover {
-    border-color: #2563EB;
+    border-color: $accent-color;
   }
 
   &--on {
-    background: #94A3B8;
-    border-color: #94A3B8;
+    background: $text-muted;
+    border-color: $text-muted;
   }
 }
 
@@ -128,8 +130,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 // ─── 文本 ──────────────────────────────────
 .sub__text {
   flex: 1;
-  font-size: 12px;
-  color: #475569;
+  font-size: $font-sm;
+  color: $text-secondary;
   line-height: 1.55;
   word-break: break-word;
   user-select: text;
@@ -143,19 +145,19 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
 .sub__edit-area {
   width: 100%;
-  background: #fff;
-  color: #0F172A;
-  font-size: 12px;
+  background: $bg-elevated;
+  color: $text-primary;
+  font-size: $font-sm;
   line-height: 1.55;
   padding: 2px 8px;
-  border: 1.5px solid #2563EB;
+  border: 1.5px solid $accent-color;
   border-radius: 6px;
   outline: none;
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
   font-family: inherit;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px rgba($accent-color, 0.1);
 }
 
 // ─── 删除 ──────────────────────────────────
@@ -165,14 +167,14 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   padding: 2px;
   background: transparent;
   border: none;
-  color: #94A3B8;
+  color: $text-muted;
   cursor: pointer;
   transition: all 0.15s ease;
   border-radius: 4px;
 
   &:hover {
-    color: #DC2626;
-    background: rgba(220, 38, 38, 0.08);
+    color: $danger-color;
+    background: rgba($danger-color, 0.08);
   }
 }
 </style>

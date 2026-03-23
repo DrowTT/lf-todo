@@ -43,6 +43,8 @@ onMounted(() => adjustHeight())
 </template>
 
 <style scoped lang="scss">
+@use '../styles/variables' as *;
+
 .sub-add {
   display: flex;
   align-items: center;
@@ -52,8 +54,8 @@ onMounted(() => adjustHeight())
 
 .sub-add__icon {
   flex-shrink: 0;
-  font-size: 14px;
-  color: #94A3B8;
+  font-size: $font-lg;
+  color: $text-muted;
   line-height: 1;
   user-select: none;
   width: 16px;
@@ -67,14 +69,14 @@ onMounted(() => adjustHeight())
   outline: none;
   resize: none;
   overflow: hidden;
-  color: #475569;
-  font-size: 12px;
+  color: $text-secondary;
+  font-size: $font-sm;
   font-family: inherit;
   padding: 0;
   line-height: 1.55;
   transition: color 0.15s ease;
 
-  &::placeholder { color: #94A3B8; }
-  &:focus { color: #0F172A; }
+  &::placeholder { color: $text-muted; }
+  &:focus { color: $text-primary; }
 }
 </style>

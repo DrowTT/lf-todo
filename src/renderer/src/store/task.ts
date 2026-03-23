@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { db, Task } from '../db'
 import { useToast } from '../composables/useToast'
+import { useSubTaskStore } from './subtask'
 
 /**
  * 任务 Store（Pinia setup store）
@@ -70,6 +71,22 @@ export const useTaskStore = defineStore('task', () => {
     task.is_completed = newCompleted
     _adjustPendingCount(categoryId, newCompleted ? -1 : 1)
     db.toggleTaskComplete(id).catch((e) => console.error('[taskStore] toggleTask IPC 失败:', e))
+
+    // 规则1：完成主待办时，联动完成所有子待办（DB 层批量 SQL，不依赖子任务是否展开）
+    if (newCompleted) {
+      db.batchCompleteSubTasks(id).catch((e) =>
+        console.error('[taskStore] 联动批量完成子待办 IPC 失败:', e)
+      )
+      // 若子任务已在内存中加载，同步更新 UI 状态
+      const subTaskStore = useSubTaskStore()
+      const subs = subTaskStore.subTasksMap[id]
+      if (subs && subs.length > 0) {
+        for (const sub of subs) {
+          sub.is_completed = true
+        }
+        task.subtask_done = task.subtask_total
+      }
+    }
   }
 
   async function deleteTask(id: number, categoryId: number) {
@@ -111,6 +128,7 @@ export const useTaskStore = defineStore('task', () => {
     tasks,
     isLoading,
     pendingCounts,
+    _adjustPendingCount,
     initPendingCounts,
     fetchTasks,
     clearTasks,

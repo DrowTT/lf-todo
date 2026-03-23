@@ -27,7 +27,7 @@ const handleSubmit = async (): Promise<void> => {
         v-model="content"
         rows="1"
         class="todo-input__field"
-        placeholder="✏️ 添加新的待办事项..."
+        placeholder="添加新的待办事项..."
         maxlength="100"
         :disabled="store.isLoading"
         @input="adjustHeight"
