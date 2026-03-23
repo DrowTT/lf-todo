@@ -63,7 +63,9 @@ const handleSubmit = async (): Promise<void> => {
 
     &:focus-within {
       border-color: $accent-color;
-      box-shadow: 0 0 0 3px $accent-soft, $shadow-glow;
+      box-shadow:
+        0 0 0 3px $accent-soft,
+        $shadow-glow;
       background: rgba($bg-input, 0.8);
     }
   }

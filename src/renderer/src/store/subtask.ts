@@ -12,7 +12,9 @@ function loadExpandedIds(categoryId: number): Set<number> {
   try {
     const raw = localStorage.getItem(expandedKey(categoryId))
     if (raw) return new Set(JSON.parse(raw) as number[])
-  } catch {}
+  } catch {
+    // localStorage 解析失败时忽略，返回空 Set
+  }
   return new Set()
 }
 

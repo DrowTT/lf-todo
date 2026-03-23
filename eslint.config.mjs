@@ -36,5 +36,33 @@ export default defineConfig(
       ]
     }
   },
+  // renderer 层（Vue SFC setup + Pinia setup store + composables）关闭强制返回类型
+  {
+    files: ['src/renderer/**/*.{ts,vue}'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  },
+  // 主进程 database.ts 内部辅助函数关闭强制返回类型
+  {
+    files: ['src/main/**/*.ts'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  },
+  // build 脚本允许 require()
+  {
+    files: ['build/**/*.{js,cjs}'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off'
+    }
+  },
+  // preload 中 window.api 桥接层允许 any
+  {
+    files: ['src/preload/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
   eslintConfigPrettier
 )

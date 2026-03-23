@@ -32,7 +32,11 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 <template>
   <div class="sub" :class="{ 'sub--done': task.is_completed }">
     <!-- 勾选框 -->
-    <button class="sub__check" :class="{ 'sub__check--on': task.is_completed }" @click="handleToggle">
+    <button
+      class="sub__check"
+      :class="{ 'sub__check--on': task.is_completed }"
+      @click="handleToggle"
+    >
       <Check v-if="task.is_completed" class="sub__check-svg" :size="9" />
     </button>
 
@@ -73,7 +77,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   &:hover {
     background: $accent-soft;
 
-    .sub__del { opacity: 1; }
+    .sub__del {
+      opacity: 1;
+    }
   }
 
   &--done {
@@ -93,7 +99,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
       }
     }
 
-    .sub__check-svg { color: #fff; }
+    .sub__check-svg {
+      color: #fff;
+    }
   }
 }
 

@@ -26,7 +26,8 @@
     "better-sqlite3": "^12.6.2",
     "electron-store": "^8.1.0",
     "lucide-vue-next": "^0.577.0",
-    "pinia": "^3.0.4"
+    "pinia": "^3.0.4",
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.0",

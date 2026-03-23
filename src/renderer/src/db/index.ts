@@ -56,6 +56,7 @@ export const db = {
     window.api.db.setTaskCompleted(id, completed) as Promise<void>,
   getPendingTaskCounts: () =>
     window.api.db.getPendingTaskCounts() as Promise<Record<number, number>>,
+  reorderTasks: (orderedIds: number[]) => window.api.db.reorderTasks(orderedIds) as Promise<void>,
 
   // SubTask 操作
   getSubTasks: (parentId: number) => window.api.db.getSubTasks(parentId) as Promise<Task[]>,

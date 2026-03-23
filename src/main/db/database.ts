@@ -151,9 +151,7 @@ export function initDatabase(): void {
     updateCompleted: db.prepare('UPDATE tasks SET is_completed = ? WHERE id = ?'),
     updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?'),
     deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
-    toggleTaskComplete: db.prepare(
-      'UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?'
-    ),
+    toggleTaskComplete: db.prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?'),
     batchCompleteSubTasks: db.prepare(
       'UPDATE tasks SET is_completed = 1 WHERE parent_id = ? AND is_completed = 0'
     ),
@@ -325,4 +323,19 @@ export function batchCompleteSubTasks(parentId: number): number {
 export function getPendingTaskCounts(): Record<number, number> {
   const rows = getStmts().getPendingTaskCounts.all() as { category_id: number; count: number }[]
   return Object.fromEntries(rows.map((r) => [r.category_id, r.count]))
+}
+
+/**
+ * 批量更新任务排序（事务内执行）
+ * orderedIds 数组按展示顺序排列，第一个 = 最大 order_index（匹配 ORDER BY DESC）
+ */
+export function reorderTasks(orderedIds: number[]): void {
+  const s = getStmts()
+  const total = orderedIds.length
+  getDb().transaction(() => {
+    for (let i = 0; i < total; i++) {
+      // 第一个任务 order_index 最大，最后一个最小
+      s.updateOrderIndex.run(total - i, orderedIds[i])
+    }
+  })()
 }

@@ -6,8 +6,12 @@ const api = {
     minimize: () => ipcRenderer.send('window:minimize'),
     close: () => ipcRenderer.send('window:close'),
     toggleAlwaysOnTop: () => ipcRenderer.send('window:toggle-always-on-top'),
+    toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => {
       ipcRenderer.on('window:always-on-top-changed', (_, flag) => callback(flag))
+    },
+    onMaximizedChanged: (callback: (flag: boolean) => void) => {
+      ipcRenderer.on('window:maximized-changed', (_, flag) => callback(flag))
     }
   },
   db: {
@@ -29,6 +33,7 @@ const api = {
     setTaskCompleted: (id: number, completed: boolean) =>
       ipcRenderer.invoke('db:set-task-completed', id, completed),
     getPendingTaskCounts: () => ipcRenderer.invoke('db:get-pending-counts'),
+    reorderTasks: (orderedIds: number[]) => ipcRenderer.invoke('db:reorder-tasks', orderedIds),
 
     // SubTask 操作
     getSubTasks: (parentId: number) => ipcRenderer.invoke('db:get-subtasks', parentId),

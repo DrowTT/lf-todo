@@ -6,7 +6,7 @@ import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
-import { Check, ChevronRight, Trash2 } from 'lucide-vue-next'
+import { Check, ChevronRight, GripVertical, Trash2 } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
 
@@ -53,8 +53,17 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   <div class="card" :class="{ 'card--open': isExpanded, 'card--done': task.is_completed }">
     <!-- 主行 -->
     <div class="card__row">
+      <!-- 拖拽手柄 -->
+      <div class="card__drag-handle">
+        <GripVertical :size="14" />
+      </div>
+
       <!-- 勾选框 -->
-      <button class="card__check" :class="{ 'card__check--on': task.is_completed }" @click="handleToggle">
+      <button
+        class="card__check"
+        :class="{ 'card__check--on': task.is_completed }"
+        @click="handleToggle"
+      >
         <Check v-if="task.is_completed" class="card__check-svg" :size="12" />
       </button>
 
@@ -85,8 +94,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
         v-if="!isEditing"
         class="card__action card__toggle"
         :class="{ 'card__toggle--on': isExpanded }"
-        @click="handleToggleExpand"
         title="展开子任务"
+        @click="handleToggleExpand"
       >
         <ChevronRight class="card__toggle-svg" :size="14" />
       </button>
@@ -100,8 +109,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     <!-- 子任务区域 -->
     <Transition name="sub-slide">
       <div v-if="isExpanded" class="card__subs">
-        <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parentId="task.id" />
-        <SubTaskInput :parentId="task.id" />
+        <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parent-id="task.id" />
+        <SubTaskInput :parent-id="task.id" />
       </div>
     </Transition>
   </div>
@@ -159,6 +168,64 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   }
 }
 
+// ─── 拖拽手柄 ──────────────────────────────
+.card__drag-handle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
+  margin-top: 1px;
+  color: $text-muted;
+  opacity: 0;
+  cursor: grab;
+  transition: all $transition-normal;
+  border-radius: $radius-sm;
+  margin-left: -4px;
+
+  &:hover {
+    color: $accent-color;
+    opacity: 1 !important;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// 卡片 hover 时显示拖拽手柄
+.card:hover .card__drag-handle {
+  opacity: 0.45;
+}
+
+// ─── 拖拽态 ─────────────────────────────────
+.card--dragging {
+  opacity: 0.92;
+  transform: rotate(1.5deg) scale(1.02);
+  box-shadow:
+    0 8px 28px rgba(37, 99, 235, 0.12),
+    0 0 0 2px rgba($accent-color, 0.25);
+  border-color: rgba($accent-color, 0.4);
+  z-index: 10;
+  transition: none;
+
+  .card__drag-handle {
+    opacity: 1 !important;
+    color: $accent-color;
+    cursor: grabbing;
+  }
+}
+
+// ─── 拖拽占位元素（SortableJS ghost） ──────
+.card--ghost {
+  opacity: 0.35;
+  transform: scale(0.98);
+  border: 2px dashed rgba($accent-color, 0.35);
+  box-shadow: none;
+  background: rgba($accent-color, 0.03);
+}
+
 // ─── 主行 ──────────────────────────────────
 .card__row {
   display: flex;
@@ -168,7 +235,9 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   transition: background-color 0.15s ease;
 
   &:hover {
-    .card__action { opacity: 1; }
+    .card__action {
+      opacity: 1;
+    }
   }
 }
 
@@ -209,9 +278,15 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 }
 
 @keyframes check-bounce {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.2); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .card__check-svg {

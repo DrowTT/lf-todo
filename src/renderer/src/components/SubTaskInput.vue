@@ -76,7 +76,11 @@ onMounted(() => adjustHeight())
   line-height: 1.55;
   transition: color 0.15s ease;
 
-  &::placeholder { color: $text-muted; }
-  &:focus { color: $text-primary; }
+  &::placeholder {
+    color: $text-muted;
+  }
+  &:focus {
+    color: $text-primary;
+  }
 }
 </style>

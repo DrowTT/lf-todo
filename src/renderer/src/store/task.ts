@@ -124,6 +124,15 @@ export const useTaskStore = defineStore('task', () => {
     delete pendingCounts.value[id]
   }
 
+  /**
+   * 拖拽排序后重排任务列表
+   * tasks.value 已由 vuedraggable 通过 v-model 直接更新，此处仅需持久化
+   */
+  function reorderTasks() {
+    const orderedIds = tasks.value.map((t) => t.id)
+    db.reorderTasks(orderedIds).catch((e) => console.error('[taskStore] reorderTasks IPC 失败:', e))
+  }
+
   return {
     tasks,
     isLoading,
@@ -137,6 +146,7 @@ export const useTaskStore = defineStore('task', () => {
     deleteTask,
     updateTaskContent,
     clearCompletedTasks,
-    removePendingCount
+    removePendingCount,
+    reorderTasks
   }
 })

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { store } from '../store'
+import { useTaskStore } from '../store/task'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
+import draggable from 'vuedraggable'
 import { computed } from 'vue'
 import { useConfirm } from '../composables/useConfirm'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
+const taskStore = useTaskStore()
 
 const currentCategoryName = computed(() => {
   const cat = store.categories.find((c) => c.id === store.currentCategoryId)
@@ -17,11 +20,24 @@ const completedCount = computed(() => {
   return store.tasks.filter((t) => t.is_completed).length
 })
 
+// vuedraggable 需要可写 computed 来双向绑定 tasks 数组
+const draggableTasks = computed({
+  get: () => taskStore.tasks,
+  set: (val) => {
+    taskStore.tasks = val
+  }
+})
+
 const handleClearCompleted = async () => {
   const confirmed = await confirm(`确认删除 ${completedCount.value} 个已完成的待办吗?`)
   if (confirmed) {
     store.clearCompletedTasks()
   }
+}
+
+// 拖拽结束 — 持久化新顺序
+const onDragEnd = () => {
+  store.reorderTasks()
 }
 </script>
 
@@ -33,16 +49,18 @@ const handleClearCompleted = async () => {
         {{ currentCategoryName }}
       </h1>
       <div class="todo-panel__actions">
-        <span class="todo-panel__badge" v-if="store.currentCategoryId">
-          <span class="todo-panel__badge-num">{{ store.pendingCounts[store.currentCategoryId] ?? 0 }}</span>
+        <span v-if="store.currentCategoryId" class="todo-panel__badge">
+          <span class="todo-panel__badge-num">{{
+            store.pendingCounts[store.currentCategoryId] ?? 0
+          }}</span>
           <span class="todo-panel__badge-label">待办</span>
         </span>
         <button
           v-if="store.currentCategoryId"
-          @click="handleClearCompleted"
           :disabled="completedCount === 0"
           class="todo-panel__clear-btn"
           title="清空已完成"
+          @click="handleClearCompleted"
         >
           清空已完成 ({{ completedCount }})
         </button>
@@ -80,15 +98,22 @@ const handleClearCompleted = async () => {
           <div class="todo-panel__empty-hint">在上方输入框添加你的第一个待办吧</div>
         </div>
 
-        <!-- 卡片列表 — TransitionGroup 提供添加/删除过渡 -->
-        <TransitionGroup
+        <!-- 可拖拽卡片列表 -->
+        <draggable
           v-else
-          name="card-list"
-          tag="div"
+          v-model="draggableTasks"
+          item-key="id"
+          handle=".card__drag-handle"
+          ghost-class="card--ghost"
+          drag-class="card--dragging"
+          :animation="200"
           class="todo-panel__cards"
+          @end="onDragEnd"
         >
-          <TodoItem v-for="task in store.tasks" :key="task.id" :task="task" />
-        </TransitionGroup>
+          <template #item="{ element }">
+            <TodoItem :task="element" />
+          </template>
+        </draggable>
       </template>
     </div>
   </div>
@@ -215,7 +240,11 @@ const handleClearCompleted = async () => {
 
   // Sparkles 变体 — 暖色调
   &--spark {
-    background: linear-gradient(135deg, rgba($warning-color, 0.1) 0%, rgba($warning-color, 0.04) 100%);
+    background: linear-gradient(
+      135deg,
+      rgba($warning-color, 0.1) 0%,
+      rgba($warning-color, 0.04) 100%
+    );
     border-color: rgba($warning-color, 0.12);
     color: $warning-color;
   }
@@ -290,12 +319,18 @@ const handleClearCompleted = async () => {
   border-radius: 50%;
   animation: dot-bounce 1.2s ease-in-out infinite;
 
-  &:nth-child(2) { animation-delay: 0.15s; }
-  &:nth-child(3) { animation-delay: 0.3s; }
+  &:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  &:nth-child(3) {
+    animation-delay: 0.3s;
+  }
 }
 
 @keyframes dot-bounce {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     transform: translateY(0);
     opacity: 0.4;
   }

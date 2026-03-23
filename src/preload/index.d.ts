@@ -24,7 +24,9 @@ interface API {
     minimize: () => void
     close: () => void
     toggleAlwaysOnTop: () => void
+    toggleMaximize: () => void
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => void
+    onMaximizedChanged: (callback: (flag: boolean) => void) => void
   }
   db: {
     // Category 操作
@@ -45,6 +47,7 @@ interface API {
     toggleTaskComplete: (id: number) => Promise<void>
     setTaskCompleted: (id: number, completed: boolean) => Promise<void>
     getPendingTaskCounts: () => Promise<Record<number, number>>
+    reorderTasks: (orderedIds: number[]) => Promise<void>
 
     // SubTask 操作
     getSubTasks: (parentId: number) => Promise<Task[]>

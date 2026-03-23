@@ -30,6 +30,7 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle('db:delete-tasks', (_, ids: number[]) => db.deleteTasks(ids))
   ipcMain.handle('db:get-pending-counts', () => db.getPendingTaskCounts())
+  ipcMain.handle('db:reorder-tasks', (_, orderedIds: number[]) => db.reorderTasks(orderedIds))
 
   // ─── SubTask ────────────────────────────────────────────────────
   ipcMain.handle('db:get-subtasks', (_, parentId: number) => db.getSubTasks(parentId))

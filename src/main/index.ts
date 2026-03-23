@@ -14,6 +14,7 @@ interface StoreType {
     x: number
     y: number
   }
+  alwaysOnTop: boolean
 }
 
 const store = new Store<StoreType>()
@@ -56,6 +57,12 @@ function createWindow(): void {
   mainWindow = win
 
   win.on('ready-to-show', () => {
+    // 恢复置顶状态
+    const savedOnTop = store.get('alwaysOnTop', false)
+    if (savedOnTop) {
+      win.setAlwaysOnTop(true)
+      win.webContents.send('window:always-on-top-changed', true)
+    }
     win.show()
     // 开发模式下打开 DevTools
     if (is.dev) {
@@ -129,7 +136,24 @@ function createWindow(): void {
   ipcMain.on('window:toggle-always-on-top', () => {
     const flag = !win.isAlwaysOnTop()
     win.setAlwaysOnTop(flag)
+    store.set('alwaysOnTop', flag)
     win.webContents.send('window:always-on-top-changed', flag)
+  })
+
+  ipcMain.on('window:toggle-maximize', () => {
+    if (win.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win.maximize()
+    }
+  })
+
+  // 监听窗口最大化/还原状态变化，通知渲染进程更新图标
+  win.on('maximize', () => {
+    win.webContents.send('window:maximized-changed', true)
+  })
+  win.on('unmaximize', () => {
+    win.webContents.send('window:maximized-changed', false)
   })
 
   // HMR for renderer base on electron-vite cli.

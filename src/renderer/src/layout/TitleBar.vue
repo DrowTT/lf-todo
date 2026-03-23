@@ -10,19 +10,27 @@
       <button
         class="title-bar__btn title-bar__btn--pin"
         :class="{ 'is-active': isAlwaysOnTop }"
-        @click="handleTogglePin"
         title="置顶"
+        @click="handleTogglePin"
       >
         <Pin :size="15" style="transform: rotate(45deg)" />
       </button>
       <button
         class="title-bar__btn title-bar__btn--minimize"
-        @click="handleMinimize"
         title="最小化"
+        @click="handleMinimize"
       >
         <Minus :size="14" />
       </button>
-      <button class="title-bar__btn title-bar__btn--close" @click="handleClose" title="关闭">
+      <button
+        class="title-bar__btn title-bar__btn--maximize"
+        :title="isMaximized ? '还原' : '最大化'"
+        @click="handleToggleMaximize"
+      >
+        <IconRestore v-if="isMaximized" />
+        <Square v-else :size="13" :stroke-width="1.4" />
+      </button>
+      <button class="title-bar__btn title-bar__btn--close" title="关闭" @click="handleClose">
         <X :size="14" />
       </button>
     </div>
@@ -31,9 +39,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Pin, Minus, X } from 'lucide-vue-next'
+import { Pin, Minus, Square, X } from 'lucide-vue-next'
+import IconRestore from '../components/icons/IconRestore.vue'
 
 const isAlwaysOnTop = ref(false)
+const isMaximized = ref(false)
 
 // 检查是否在 Electron 环境中（window.api 由 preload 脚本注入）
 const isElectron = typeof window !== 'undefined' && window.api !== undefined
@@ -50,6 +60,12 @@ const handleMinimize = () => {
   }
 }
 
+const handleToggleMaximize = () => {
+  if (isElectron) {
+    window.api.window.toggleMaximize()
+  }
+}
+
 const handleClose = () => {
   if (isElectron) {
     window.api.window.close()
@@ -60,6 +76,9 @@ onMounted(() => {
   if (isElectron) {
     window.api.window.onAlwaysOnTopChanged((flag: boolean) => {
       isAlwaysOnTop.value = flag
+    })
+    window.api.window.onMaximizedChanged((flag: boolean) => {
+      isMaximized.value = flag
     })
   }
 })

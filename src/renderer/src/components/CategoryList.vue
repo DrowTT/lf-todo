@@ -94,6 +94,7 @@ const cancelRename = () => {
         >
           <input
             v-if="editingCategoryId === cat.id"
+            ref="editInputRef"
             v-model="editingName"
             class="category-item__edit-input"
             maxlength="6"
@@ -101,7 +102,6 @@ const cancelRename = () => {
             @keyup.escape="cancelRename"
             @blur="handleRenameConfirm"
             @click.stop
-            ref="editInputRef"
           />
           <template v-else>
             <span class="category-item__name">{{ cat.name }}</span>
@@ -114,20 +114,20 @@ const cancelRename = () => {
 
       <div v-if="isAdding" class="category-list__input-wrapper">
         <input
+          ref="inputRef"
           v-model="newCategoryName"
           class="category-list__input"
           placeholder="输入名称..."
           maxlength="6"
+          autofocus
           @keyup.enter="handleAddCategory"
           @blur="handleAddCategory"
-          ref="inputRef"
-          autofocus
         />
       </div>
     </div>
 
     <div class="category-list__footer">
-      <button v-if="!isAdding" @click="startAdding" class="category-list__add-btn">
+      <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">
         <Plus class="category-list__add-icon" :size="12" />
         新建分类
       </button>
@@ -140,9 +140,9 @@ const cancelRename = () => {
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       @click.stop
     >
-      <button @click="handleRenameClick" class="context-menu__item">重命名</button>
+      <button class="context-menu__item" @click="handleRenameClick">重命名</button>
       <div class="context-menu__divider"></div>
-      <button @click="handleDeleteCategory" class="context-menu__item context-menu__item--danger">
+      <button class="context-menu__item context-menu__item--danger" @click="handleDeleteCategory">
         删除分类
       </button>
     </div>
@@ -246,7 +246,9 @@ const cancelRename = () => {
   color: $text-secondary;
   cursor: pointer;
   border-radius: $radius-md;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
   position: relative;
 
   &:hover {

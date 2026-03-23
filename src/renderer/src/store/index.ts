@@ -120,6 +120,11 @@ export const store = {
     }
   },
 
+  // 拖拽排序 — vuedraggable 已通过 v-model 更新 tasks 数组，此处仅持久化
+  reorderTasks() {
+    useTaskStore().reorderTasks()
+  },
+
   // ─── SubTask Actions ─────────────────────────────────────────
   async fetchSubTasks(parentId: number) {
     await useSubTaskStore().fetchSubTasks(parentId)
