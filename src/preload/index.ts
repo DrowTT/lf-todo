@@ -50,6 +50,18 @@ const api = {
       ipcRenderer.invoke('settings:set-auto-cleanup', config),
     exportData: () => ipcRenderer.invoke('settings:export-data'),
     getAppInfo: () => ipcRenderer.invoke('settings:get-app-info')
+  },
+  updater: {
+    // 手动检查更新
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    // 开始下载更新
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    // 退出并安装更新
+    installUpdate: () => ipcRenderer.invoke('updater:install'),
+    // 监听更新状态变化
+    onUpdateStatus: (callback: (data: Record<string, unknown>) => void) => {
+      ipcRenderer.on('updater:status', (_, data) => callback(data))
+    }
   }
 }
 

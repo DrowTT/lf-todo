@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
+import { initAutoUpdater } from './updater'
 
 interface AutoCleanupConfig {
   enabled: boolean
@@ -202,6 +203,9 @@ function createWindow(): void {
     }
 
     win.show()
+
+    // 初始化自动更新模块
+    initAutoUpdater(win)
 
     if (is.dev) {
       win.webContents.openDevTools()

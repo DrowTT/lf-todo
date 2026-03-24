@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.18.3",
   "main": "./out/main/index.js",
   "author": "LF",
-  "homepage": "https://gitee.com/online-dating-LT/lf-todo",
+  "homepage": "https://github.com/online-dating-LT/lf-todo",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -26,6 +26,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^12.6.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3",
     "lucide-vue-next": "^0.577.0",
     "pinia": "^3.0.4",
     "vuedraggable": "^4.1.0"

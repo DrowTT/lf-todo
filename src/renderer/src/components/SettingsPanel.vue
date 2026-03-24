@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { Settings, X, Power, MonitorOff, Trash2, Download, Info, Keyboard } from 'lucide-vue-next'
+import { Settings, X, Power, MonitorOff, Trash2, Download, Info, Keyboard, RefreshCw } from 'lucide-vue-next'
 import { useHotkeys, HOTKEY_LABELS, keyToLabel, type HotkeyAction } from '../composables/useHotkeys'
+import { useConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
   visible: boolean
@@ -30,8 +31,58 @@ const appInfo = ref({
   node: ''
 })
 
+// ─── 更新状态 ───────────────────────────────────────────────────────
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+
+const updateStatus = ref<UpdateStatus>('idle')
+const updateVersion = ref('')
+const updatePercent = ref(0)
+const updateError = ref('')
+
+// 监听来自主进程的更新状态
+const setupUpdateListener = () => {
+  if (!isElectron) return
+  window.api.updater.onUpdateStatus((data: any) => {
+    updateStatus.value = data.status
+    if (data.status === 'available') {
+      updateVersion.value = data.version || ''
+    } else if (data.status === 'downloading') {
+      updatePercent.value = data.percent || 0
+    } else if (data.status === 'downloaded') {
+      updateVersion.value = data.version || ''
+    } else if (data.status === 'error') {
+      updateError.value = data.message || '未知错误'
+    }
+  })
+}
+
+const handleCheckUpdate = async () => {
+  if (!isElectron) return
+  updateStatus.value = 'checking'
+  updateError.value = ''
+  await window.api.updater.checkForUpdates()
+}
+
+const handleDownloadUpdate = async () => {
+  if (!isElectron) return
+  updatePercent.value = 0
+  await window.api.updater.downloadUpdate()
+}
+
+const handleInstallUpdate = async () => {
+  if (!isElectron) return
+  await window.api.updater.installUpdate()
+}
+
 // ─── 快捷键设置 ──────────────────────────────────────────────────────
 const { hotkeyConfig, isEnabled, updateBinding, resetAllBindings } = useHotkeys()
+const { confirm } = useConfirm()
+
+/** 恢复默认：通过 useConfirm 弹出二次确认 */
+const handleResetAll = async () => {
+  const ok = await confirm('所有快捷键将恢复为初始设置，确认恢复默认吗？')
+  if (ok) resetAllBindings()
+}
 
 // 当前正在录键的 action（null 表示未录键）
 const recordingAction = ref<HotkeyAction | null>(null)
@@ -81,7 +132,10 @@ const handleRecordKeydown = (e: KeyboardEvent) => {
   }
 
   // 冲突检测：检查是否与其他 action 的绑定重复
-  for (const [action, binding] of Object.entries(hotkeyConfig) as [HotkeyAction, { key: string; label: string }][]) {
+  for (const [action, binding] of Object.entries(hotkeyConfig) as [
+    HotkeyAction,
+    { key: string; label: string }
+  ][]) {
     if (action !== recordingAction.value && binding.key === newKey) {
       conflictMessage.value = `"${keyToLabel(newKey)}" 已被「${HOTKEY_LABELS[action].name}」占用`
       return
@@ -132,7 +186,10 @@ const loadSettings = async () => {
 }
 
 // 面板首次挂载和每次打开时重新加载设置
-onMounted(loadSettings)
+onMounted(() => {
+  loadSettings()
+  setupUpdateListener()
+})
 watch(
   () => props.visible,
   (val) => {
@@ -276,7 +333,7 @@ onUnmounted(() => {
           <div class="settings-group__header">
             <Keyboard :size="14" class="settings-group__icon" />
             <span>快捷键</span>
-            <button class="hotkey-reset-all" @click="resetAllBindings">恢复默认</button>
+            <button class="hotkey-reset-all" @click="handleResetAll">恢复默认</button>
           </div>
 
           <!-- 可配置快捷键列表 -->
@@ -410,6 +467,84 @@ onUnmounted(() => {
               <span class="settings-about__dot"></span>
               <span class="settings-about__name">{{ appInfo.name }}</span>
               <span class="settings-about__version">v{{ appInfo.version }}</span>
+            </div>
+
+            <!-- 更新区域 -->
+            <div class="update-section">
+              <!-- 闲置 / 已是最新 -->
+              <div v-if="updateStatus === 'idle' || updateStatus === 'not-available'" class="update-section__row">
+                <span v-if="updateStatus === 'not-available'" class="update-section__text update-section__text--success">
+                  ✓ 已是最新版本
+                </span>
+                <button
+                  class="update-section__btn"
+                  @click="handleCheckUpdate"
+                >
+                  <RefreshCw :size="12" />
+                  检查更新
+                </button>
+              </div>
+
+              <!-- 检查中 -->
+              <div v-else-if="updateStatus === 'checking'" class="update-section__row">
+                <span class="update-section__text update-section__text--checking">
+                  <RefreshCw :size="12" class="update-section__spin" />
+                  正在检查更新…
+                </span>
+              </div>
+
+              <!-- 发现新版本 -->
+              <div v-else-if="updateStatus === 'available'" class="update-section__row">
+                <span class="update-section__text update-section__text--available">
+                  🎉 发现新版本 v{{ updateVersion }}
+                </span>
+                <button
+                  class="update-section__btn update-section__btn--primary"
+                  @click="handleDownloadUpdate"
+                >
+                  <Download :size="12" />
+                  下载更新
+                </button>
+              </div>
+
+              <!-- 下载中 -->
+              <div v-else-if="updateStatus === 'downloading'" class="update-section__column">
+                <span class="update-section__text">
+                  正在下载更新… {{ updatePercent }}%
+                </span>
+                <div class="update-section__progress">
+                  <div
+                    class="update-section__progress-bar"
+                    :style="{ width: updatePercent + '%' }"
+                  />
+                </div>
+              </div>
+
+              <!-- 下载完成 -->
+              <div v-else-if="updateStatus === 'downloaded'" class="update-section__row">
+                <span class="update-section__text update-section__text--success">
+                  ✓ v{{ updateVersion }} 已下载完成
+                </span>
+                <button
+                  class="update-section__btn update-section__btn--primary"
+                  @click="handleInstallUpdate"
+                >
+                  立即安装
+                </button>
+              </div>
+
+              <!-- 错误 -->
+              <div v-else-if="updateStatus === 'error'" class="update-section__row">
+                <span class="update-section__text update-section__text--error">
+                  检查失败：{{ updateError }}
+                </span>
+                <button
+                  class="update-section__btn"
+                  @click="handleCheckUpdate"
+                >
+                  重试
+                </button>
+              </div>
             </div>
 
             <div class="settings-about__meta">
@@ -977,6 +1112,110 @@ onUnmounted(() => {
     color: $text-secondary;
     font-family: 'SF Mono', 'Cascadia Code', monospace;
   }
+}
+
+// ─── 更新区域 ──────────────────────────────────────────────────────
+.update-section {
+  margin-bottom: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  background: rgba($accent-color, 0.03);
+  border: 1px solid rgba($accent-color, 0.08);
+  border-radius: $radius-md;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-sm;
+  }
+
+  &__column {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: $font-xs;
+    color: $text-secondary;
+
+    &--success {
+      color: #22c55e;
+    }
+
+    &--checking {
+      color: $accent-color;
+    }
+
+    &--available {
+      color: $accent-color;
+      font-weight: 500;
+    }
+
+    &--error {
+      color: $danger-color;
+      font-size: 10px;
+    }
+  }
+
+  &__spin {
+    animation: spin 1s linear infinite;
+  }
+
+  &__btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid $border-subtle;
+    border-radius: $radius-sm;
+    font-size: 11px;
+    font-weight: 500;
+    color: $text-secondary;
+    cursor: pointer;
+    transition: all $transition-fast;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.06);
+      border-color: $border-light;
+    }
+
+    &--primary {
+      background: $accent-color;
+      border-color: $accent-color;
+      color: white;
+
+      &:hover {
+        background: darken($accent-color, 8%);
+      }
+    }
+  }
+
+  &__progress {
+    width: 100%;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  &__progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, $accent-color, lighten($accent-color, 10%));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 // ─── 过渡动画 ──────────────────────────────────────────────────────
