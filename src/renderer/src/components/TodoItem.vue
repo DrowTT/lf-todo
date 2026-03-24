@@ -68,19 +68,18 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
       </button>
 
       <!-- 内容 / 编辑 -->
-      <div v-if="isEditing" class="card__edit-wrap">
-        <textarea
-          ref="editInputRef"
-          v-model="editContent"
-          class="card__edit-area"
-          maxlength="100"
-          rows="1"
-          @keydown.enter.exact.prevent="saveEdit"
-          @keyup.escape="cancelEdit"
-          @blur="onBlur"
-          @input="adjustHeight"
-        />
-      </div>
+      <textarea
+        v-if="isEditing"
+        ref="editInputRef"
+        v-model="editContent"
+        class="card__edit-area"
+        maxlength="100"
+        rows="1"
+        @keydown.enter.exact.prevent="saveEdit"
+        @keyup.escape="cancelEdit"
+        @blur="onBlur"
+        @input="adjustHeight"
+      />
       <div v-else class="card__text" @dblclick="handleDblClick">
         {{ task.content }}
         <!-- 子任务进度 -->
@@ -89,19 +88,16 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
         </span>
       </div>
 
-      <!-- 展开 -->
       <button
-        v-if="!isEditing"
         class="card__action card__toggle"
-        :class="{ 'card__toggle--on': isExpanded }"
+        :class="{ 'card__toggle--on': isExpanded, 'card__action--hidden': isEditing }"
         title="展开子任务"
         @click="handleToggleExpand"
       >
         <ChevronRight class="card__toggle-svg" :size="14" />
       </button>
 
-      <!-- 删除 -->
-      <button v-if="!isEditing" class="card__action card__del" @click="handleDelete">
+      <button class="card__action card__del" :class="{ 'card__action--hidden': isEditing }" @click="handleDelete">
         <Trash2 :size="14" />
       </button>
     </div>
@@ -331,25 +327,25 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 }
 
 // ─── 编辑态 ────────────────────────────────
-.card__edit-wrap {
-  flex: 1;
-}
 
 .card__edit-area {
-  width: 100%;
-  background: $bg-elevated;
+  flex: 1;
+  background: transparent;
   color: $text-primary;
   font-size: $font-lg;
+  font-weight: 450;
   line-height: 1.65;
-  padding: 4px 10px;
-  border: 2px solid $accent-color;
-  border-radius: 10px;
+  padding: 0;
+  margin: 0;
+  display: block;
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 1.5px 0 0 rgba($accent-color, 0.4);
   outline: none;
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
   font-family: inherit;
-  box-shadow: $shadow-glow;
 }
 
 // ─── 操作按钮 ──────────────────────────────
@@ -363,6 +359,12 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   cursor: pointer;
   transition: all 0.15s ease;
   border-radius: 6px;
+
+  // 编辑态隐藏但保留占位，防止行高坍缩
+  &--hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 
 .card__toggle {

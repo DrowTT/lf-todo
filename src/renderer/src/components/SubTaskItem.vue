@@ -41,23 +41,22 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     </button>
 
     <!-- 内容 / 编辑 -->
-    <div v-if="isEditing" class="sub__edit-wrap">
-      <textarea
-        ref="editInputRef"
-        v-model="editContent"
-        class="sub__edit-area"
-        maxlength="200"
-        rows="1"
-        @keydown.enter.exact.prevent="saveEdit"
-        @keyup.escape="cancelEdit"
-        @blur="onBlur"
-        @input="adjustHeight"
-      />
-    </div>
+    <textarea
+      v-if="isEditing"
+      ref="editInputRef"
+      v-model="editContent"
+      class="sub__edit-area"
+      maxlength="200"
+      rows="1"
+      @keydown.enter.exact.prevent="saveEdit"
+      @keyup.escape="cancelEdit"
+      @blur="onBlur"
+      @input="adjustHeight"
+    />
     <div v-else class="sub__text" @dblclick="handleDblClick">{{ task.content }}</div>
 
     <!-- 删除 -->
-    <button v-if="!isEditing" class="sub__del" @click="handleDelete">
+    <button class="sub__del" :class="{ 'sub__del--hidden': isEditing }" @click="handleDelete">
       <X :size="11" />
     </button>
   </div>
@@ -148,25 +147,24 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 }
 
 // ─── 编辑 ──────────────────────────────────
-.sub__edit-wrap {
-  flex: 1;
-}
 
 .sub__edit-area {
-  width: 100%;
-  background: $bg-elevated;
+  flex: 1;
+  background: transparent;
   color: $text-primary;
   font-size: $font-sm;
   line-height: 1.55;
-  padding: 2px 8px;
-  border: 1.5px solid $accent-color;
-  border-radius: 6px;
+  padding: 0;
+  margin: 0;
+  display: block;
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 1.5px 0 0 rgba($accent-color, 0.4);
   outline: none;
   box-sizing: border-box;
   resize: none;
   overflow: hidden;
   font-family: inherit;
-  box-shadow: 0 0 0 3px rgba($accent-color, 0.1);
 }
 
 // ─── 删除 ──────────────────────────────────
@@ -184,6 +182,12 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   &:hover {
     color: $danger-color;
     background: rgba($danger-color, 0.08);
+  }
+
+  // 编辑态隐藏但保留占位，防止行高坍缩
+  &--hidden {
+    visibility: hidden;
+    pointer-events: none;
   }
 }
 </style>
