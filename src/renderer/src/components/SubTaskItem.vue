@@ -142,6 +142,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   color: $text-secondary;
   line-height: 1.55;
   word-break: break-word;
+  white-space: pre-line;
   user-select: text;
   cursor: text;
 }

@@ -130,7 +130,8 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   transition:
     box-shadow 0.25s ease,
     border-color 0.25s ease,
-    transform 0.25s ease;
+    transform 0.25s ease,
+    opacity 0.25s ease;
   overflow: hidden;
   cursor: default;
   position: relative;
@@ -303,10 +304,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   word-break: break-word;
   user-select: text;
   cursor: text;
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px;
+  white-space: pre-line;
 
   .card--done & {
     color: $text-muted;
@@ -329,6 +327,7 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
   letter-spacing: 0.4px;
   line-height: 1.4;
   flex-shrink: 0;
+  margin-left: 6px;
 }
 
 // ─── 编辑态 ────────────────────────────────

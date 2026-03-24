@@ -44,9 +44,12 @@ const loadSettings = async () => {
 
 // 面板首次挂载和每次打开时重新加载设置
 onMounted(loadSettings)
-watch(() => props.visible, (val) => {
-  if (val) loadSettings()
-})
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) loadSettings()
+  }
+)
 
 // ─── 设置变更处理（即时生效） ─────────────────────────────────────────
 const handleAutoLaunchChange = async () => {
@@ -101,162 +104,173 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!-- 遮罩层：淡入淡出 -->
   <Transition name="settings-overlay">
-    <div v-if="visible" class="settings-overlay" @click.self="emit('close')" @keydown="handleKeydown" tabindex="-1" ref="overlayRef">
-      <Transition name="settings-panel">
-        <div v-if="visible" class="settings-panel">
-          <!-- 头部 -->
-          <div class="settings-panel__header">
-            <div class="settings-panel__header-left">
-              <Settings :size="18" class="settings-panel__header-icon" />
-              <h2 class="settings-panel__title">设置</h2>
-            </div>
-            <button class="settings-panel__close" title="关闭" @click="emit('close')">
-              <X :size="16" />
-            </button>
+    <div
+      v-if="visible"
+      ref="overlayRef"
+      class="settings-overlay"
+      tabindex="-1"
+      @click.self="emit('close')"
+      @keydown="handleKeydown"
+    />
+  </Transition>
+
+  <!-- 面板：从右侧滑入 -->
+  <Transition name="settings-panel">
+    <div v-if="visible" class="settings-panel" tabindex="-1" @keydown="handleKeydown">
+      <!-- 头部 -->
+      <!-- 关闭按钮：绝对定位到右上角，与 TitleBar 关闭按钮完全重合 -->
+      <button class="settings-panel__close" title="关闭" @click="emit('close')">
+        <X :size="14" />
+      </button>
+
+      <div class="settings-panel__header">
+        <div class="settings-panel__header-left">
+          <Settings :size="18" class="settings-panel__header-icon" />
+          <h2 class="settings-panel__title">设置</h2>
+        </div>
+      </div>
+
+      <!-- 内容区域 -->
+      <div class="settings-panel__body">
+        <!-- 通用设置 -->
+        <div class="settings-group">
+          <div class="settings-group__header">
+            <Power :size="14" class="settings-group__icon" />
+            <span>通用</span>
           </div>
 
-          <!-- 内容区域 -->
-          <div class="settings-panel__body">
-            <!-- 通用设置 -->
-            <div class="settings-group">
-              <div class="settings-group__header">
-                <Power :size="14" class="settings-group__icon" />
-                <span>通用</span>
-              </div>
-
-              <div class="settings-item">
-                <div class="settings-item__info">
-                  <label class="settings-item__label" for="auto-launch">开机自启</label>
-                  <span class="settings-item__desc">登录系统时自动启动极简待办</span>
-                </div>
-                <label class="toggle-switch" for="auto-launch">
-                  <input
-                    id="auto-launch"
-                    type="checkbox"
-                    v-model="autoLaunch"
-                    @change="handleAutoLaunchChange"
-                  />
-                  <span class="toggle-switch__slider"></span>
-                </label>
-              </div>
-
-              <div class="settings-item">
-                <div class="settings-item__info">
-                  <label class="settings-item__label" for="close-to-tray">
-                    <MonitorOff :size="14" class="settings-item__inline-icon" />
-                    关闭时最小化到托盘
-                  </label>
-                  <span class="settings-item__desc">关闭后仍可通过托盘图标打开，关闭则直接退出</span>
-                </div>
-                <label class="toggle-switch" for="close-to-tray">
-                  <input
-                    id="close-to-tray"
-                    type="checkbox"
-                    v-model="closeToTray"
-                    @change="handleCloseToTrayChange"
-                  />
-                  <span class="toggle-switch__slider"></span>
-                </label>
-              </div>
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label" for="auto-launch">开机自启</label>
+              <span class="settings-item__desc">登录系统时自动启动极简待办</span>
             </div>
+            <label class="toggle-switch" for="auto-launch">
+              <input
+                id="auto-launch"
+                v-model="autoLaunch"
+                type="checkbox"
+                @change="handleAutoLaunchChange"
+              />
+              <span class="toggle-switch__slider"></span>
+            </label>
+          </div>
 
-            <!-- 数据管理 -->
-            <div class="settings-group">
-              <div class="settings-group__header">
-                <Trash2 :size="14" class="settings-group__icon" />
-                <span>数据管理</span>
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label" for="close-to-tray">
+                <MonitorOff :size="14" class="settings-item__inline-icon" />
+                关闭时最小化到托盘
+              </label>
+              <span class="settings-item__desc">关闭后仍可通过托盘图标打开，关闭则直接退出</span>
+            </div>
+            <label class="toggle-switch" for="close-to-tray">
+              <input
+                id="close-to-tray"
+                v-model="closeToTray"
+                type="checkbox"
+                @change="handleCloseToTrayChange"
+              />
+              <span class="toggle-switch__slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 数据管理 -->
+        <div class="settings-group">
+          <div class="settings-group__header">
+            <Trash2 :size="14" class="settings-group__icon" />
+            <span>数据管理</span>
+          </div>
+
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label" for="auto-cleanup">自动清理已完成任务</label>
+              <span class="settings-item__desc">在每次启动时自动删除过期的已完成任务</span>
+            </div>
+            <label class="toggle-switch" for="auto-cleanup">
+              <input
+                id="auto-cleanup"
+                v-model="autoCleanupEnabled"
+                type="checkbox"
+                @change="handleAutoCleanupChange"
+              />
+              <span class="toggle-switch__slider"></span>
+            </label>
+          </div>
+
+          <Transition name="cleanup-detail">
+            <div v-if="autoCleanupEnabled" class="settings-item settings-item--nested">
+              <div class="settings-item__info">
+                <label class="settings-item__label" for="cleanup-days">清理范围</label>
               </div>
-
-              <div class="settings-item">
-                <div class="settings-item__info">
-                  <label class="settings-item__label" for="auto-cleanup">自动清理已完成任务</label>
-                  <span class="settings-item__desc">在每次启动时自动删除过期的已完成任务</span>
-                </div>
-                <label class="toggle-switch" for="auto-cleanup">
-                  <input
-                    id="auto-cleanup"
-                    type="checkbox"
-                    v-model="autoCleanupEnabled"
-                    @change="handleAutoCleanupChange"
-                  />
-                  <span class="toggle-switch__slider"></span>
-                </label>
-              </div>
-
-              <Transition name="cleanup-detail">
-                <div v-if="autoCleanupEnabled" class="settings-item settings-item--nested">
-                  <div class="settings-item__info">
-                    <label class="settings-item__label" for="cleanup-days">清理范围</label>
-                  </div>
-                  <div class="cleanup-days-selector">
-                    <span class="cleanup-days-selector__text">清理</span>
-                    <select
-                      id="cleanup-days"
-                      v-model.number="autoCleanupDays"
-                      class="cleanup-days-selector__select"
-                    >
-                      <option :value="3">3 天</option>
-                      <option :value="7">7 天</option>
-                      <option :value="14">14 天</option>
-                      <option :value="30">30 天</option>
-                    </select>
-                    <span class="cleanup-days-selector__text">前的已完成任务</span>
-                  </div>
-                </div>
-              </Transition>
-
-              <div class="settings-item">
-                <div class="settings-item__info">
-                  <label class="settings-item__label">
-                    <Download :size="14" class="settings-item__inline-icon" />
-                    导出数据
-                  </label>
-                  <span class="settings-item__desc">将所有待办数据导出为 JSON 文件</span>
-                </div>
-                <button
-                  class="settings-item__action-btn"
-                  :disabled="isExporting"
-                  @click="handleExportData"
+              <div class="cleanup-days-selector">
+                <span class="cleanup-days-selector__text">清理</span>
+                <select
+                  id="cleanup-days"
+                  v-model.number="autoCleanupDays"
+                  class="cleanup-days-selector__select"
                 >
-                  {{ isExporting ? '导出中...' : '导出' }}
-                </button>
+                  <option :value="3">3 天</option>
+                  <option :value="7">7 天</option>
+                  <option :value="14">14 天</option>
+                  <option :value="30">30 天</option>
+                </select>
+                <span class="cleanup-days-selector__text">前的已完成任务</span>
               </div>
             </div>
+          </Transition>
 
-            <!-- 关于 -->
-            <div class="settings-group">
-              <div class="settings-group__header">
-                <Info :size="14" class="settings-group__icon" />
-                <span>关于</span>
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label">
+                <Download :size="14" class="settings-item__inline-icon" />
+                导出数据
+              </label>
+              <span class="settings-item__desc">将所有待办数据导出为 JSON 文件</span>
+            </div>
+            <button
+              class="settings-item__action-btn"
+              :disabled="isExporting"
+              @click="handleExportData"
+            >
+              {{ isExporting ? '导出中...' : '导出' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 关于 -->
+        <div class="settings-group">
+          <div class="settings-group__header">
+            <Info :size="14" class="settings-group__icon" />
+            <span>关于</span>
+          </div>
+
+          <div class="settings-about">
+            <div class="settings-about__app">
+              <span class="settings-about__dot"></span>
+              <span class="settings-about__name">{{ appInfo.name }}</span>
+              <span class="settings-about__version">v{{ appInfo.version }}</span>
+            </div>
+
+            <div class="settings-about__meta">
+              <div class="settings-about__meta-row">
+                <span class="settings-about__meta-label">Electron</span>
+                <span class="settings-about__meta-value">{{ appInfo.electron }}</span>
               </div>
-
-              <div class="settings-about">
-                <div class="settings-about__app">
-                  <span class="settings-about__dot"></span>
-                  <span class="settings-about__name">{{ appInfo.name }}</span>
-                  <span class="settings-about__version">v{{ appInfo.version }}</span>
-                </div>
-
-                <div class="settings-about__meta">
-                  <div class="settings-about__meta-row">
-                    <span class="settings-about__meta-label">Electron</span>
-                    <span class="settings-about__meta-value">{{ appInfo.electron }}</span>
-                  </div>
-                  <div class="settings-about__meta-row">
-                    <span class="settings-about__meta-label">Chrome</span>
-                    <span class="settings-about__meta-value">{{ appInfo.chrome }}</span>
-                  </div>
-                  <div class="settings-about__meta-row">
-                    <span class="settings-about__meta-label">Node.js</span>
-                    <span class="settings-about__meta-value">{{ appInfo.node }}</span>
-                  </div>
-                </div>
+              <div class="settings-about__meta-row">
+                <span class="settings-about__meta-label">Chrome</span>
+                <span class="settings-about__meta-value">{{ appInfo.chrome }}</span>
+              </div>
+              <div class="settings-about__meta-row">
+                <span class="settings-about__meta-label">Node.js</span>
+                <span class="settings-about__meta-value">{{ appInfo.node }}</span>
               </div>
             </div>
           </div>
         </div>
-      </Transition>
+      </div>
     </div>
   </Transition>
 </template>
@@ -272,12 +286,14 @@ onUnmounted(() => {
   background: rgba(15, 23, 42, 0.3);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: flex-end;
 }
 
 // ─── 面板主体 ──────────────────────────────────────────────────────
 .settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 201;
   width: 380px;
   max-width: 90vw;
   height: 100%;
@@ -319,21 +335,27 @@ onUnmounted(() => {
   }
 
   &__close {
+    // 绝对定位到面板右上角，与 TitleBar 关闭按钮重合
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 46px;
+    height: 36px;
     background: transparent;
     border: none;
-    border-radius: $radius-sm;
+    border-radius: 0;
     color: $text-muted;
     cursor: pointer;
     transition: all $transition-fast;
+    -webkit-app-region: no-drag;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.06);
-      color: $text-primary;
+      background: $danger-color;
+      color: white;
     }
   }
 
