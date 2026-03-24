@@ -32,6 +32,7 @@ const handleSubmit = async (): Promise<void> => {
         :disabled="store.isLoading"
         @input="adjustHeight"
         @keydown.enter.exact.prevent="handleSubmit"
+        @keyup.escape="($event.target as HTMLTextAreaElement).blur()"
       />
       <button
         class="todo-input__btn"

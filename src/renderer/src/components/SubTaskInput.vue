@@ -38,6 +38,7 @@ onMounted(() => adjustHeight())
       maxlength="200"
       @input="adjustHeight"
       @keydown.enter.exact.prevent="handleSubmit"
+      @keyup.escape="($event.target as HTMLTextAreaElement).blur()"
     />
   </div>
 </template>

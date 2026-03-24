@@ -4,9 +4,11 @@ import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
+import { useHoverTarget } from '../composables/useHoverTarget'
 import { Check, X } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
+const { setHoverSubTask, setHoverTask } = useHoverTarget()
 
 const props = defineProps<{
   task: Task
@@ -27,10 +29,22 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     () => props.task.content,
     (content) => store.updateSubTaskContent(props.task.id, props.parentId, content)
   )
+
+// 鼠标进入子待办时设置悬停目标
+const onSubMouseEnter = () => setHoverSubTask(props.task.id, props.parentId)
+// 鼠标离开子待办时回退到父级任务（不清空，因为仍在 card 内）
+const onSubMouseLeave = () => setHoverTask(props.parentId)
 </script>
 
 <template>
-  <div class="sub" :class="{ 'sub--done': task.is_completed }">
+  <div
+    class="sub"
+    :class="{ 'sub--done': task.is_completed }"
+    :data-subtask-id="task.id"
+    :data-parent-id="parentId"
+    @mouseenter="onSubMouseEnter"
+    @mouseleave="onSubMouseLeave"
+  >
     <!-- 勾选框 -->
     <button
       class="sub__check"

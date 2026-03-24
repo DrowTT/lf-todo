@@ -4,11 +4,13 @@ import { Task } from '../db'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
+import { useHoverTarget } from '../composables/useHoverTarget'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
 import { Check, ChevronRight, GripVertical, Trash2 } from 'lucide-vue-next'
 
 const { confirm } = useConfirm()
+const { setHoverTask, clearHover } = useHoverTarget()
 
 const props = defineProps<{
   task: Task
@@ -47,10 +49,21 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     () => props.task.content,
     (content) => store.updateTaskContent(props.task.id, content)
   )
+
+// 鼠标进入卡片时设置悬停目标
+const onCardMouseEnter = () => setHoverTask(props.task.id)
+// 鼠标离开卡片时清除悬停目标
+const onCardMouseLeave = () => clearHover()
 </script>
 
 <template>
-  <div class="card" :class="{ 'card--open': isExpanded, 'card--done': task.is_completed }">
+  <div
+    class="card"
+    :class="{ 'card--open': isExpanded, 'card--done': task.is_completed }"
+    :data-task-id="task.id"
+    @mouseenter="onCardMouseEnter"
+    @mouseleave="onCardMouseLeave"
+  >
     <!-- 主行 -->
     <div class="card__row">
       <!-- 拖拽手柄 -->

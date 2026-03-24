@@ -8,9 +8,13 @@ import ConfirmDialog from './components/ConfirmDialog.vue'
 import ToastMessage from './components/ToastMessage.vue'
 import { useConfirm } from './composables/useConfirm'
 import { useSidebarResize } from './composables/useSidebarResize'
+import { useHotkeys } from './composables/useHotkeys'
 
 const { current, handleConfirm, handleCancel } = useConfirm()
 const { sidebarWidth, startResize } = useSidebarResize()
+
+// 初始化全局快捷键系统
+useHotkeys()
 
 // 设置面板显隐状态
 const showSettings = ref(false)
