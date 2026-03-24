@@ -124,7 +124,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     const taskStore = useTaskStore()
     const parent = taskStore.tasks.find((t) => t.id === parentId)
     if (parent) {
-      parent.subtask_done = (parent.subtask_done ?? 0) + (newCompleted ? 1 : -1)
+      parent.subtask_done = Math.max(0, (parent.subtask_done ?? 0) + (newCompleted ? 1 : -1))
 
       // 规则2：所有子待办都完成时，自动完成主待办
       const allDone = list!.every((t) => t.is_completed)

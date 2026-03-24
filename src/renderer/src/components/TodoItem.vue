@@ -27,7 +27,12 @@ const subTaskProgress = computed(() => {
   if (store.expandedTaskIds.has(props.task.id) && store.subTasksMap[props.task.id]) {
     const list = store.subTasksMap[props.task.id]
     if (list.length === 0) return null
-    return { done: list.filter((t) => t.is_completed).length, total: list.length }
+    const done = list.filter((t) => t.is_completed).length
+    const total = list.length
+    // 回写 SQL 缓存字段，确保收起后数据一致
+    props.task.subtask_done = done
+    props.task.subtask_total = total
+    return { done, total }
   }
   const total = props.task.subtask_total
   if (!total) return null
