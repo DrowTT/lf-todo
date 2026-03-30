@@ -62,6 +62,17 @@ const api = {
     onUpdateStatus: (callback: (data: Record<string, unknown>) => void) => {
       ipcRenderer.on('updater:status', (_, data) => callback(data))
     }
+  },
+  auth: {
+    // Token 安全存储/读取/清除
+    saveTokens: (tokens: { accessToken: string; refreshToken: string }) =>
+      ipcRenderer.invoke('auth:save-tokens', tokens),
+    getTokens: () =>
+      ipcRenderer.invoke('auth:get-tokens') as Promise<{ accessToken: string; refreshToken: string } | null>,
+    clearTokens: () => ipcRenderer.invoke('auth:clear-tokens'),
+    // 获取设备信息
+    getDeviceInfo: () =>
+      ipcRenderer.invoke('auth:get-device-info') as Promise<{ deviceId: string; deviceName: string }>
   }
 }
 

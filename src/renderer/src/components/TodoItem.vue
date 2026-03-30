@@ -5,9 +5,12 @@ import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import { useHoverTarget } from '../composables/useHoverTarget'
+import { useAuthStore } from '../store/auth'
 import SubTaskItem from './SubTaskItem.vue'
 import SubTaskInput from './SubTaskInput.vue'
 import { Check, ChevronRight, GripVertical, Trash2 } from 'lucide-vue-next'
+
+const authStore = useAuthStore()
 
 const { confirm } = useConfirm()
 const { setHoverTask, clearHover } = useHoverTarget()
@@ -106,7 +109,9 @@ const onCardMouseLeave = () => clearHover()
         </span>
       </div>
 
+      <!-- 子任务展开/收起按钮（仅 Pro 用户可见） -->
       <button
+        v-if="authStore.isPro"
         class="card__action card__toggle"
         :class="{ 'card__toggle--on': isExpanded, 'card__action--hidden': isEditing }"
         title="展开子任务"
@@ -120,9 +125,9 @@ const onCardMouseLeave = () => clearHover()
       </button>
     </div>
 
-    <!-- 子任务区域 -->
+    <!-- 子任务区域（仅 Pro 用户可见） -->
     <Transition name="sub-slide">
-      <div v-if="isExpanded" class="card__subs">
+      <div v-if="authStore.isPro && isExpanded" class="card__subs">
         <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parent-id="task.id" />
         <SubTaskInput :parent-id="task.id" />
       </div>

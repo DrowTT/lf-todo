@@ -52,4 +52,4 @@ npmRebuild: true
 publish:
   provider: github
   owner: DrowTT
-  repo: lf-todo
+  repo: lf-todo-frontend

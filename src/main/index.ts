@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
+import { registerAuthIpcHandlers } from './auth-ipc'
 import { initAutoUpdater } from './updater'
 
 interface AutoCleanupConfig {
@@ -318,6 +319,7 @@ app.whenReady().then(() => {
   }
 
   registerIpcHandlers()
+  registerAuthIpcHandlers()
   registerSettingsHandlers()
 
   createWindow()

@@ -3,6 +3,8 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Settings, X, Power, MonitorOff, Trash2, Download, Info, Keyboard, RefreshCw } from 'lucide-vue-next'
 import { useHotkeys, HOTKEY_LABELS, keyToLabel, type HotkeyAction } from '../composables/useHotkeys'
 import { useConfirm } from '../composables/useConfirm'
+import { useAuthStore } from '../store/auth'
+import UserProfile from './UserProfile.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -10,7 +12,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  'show-pro-upgrade': []
 }>()
+
+const authStore = useAuthStore()
 
 // 检查是否在 Electron 环境中
 const isElectron = typeof window !== 'undefined' && window.api !== undefined
@@ -285,6 +290,12 @@ onUnmounted(() => {
 
       <!-- 内容区域 -->
       <div class="settings-panel__body">
+        <!-- 用户信息 -->
+        <UserProfile
+          @upgrade="emit('show-pro-upgrade')"
+          @logout="authStore.logout()"
+        />
+
         <!-- 通用设置 -->
         <div class="settings-group">
           <div class="settings-group__header">
@@ -341,7 +352,10 @@ onUnmounted(() => {
             v-for="action in hotkeyActions"
             :key="action"
             class="hotkey-row"
-            :class="{ 'hotkey-row--active': recordingAction === action }"
+            :class="{
+              'hotkey-row--active': recordingAction === action,
+              'hotkey-row--disabled': action === 'toggleExpand' && !authStore.isPro
+            }"
           >
             <div class="hotkey-row__info">
               <span class="hotkey-row__name">{{ HOTKEY_LABELS[action].name }}</span>
@@ -353,6 +367,11 @@ onUnmounted(() => {
                 {{ conflictMessage }}
               </span>
               <span v-else class="hotkey-row__desc">{{ HOTKEY_LABELS[action].desc }}</span>
+              <!-- Pro 标识（子任务快捷键仅 Pro 可用） -->
+              <span
+                v-if="action === 'toggleExpand' && !authStore.isPro"
+                class="hotkey-row__pro-tag"
+              >PRO</span>
             </div>
             <div class="hotkey-row__actions">
               <!-- 录键状态 -->
@@ -363,8 +382,9 @@ onUnmounted(() => {
               <span
                 v-else
                 class="hotkey-key"
-                title="点击修改快捷键"
-                @click="startRecording(action)"
+                :class="{ 'hotkey-key--pro-locked': action === 'toggleExpand' && !authStore.isPro }"
+                :title="action === 'toggleExpand' && !authStore.isPro ? '升级 Pro 解锁' : '点击修改快捷键'"
+                @click="action !== 'toggleExpand' || authStore.isPro ? startRecording(action) : emit('show-pro-upgrade')"
               >
                 {{ hotkeyConfig[action].label }}
               </span>
@@ -807,6 +827,25 @@ onUnmounted(() => {
       background: transparent;
       opacity: 0.65;
     }
+  }
+
+  // Pro 限制的快捷键行
+  &--disabled {
+    opacity: 0.5;
+  }
+
+  // Pro 标签
+  &__pro-tag {
+    display: inline-block;
+    padding: 0 5px;
+    margin-left: 4px;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border-radius: 3px;
+    line-height: 16px;
   }
 
   &__info {

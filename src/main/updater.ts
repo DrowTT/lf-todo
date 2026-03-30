@@ -116,6 +116,8 @@ function registerIpcHandlers(win: BrowserWindow): void {
   // 退出并安装更新
   ipcMain.handle('updater:install', () => {
     if (is.dev) return
-    autoUpdater.quitAndInstall()
+    // isSilent=true: 静默安装，不弹安装向导
+    // isForceRunAfter=true: 安装完成后自动重启应用
+    autoUpdater.quitAndInstall(true, true)
   })
 }

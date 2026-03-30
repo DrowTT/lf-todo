@@ -3,10 +3,17 @@ import { ref, nextTick, onMounted } from 'vue'
 import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useContextMenu } from '../composables/useContextMenu'
+import { useAuthStore } from '../store/auth'
 import { Plus, Settings } from 'lucide-vue-next'
+
+const authStore = useAuthStore()
+
+// 普通用户分类数量上限
+const MAX_FREE_CATEGORIES = 2
 
 const emit = defineEmits<{
   'open-settings': []
+  'show-pro-upgrade': []
 }>()
 
 const { confirm } = useConfirm()
@@ -38,6 +45,11 @@ const handleAddCategory = async () => {
 }
 
 const startAdding = async () => {
+  // 非 Pro 用户检查分类数量限制
+  if (!authStore.isPro && store.categories.length >= MAX_FREE_CATEGORIES) {
+    emit('show-pro-upgrade')
+    return
+  }
   isAdding.value = true
   await nextTick()
   inputRef.value?.focus()
@@ -134,6 +146,10 @@ const cancelRename = () => {
       <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">
         <Plus class="category-list__add-icon" :size="12" />
         新建分类
+        <span
+          v-if="!authStore.isPro && store.categories.length >= MAX_FREE_CATEGORIES"
+          class="category-list__pro-hint"
+        >PRO</span>
       </button>
       <div class="category-list__footer-divider"></div>
       <button class="category-list__settings-btn" @click="emit('open-settings')">
@@ -244,6 +260,18 @@ const cancelRename = () => {
     width: 12px;
     height: 12px;
     margin-right: $spacing-sm;
+  }
+
+  &__pro-hint {
+    margin-left: auto;
+    padding: 0 6px;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border-radius: 3px;
+    line-height: 16px;
   }
 
   &__input-wrapper {

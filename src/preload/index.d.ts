@@ -87,6 +87,12 @@ interface API {
     installUpdate: () => Promise<void>
     onUpdateStatus: (callback: (data: UpdateStatusData) => void) => void
   }
+  auth: {
+    saveTokens: (tokens: { accessToken: string; refreshToken: string }) => Promise<boolean>
+    getTokens: () => Promise<{ accessToken: string; refreshToken: string } | null>
+    clearTokens: () => Promise<boolean>
+    getDeviceInfo: () => Promise<{ deviceId: string; deviceName: string }>
+  }
 }
 
 /** 更新状态数据类型 */
