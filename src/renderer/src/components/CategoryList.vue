@@ -4,6 +4,7 @@ import { store } from '../store'
 import { useConfirm } from '../composables/useConfirm'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useAuthStore } from '../store/auth'
+import CheckinButton from './CheckinButton.vue'
 import { Plus, Settings } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
@@ -96,6 +97,9 @@ const cancelRename = () => {
     </div>
 
     <div class="category-list__content">
+      <!-- 等级信息 + 签到 -->
+      <CheckinButton />
+
       <ul>
         <li
           v-for="cat in store.categories"

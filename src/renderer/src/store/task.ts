@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { db, Task } from '../db'
 import { useToast } from '../composables/useToast'
 import { useSubTaskStore } from './subtask'
+import { taskComplete } from '../api/level'
 
 /**
  * 任务 Store（Pinia setup store）
@@ -86,6 +87,11 @@ export const useTaskStore = defineStore('task', () => {
         }
         task.subtask_done = task.subtask_total
       }
+
+      // 上报经验值到等级系统（fire-and-forget，失败不阻塞主流程）
+      taskComplete(String(id)).catch((e) =>
+        console.warn('[taskStore] 上报任务经验失败（不影响任务完成）:', e)
+      )
     }
   }
 
