@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import { FolderOpen, ListChecks, Keyboard, Palette } from 'lucide-vue-next'
+import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import {
+  FolderOpen,
+  Keyboard,
+  ListChecks,
+  Palette,
+  QrCode,
+  RefreshCcw,
+  Sparkles
+} from 'lucide-vue-next'
+import { useProPurchase } from '../composables/useProPurchase'
 
 const props = defineProps<{
   visible: boolean
@@ -10,37 +19,115 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const contentRef = ref<HTMLElement | null>(null)
+const contentRef = useTemplateRef<HTMLElement>('content')
+
+const {
+  order,
+  isCreating,
+  isRefreshing,
+  isSimulating,
+  errorMessage,
+  statusLabel,
+  paymentModeLabel,
+  createOrder,
+  refreshOrderStatus,
+  simulatePaid,
+  reset
+} = useProPurchase()
 
 const proPrice = '23'
+
+const expiresAtText = computed(() => {
+  if (!order.value?.expiresAt) return '未生成'
+  return new Date(order.value.expiresAt).toLocaleString('zh-CN', { hour12: false })
+})
+
+const paymentSummary = computed(() => {
+  if (!order.value) {
+    return '一次买断，后续新增 Pro 能力将持续包含在内。'
+  }
+
+  if (order.value.paymentMode === 'mock') {
+    return '当前为开发态 Mock 支付链路，订单、轮询与开通逻辑已接通，后续只需替换为真实微信 code_url。'
+  }
+
+  return '请使用微信扫码支付，支付成功后客户端会自动刷新 Pro 权限。'
+})
+
+const primaryButtonLabel = computed(() => {
+  if (order.value?.status === 'PAID') {
+    return '继续使用 Pro'
+  }
+
+  if (order.value?.status === 'PENDING') {
+    if (isRefreshing.value) return '刷新中...'
+    return '我已完成支付，刷新状态'
+  }
+
+  if (isCreating.value) {
+    return '创建订单中...'
+  }
+
+  return '23 元永久解锁'
+})
+
+const canUsePrimaryAction = computed(() => {
+  return !isCreating.value && !isRefreshing.value && !isSimulating.value
+})
+
+const canSimulatePayment = computed(() => {
+  return (
+    order.value?.status === 'PENDING' &&
+    order.value.paymentMode === 'mock' &&
+    order.value.simulateEnabled
+  )
+})
+
+const statusClass = computed(() => {
+  return order.value ? `payment-panel--${order.value.status.toLowerCase()}` : 'payment-panel--idle'
+})
 
 function handleClose(): void {
   emit('close')
 }
 
-function handlePurchase(): void {
-  // V2 仅为 UI 骨架，暂不对接真实支付
-  window.dispatchEvent(new CustomEvent('pro:status-changed'))
-  alert('功能开发中，敬请期待！')
+async function handlePrimaryAction(): Promise<void> {
+  if (order.value?.status === 'PAID') {
+    handleClose()
+    return
+  }
+
+  if (order.value?.status === 'PENDING') {
+    await refreshOrderStatus()
+    return
+  }
+
+  await createOrder()
 }
 
-// 弹窗出现时自动聚焦
+async function handleSimulatePaid(): Promise<void> {
+  await simulatePaid()
+}
+
 watch(
   () => props.visible,
-  (val) => {
-    if (val) nextTick(() => contentRef.value?.focus())
+  (visible) => {
+    if (visible) {
+      nextTick(() => contentRef.value?.focus())
+      return
+    }
+
+    reset()
   }
 )
 </script>
 
 <template>
   <Teleport to="body">
-    <!-- 遮罩层 -->
     <Transition name="fade">
       <div v-if="visible" class="pro-overlay" @click="handleClose" />
     </Transition>
 
-    <!-- 弹窗 -->
     <Transition name="slide">
       <div
         v-if="visible"
@@ -48,34 +135,99 @@ watch(
         @click.self="handleClose"
         @keydown.escape="handleClose"
       >
-        <div ref="contentRef" class="pro-content" tabindex="-1" @click.stop>
-          <!-- 头部 -->
+        <div ref="content" class="pro-content" tabindex="-1" @click.stop>
           <div class="pro-header">
             <span class="pro-badge">PRO</span>
             <h2 class="pro-title">升级 Pro 永久版</h2>
-            <p class="pro-desc">一次买断，永久解锁全部高级功能</p>
+            <p class="pro-desc">{{ paymentSummary }}</p>
           </div>
 
-          <!-- 权益列表 -->
           <ul class="pro-features">
             <li><FolderOpen :size="16" class="feature-icon" />无限分类数量</li>
-            <li><ListChecks :size="16" class="feature-icon" />子待办（子任务）功能</li>
+            <li><ListChecks :size="16" class="feature-icon" />子待办与子任务能力</li>
             <li><Keyboard :size="16" class="feature-icon" />子任务快捷键设置</li>
-            <li><Palette :size="16" class="feature-icon" />更多主题（即将推出）</li>
+            <li><Palette :size="16" class="feature-icon" />更多主题与后续高级能力</li>
           </ul>
 
           <div class="plan-card plan-card--single">
             <span class="plan-best">当前定价</span>
             <span class="plan-period">永久买断</span>
-            <span class="plan-price">¥{{ proPrice }}<small>/一次</small></span>
-            <span class="plan-save">后续功能持续包含在内</span>
+            <span class="plan-price">￥{{ proPrice }}<small>/一次</small></span>
+            <span class="plan-save">支付成功后会自动刷新当前账号的 Pro 权限</span>
           </div>
 
-          <!-- 操作按钮 -->
+          <section class="payment-panel" :class="statusClass">
+            <div class="payment-panel__header">
+              <div>
+                <p class="payment-panel__label">支付状态</p>
+                <h3 class="payment-panel__title">{{ statusLabel }}</h3>
+              </div>
+              <span v-if="order" class="payment-panel__mode">{{ paymentModeLabel }}</span>
+            </div>
+
+            <template v-if="order">
+              <div class="payment-panel__qr">
+                <QrCode :size="28" class="payment-panel__qr-icon" />
+                <p class="payment-panel__qr-title">
+                  {{ order.paymentMode === 'mock' ? '二维码占位区' : '微信扫码支付区' }}
+                </p>
+                <p class="payment-panel__qr-desc">
+                  {{ order.paymentMode === 'mock'
+                    ? '当前先展示订单壳与状态流转，真实微信接入后这里将替换成 code_url 生成的二维码。'
+                    : '请使用微信扫描二维码完成支付。' }}
+                </p>
+              </div>
+
+              <dl class="payment-meta">
+                <div class="payment-meta__item">
+                  <dt>订单号</dt>
+                  <dd>{{ order.orderNo }}</dd>
+                </div>
+                <div class="payment-meta__item">
+                  <dt>应付金额</dt>
+                  <dd>￥{{ order.amountYuan }}</dd>
+                </div>
+                <div class="payment-meta__item">
+                  <dt>有效期至</dt>
+                  <dd>{{ expiresAtText }}</dd>
+                </div>
+                <div class="payment-meta__item">
+                  <dt>商户资料</dt>
+                  <dd>{{ order.merchantReady ? '已配置' : '未配置' }}</dd>
+                </div>
+              </dl>
+
+              <p v-if="order.codeUrl" class="payment-code">
+                <span class="payment-code__label">支付会话：</span>
+                <code>{{ order.codeUrl }}</code>
+              </p>
+            </template>
+
+            <template v-else>
+              <div class="payment-panel__empty">
+                <Sparkles :size="18" />
+                <span>创建订单后，这里会显示支付状态、订单号和扫码区域。</span>
+              </div>
+            </template>
+
+            <p v-if="errorMessage" class="payment-error">{{ errorMessage }}</p>
+          </section>
+
           <div class="pro-actions">
-            <button class="pro-btn pro-btn--primary" @click="handlePurchase">
-              23 元永久解锁
+            <button class="pro-btn pro-btn--primary" :disabled="!canUsePrimaryAction" @click="handlePrimaryAction">
+              <RefreshCcw v-if="order?.status === 'PENDING'" :size="16" />
+              <span>{{ primaryButtonLabel }}</span>
             </button>
+
+            <button
+              v-if="canSimulatePayment"
+              class="pro-btn pro-btn--ghost"
+              :disabled="isSimulating"
+              @click="handleSimulatePaid"
+            >
+              {{ isSimulating ? '模拟支付中...' : '开发态：模拟支付成功' }}
+            </button>
+
             <button class="pro-btn pro-btn--secondary" @click="handleClose">
               以后再说
             </button>
@@ -91,10 +243,7 @@ watch(
 
 .pro-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background-color: rgb(var(--text-primary-rgb) / 0.35);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -103,28 +252,28 @@ watch(
 
 .pro-wrapper {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  padding: $spacing-xl;
 }
 
 .pro-content {
-  width: 400px;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   background: $bg-elevated;
   border: 1px solid $border-color;
   border-radius: $radius-xl;
-  box-shadow: 0 20px 60px rgb(var(--text-primary-rgb) / 0.18), 0 0 1px rgb(var(--text-primary-rgb) / 0.08);
+  box-shadow:
+    0 20px 60px rgb(var(--text-primary-rgb) / 0.18),
+    0 0 1px rgb(var(--text-primary-rgb) / 0.08);
   padding: $spacing-2xl;
   outline: none;
   position: relative;
-  overflow: hidden;
 
-  // 顶部品牌光晕装饰
   &::before {
     content: '';
     position: absolute;
@@ -134,14 +283,13 @@ watch(
     height: 100%;
     background: radial-gradient(
       ellipse at center,
-      rgb(var(--warning-color-rgb) / 0.06) 0%,
+      rgb(var(--warning-color-rgb) / 0.07) 0%,
       transparent 70%
     );
     pointer-events: none;
   }
 }
 
-// ─── 头部 ───
 .pro-header {
   text-align: center;
   margin-bottom: $spacing-xl;
@@ -170,9 +318,9 @@ watch(
   font-size: $font-sm;
   color: $text-secondary;
   margin: 0;
+  line-height: 1.6;
 }
 
-// ─── 权益列表 ───
 .pro-features {
   list-style: none;
   padding: 0;
@@ -189,14 +337,13 @@ watch(
     color: $text-primary;
     padding: $spacing-xs 0;
   }
-
-  .feature-icon {
-    color: $accent-color;
-    flex-shrink: 0;
-  }
 }
 
-// ─── 买断方案展示 ───
+.feature-icon {
+  color: $accent-color;
+  flex-shrink: 0;
+}
+
 .plan-card {
   display: flex;
   flex-direction: column;
@@ -206,7 +353,6 @@ watch(
   border: 2px solid $border-color;
   border-radius: $radius-lg;
   background: rgb(var(--bg-elevated-rgb) / 0.5);
-  transition: all $transition-normal;
   position: relative;
   margin-bottom: $spacing-xl;
 
@@ -251,9 +397,159 @@ watch(
   font-size: $font-xs;
   color: $success-color;
   font-weight: 500;
+  text-align: center;
 }
 
-// ─── 操作按钮 ───
+.payment-panel {
+  position: relative;
+  border: 1px solid $border-light;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  background:
+    linear-gradient(135deg, rgb(var(--bg-elevated-rgb) / 0.94), rgb(var(--bg-primary-rgb) / 0.88)),
+    $bg-primary;
+  margin-bottom: $spacing-xl;
+
+  &--pending {
+    border-color: rgb(var(--accent-color-rgb) / 0.3);
+  }
+
+  &--paid {
+    border-color: rgb(var(--success-color-rgb) / 0.35);
+  }
+
+  &--failed,
+  &--expired,
+  &--closed {
+    border-color: rgb(var(--danger-color-rgb) / 0.25);
+  }
+}
+
+.payment-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+.payment-panel__label {
+  margin: 0 0 2px;
+  font-size: $font-xs;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.payment-panel__title {
+  margin: 0;
+  font-size: $font-xl;
+  color: $text-primary;
+}
+
+.payment-panel__mode {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgb(var(--accent-color-rgb) / 0.12);
+  color: $accent-color;
+  padding: 4px 10px;
+  font-size: $font-xs;
+  font-weight: 600;
+}
+
+.payment-panel__qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-sm;
+  text-align: center;
+  padding: $spacing-lg;
+  border-radius: $radius-lg;
+  border: 1px dashed rgb(var(--text-primary-rgb) / 0.12);
+  background:
+    linear-gradient(135deg, rgb(var(--accent-color-rgb) / 0.05), transparent),
+    rgb(var(--bg-elevated-rgb) / 0.7);
+}
+
+.payment-panel__qr-icon {
+  color: $accent-color;
+}
+
+.payment-panel__qr-title {
+  margin: 0;
+  font-size: $font-lg;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.payment-panel__qr-desc {
+  margin: 0;
+  font-size: $font-sm;
+  line-height: 1.6;
+  color: $text-secondary;
+}
+
+.payment-panel__empty {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  border-radius: $radius-md;
+  background: rgb(var(--accent-color-rgb) / 0.08);
+  color: $text-secondary;
+  font-size: $font-sm;
+}
+
+.payment-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-md;
+  margin: $spacing-lg 0 0;
+}
+
+.payment-meta__item {
+  padding: $spacing-sm $spacing-md;
+  border-radius: $radius-md;
+  background: rgb(var(--bg-elevated-rgb) / 0.78);
+  border: 1px solid rgb(var(--text-primary-rgb) / 0.06);
+
+  dt {
+    margin-bottom: 4px;
+    font-size: $font-xs;
+    color: $text-muted;
+  }
+
+  dd {
+    margin: 0;
+    font-size: $font-sm;
+    color: $text-primary;
+    word-break: break-all;
+  }
+}
+
+.payment-code {
+  margin: $spacing-lg 0 0;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $radius-md;
+  background: rgb(var(--text-primary-rgb) / 0.04);
+  color: $text-secondary;
+  font-size: $font-xs;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.payment-code__label {
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.payment-error {
+  margin: $spacing-md 0 0;
+  color: $danger-color;
+  font-size: $font-sm;
+}
+
 .pro-actions {
   display: flex;
   flex-direction: column;
@@ -262,21 +558,43 @@ watch(
 
 .pro-btn {
   width: 100%;
-  height: 42px;
+  min-height: 42px;
   border: none;
   border-radius: $radius-md;
   font-size: $font-lg;
   font-weight: 600;
   cursor: pointer;
   transition: all $transition-normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
+  padding: 0 $spacing-md;
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.7;
+    transform: none;
+    box-shadow: none;
+  }
 
   &--primary {
     background: var(--accent-gradient);
     color: white;
 
-    &:hover {
+    &:hover:not(:disabled) {
       box-shadow: 0 4px 16px rgb(var(--accent-color-rgb) / 0.3);
       transform: translateY(-1px);
+    }
+  }
+
+  &--ghost {
+    background: rgb(var(--accent-color-rgb) / 0.1);
+    color: $accent-color;
+    border: 1px solid rgb(var(--accent-color-rgb) / 0.16);
+
+    &:hover:not(:disabled) {
+      background: rgb(var(--accent-color-rgb) / 0.14);
     }
   }
 
@@ -285,7 +603,7 @@ watch(
     color: $text-muted;
     border: 1px solid $border-color;
 
-    &:hover {
+    &:hover:not(:disabled) {
       color: $text-secondary;
       border-color: $border-light;
       background: rgb(var(--text-primary-rgb) / 0.02);
@@ -293,7 +611,22 @@ watch(
   }
 }
 
-// ─── 动画 ───
+@media (max-width: 640px) {
+  .pro-wrapper {
+    align-items: flex-end;
+    padding: $spacing-md;
+  }
+
+  .pro-content {
+    max-height: 88vh;
+    padding: $spacing-xl;
+  }
+
+  .payment-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fade-enter-active {
   transition: background-color $transition-slow;
 }
