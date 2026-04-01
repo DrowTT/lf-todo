@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { db, Category } from '../db'
-import { useToast } from '../composables/useToast'
+import type { Category } from '../../../shared/types/models'
+import { useAppRuntime } from '../app/runtime'
 
 // ─── localStorage 持久化封装 ──────────────────────────────────────
 // 统一使用 lf-todo: 前缀（与 useSidebarResize.ts、subtask store 保持一致的命名规范）
@@ -33,7 +33,8 @@ export const useCategoryStore = defineStore('category', () => {
   const categories = ref<Category[]>([])
   const currentCategoryId = ref<number | null>(null)
 
-  const toast = useToast()
+  const { repositories, toast } = useAppRuntime()
+  const categoryRepository = repositories.category
 
   /**
    * 仅刷新分类列表，不触碰 currentCategoryId（优化 #4）
@@ -41,7 +42,7 @@ export const useCategoryStore = defineStore('category', () => {
    */
   async function _loadList() {
     try {
-      categories.value = await db.getCategories()
+      categories.value = await categoryRepository.getCategories()
     } catch (e) {
       console.error('[categoryStore] _loadList 失败:', e)
       throw e
@@ -73,13 +74,13 @@ export const useCategoryStore = defineStore('category', () => {
     } catch (e) {
       console.error('[categoryStore] fetchCategories 失败:', e)
       toast.show('加载分类列表失败，请重试')
-      return false
+      throw e
     }
   }
 
   async function addCategory(name: string) {
     try {
-      await db.createCategory(name)
+      await categoryRepository.createCategory(name)
       await _loadList()
       if (categories.value.length > 0) {
         currentCategoryId.value = categories.value[categories.value.length - 1].id
@@ -94,7 +95,7 @@ export const useCategoryStore = defineStore('category', () => {
 
   async function deleteCategory(id: number) {
     try {
-      await db.deleteCategory(id)
+      await categoryRepository.deleteCategory(id)
       await _loadList()
       if (currentCategoryId.value === id) {
         if (categories.value.length > 0) {
@@ -114,7 +115,7 @@ export const useCategoryStore = defineStore('category', () => {
 
   async function updateCategory(id: number, name: string) {
     try {
-      await db.updateCategory(id, name)
+      await categoryRepository.updateCategory(id, name)
       await _loadList()
     } catch (e) {
       console.error('[categoryStore] updateCategory 失败:', e)

@@ -1,7 +1,5 @@
 import { onMounted, ref } from 'vue'
-import { useCategoryStore } from '../store/category'
-import { useSubTaskStore } from '../store/subtask'
-import { useTaskStore } from '../store/task'
+import { useAppFacade } from './facade/useAppFacade'
 
 async function bootstrapRuntimeFeatures() {
   await Promise.all([
@@ -12,9 +10,7 @@ async function bootstrapRuntimeFeatures() {
 }
 
 export function useAppBootstrap() {
-  const categoryStore = useCategoryStore()
-  const taskStore = useTaskStore()
-  const subTaskStore = useSubTaskStore()
+  const app = useAppFacade()
 
   const hasBootstrapped = ref(false)
   const isBootstrapping = ref(false)
@@ -25,18 +21,7 @@ export function useAppBootstrap() {
     isBootstrapping.value = true
 
     try {
-      const hasCurrentCategory = await categoryStore.fetchCategories()
-      await taskStore.initPendingCounts()
-
-      if (hasCurrentCategory && categoryStore.currentCategoryId) {
-        await taskStore.fetchTasks(categoryStore.currentCategoryId)
-        subTaskStore.loadExpandedForCategory(categoryStore.currentCategoryId)
-        await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
-      } else {
-        taskStore.clearTasks()
-        subTaskStore.reset()
-      }
-
+      await app.fetchCategories()
       await bootstrapRuntimeFeatures()
       hasBootstrapped.value = true
     } catch (error) {

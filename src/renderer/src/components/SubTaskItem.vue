@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Task } from '../db'
-import { useConfirm } from '../composables/useConfirm'
+import type { Task } from '../../../shared/types/models'
+import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from '../composables/useHoverTarget'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import { useSubTaskStore } from '../store/subtask'
 import { Check, X } from 'lucide-vue-next'
 
-const { confirm } = useConfirm()
+const { confirm } = useAppRuntime().confirm
 const { setHoverSubTask, setHoverTask } = useHoverTarget()
 const subTaskStore = useSubTaskStore()
 

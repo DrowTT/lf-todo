@@ -6,6 +6,7 @@ import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
 import { initAutoUpdater } from './updater'
+import { parseBooleanSetting, parseSetAutoCleanupRequest } from '../shared/contracts/settings'
 
 interface AutoCleanupConfig {
   enabled: boolean
@@ -72,19 +73,22 @@ function registerSettingsHandlers(): void {
   })
 
   ipcMain.handle('settings:set-auto-launch', (_, enabled: boolean) => {
-    app.setLoginItemSettings({ openAtLogin: enabled })
-    store.set('autoLaunch', enabled)
-    return enabled
+    const nextEnabled = parseBooleanSetting(enabled, 'settings:set-auto-launch.request')
+    app.setLoginItemSettings({ openAtLogin: nextEnabled })
+    store.set('autoLaunch', nextEnabled)
+    return nextEnabled
   })
 
   ipcMain.handle('settings:set-close-to-tray', (_, enabled: boolean) => {
-    store.set('closeToTray', enabled)
-    return enabled
+    const nextEnabled = parseBooleanSetting(enabled, 'settings:set-close-to-tray.request')
+    store.set('closeToTray', nextEnabled)
+    return nextEnabled
   })
 
   ipcMain.handle('settings:set-auto-cleanup', (_, config: AutoCleanupConfig) => {
-    store.set('autoCleanup', config)
-    return config
+    const nextConfig = parseSetAutoCleanupRequest(config, 'settings:set-auto-cleanup.request')
+    store.set('autoCleanup', nextConfig)
+    return nextConfig
   })
 
   ipcMain.handle('settings:export-data', async () => {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
+import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
-import { store } from '../store'
 import { useTaskStore } from '../store/task'
 
+const app = useAppFacade()
 const taskStore = useTaskStore()
 
 const content = ref('')
@@ -12,12 +13,12 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
 const hasContent = computed(() => content.value.trim().length > 0)
-const isSubmitting = computed(() => store.isLoading || taskStore.isCreatingTask)
+const isSubmitting = computed(() => app.isLoading.value || taskStore.isCreatingTask)
 
 const handleSubmit = async () => {
   if (!hasContent.value || isSubmitting.value) return
 
-  const created = await store.addTask(content.value.trim())
+  const created = await app.addTask(content.value.trim())
   if (!created) return
 
   content.value = ''

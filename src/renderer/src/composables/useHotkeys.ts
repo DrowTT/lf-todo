@@ -1,7 +1,7 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useAppFacade } from '../app/facade/useAppFacade'
+import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from './useHoverTarget'
-import { useConfirm } from './useConfirm'
-import { store } from '../store'
 
 // ─── 类型定义 ──────────────────────────────────────────────────
 /** 单个快捷键动作标识 */
@@ -164,8 +164,9 @@ function matchAction(normalizedKey: string): HotkeyAction | null {
  * 在 SettingsPanel 中调用获取配置进行展示和修改。
  */
 export function useHotkeys() {
+  const app = useAppFacade()
   const { hoveredTarget, hoveredParentTaskId } = useHoverTarget()
-  const { confirm } = useConfirm()
+  const { confirm } = useAppRuntime().confirm
 
   /** 执行快捷键对应的操作 */
   async function executeAction(action: HotkeyAction) {
@@ -177,9 +178,9 @@ export function useHotkeys() {
         const parentId = hoveredTarget.parentId
         if (!taskId) return
         if (type === 'task') {
-          await store.toggleTask(taskId)
+          await app.toggleTask(taskId)
         } else if (type === 'subtask' && parentId) {
-          await store.toggleSubTask(taskId, parentId)
+          await app.toggleSubTask(taskId, parentId)
         }
         break
       }
@@ -192,10 +193,10 @@ export function useHotkeys() {
         if (!taskId) return
         if (type === 'task') {
           const ok = await confirm('确认删除该任务吗？')
-          if (ok) await store.deleteTask(taskId)
+          if (ok) await app.deleteTask(taskId)
         } else if (type === 'subtask' && parentId) {
           const ok = await confirm('确认删除该子任务吗？')
-          if (ok) await store.deleteSubTask(taskId, parentId)
+          if (ok) await app.deleteSubTask(taskId, parentId)
         }
         break
       }
@@ -203,7 +204,7 @@ export function useHotkeys() {
         // 只操作一级待办
         const parentId = hoveredParentTaskId.value
         if (parentId) {
-          await store.toggleExpand(parentId)
+          await app.toggleExpand(parentId)
         }
         break
       }
@@ -211,8 +212,8 @@ export function useHotkeys() {
         const parentId = hoveredParentTaskId.value
         if (parentId) {
           // 如果悬停的一级待办未展开，先展开它
-          if (!store.expandedTaskIds.has(parentId)) {
-            await store.toggleExpand(parentId)
+          if (!app.expandedTaskIds.value.has(parentId)) {
+            await app.toggleExpand(parentId)
           }
           // 等待 DOM 更新后聚焦子任务输入框
           await nextTick()
@@ -238,13 +239,13 @@ export function useHotkeys() {
     const num = parseInt(e.key, 10)
     if (isNaN(num) || num < 1 || num > 9) return false
 
-    const categories = store.categories
+    const categories = app.categories.value
     const index = num - 1
     if (index < categories.length) {
       // 已经是当前分类则跳过
-      if (categories[index].id === store.currentCategoryId) return true
+      if (categories[index].id === app.currentCategoryId.value) return true
       e.preventDefault()
-      store.selectCategory(categories[index].id)
+      void app.selectCategory(categories[index].id)
       return true
     }
     return false

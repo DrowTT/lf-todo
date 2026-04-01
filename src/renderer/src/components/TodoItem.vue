@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Task } from '../db'
-import { useConfirm } from '../composables/useConfirm'
+import type { Task } from '../../../shared/types/models'
+import { useAppFacade } from '../app/facade/useAppFacade'
+import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from '../composables/useHoverTarget'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import { useSubTaskStore } from '../store/subtask'
@@ -10,7 +11,8 @@ import SubTaskInput from './SubTaskInput.vue'
 import SubTaskItem from './SubTaskItem.vue'
 import { Check, ChevronRight, GripVertical, Trash2 } from 'lucide-vue-next'
 
-const { confirm } = useConfirm()
+const app = useAppFacade()
+const { confirm } = useAppRuntime().confirm
 const { setHoverTask, clearHover } = useHoverTarget()
 const taskStore = useTaskStore()
 const subTaskStore = useSubTaskStore()
@@ -55,10 +57,7 @@ const handleToggleExpand = () => {
 const handleDelete = async () => {
   const ok = await confirm('确认删除该任务吗？')
   if (ok) {
-    const deleted = await taskStore.deleteTask(props.task.id, props.task.category_id)
-    if (deleted) {
-      subTaskStore.removeTask(props.task.id, props.task.category_id)
-    }
+    await app.deleteTask(props.task.id)
   }
 }
 

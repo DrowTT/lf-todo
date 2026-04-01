@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { Plus, Settings } from 'lucide-vue-next'
-import { useConfirm } from '../composables/useConfirm'
+import { useAppFacade } from '../app/facade/useAppFacade'
+import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
-import { store } from '../store'
 
 const emit = defineEmits<{
   'open-settings': []
 }>()
 
-const { confirm } = useConfirm()
+const app = useAppFacade()
+const { categories, currentCategoryId, pendingCounts } = app
+const { confirm } = useAppRuntime().confirm
 const {
   menu: contextMenu,
   open: openContextMenu,
@@ -31,7 +33,7 @@ const handleAddCategory = async () => {
     return
   }
 
-  await store.addCategory(trimmed)
+  await app.addCategory(trimmed)
   newCategoryName.value = ''
   isAdding.value = false
 }
@@ -47,7 +49,7 @@ const handleDeleteCategory = async () => {
 
   const confirmed = await confirm('确认删除该分类及其所有待办吗？')
   if (confirmed) {
-    await store.deleteCategory(contextMenu.value.data)
+    await app.deleteCategory(contextMenu.value.data)
   }
 
   closeContextMenu()
@@ -56,7 +58,7 @@ const handleDeleteCategory = async () => {
 const handleRenameClick = async () => {
   if (contextMenu.value.data === null) return
 
-  const category = store.categories.find((item) => item.id === contextMenu.value.data)
+  const category = categories.value.find((item) => item.id === contextMenu.value.data)
   if (!category) return
 
   editingCategoryId.value = category.id
@@ -68,7 +70,7 @@ const handleRenameClick = async () => {
 
 const handleRenameConfirm = async () => {
   if (editingCategoryId.value !== null && editingName.value.trim()) {
-    await store.updateCategory(editingCategoryId.value, editingName.value.trim())
+    await app.updateCategory(editingCategoryId.value, editingName.value.trim())
   }
 
   cancelRename()
@@ -89,14 +91,14 @@ const cancelRename = () => {
     <div class="category-list__content">
       <ul>
         <li
-          v-for="category in store.categories"
+          v-for="category in categories"
           :key="category.id"
           class="category-item"
           :class="{
-            'category-item--active': store.currentCategoryId === category.id,
+            'category-item--active': currentCategoryId === category.id,
             'category-item--editing': editingCategoryId === category.id
           }"
-          @click="editingCategoryId !== category.id && store.selectCategory(category.id)"
+          @click="editingCategoryId !== category.id && app.selectCategory(category.id)"
           @contextmenu="openContextMenu($event, category.id)"
         >
           <input
@@ -112,8 +114,8 @@ const cancelRename = () => {
           />
           <template v-else>
             <span class="category-item__name">{{ category.name }}</span>
-            <span v-if="store.pendingCounts[category.id]" class="category-item__badge">
-              {{ store.pendingCounts[category.id] }}
+            <span v-if="pendingCounts[category.id]" class="category-item__badge">
+              {{ pendingCounts[category.id] }}
             </span>
           </template>
         </li>

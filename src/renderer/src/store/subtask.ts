@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { db, Task } from '../db'
-import { useToast } from '../composables/useToast'
+import type { Task } from '../../../shared/types/models'
+import { useAppRuntime } from '../app/runtime'
 import {
   buildPendingOperationKey,
   hasPendingOperation,
@@ -39,8 +39,20 @@ function saveExpandedIds(categoryId: number, ids: Set<number>) {
 export const useSubTaskStore = defineStore('subTask', () => {
   const subTasksMap = ref<Record<number, Task[]>>({})
   const expandedTaskIds = ref(new Set<number>())
+  let latestSubTaskFetchRequestId = 0
 
-  const toast = useToast()
+  const { repositories, toast } = useAppRuntime()
+  const taskRepository = repositories.task
+  const notifyError = (message: string) => toast.show(message)
+
+  function runSubTaskAction<T>(
+    options: Parameters<typeof runAsyncAction<T>>[0]
+  ) {
+    return runAsyncAction({
+      ...options,
+      notifyError
+    })
+  }
 
   function syncParentTaskStats(parentId: number) {
     const taskStore = useTaskStore()
@@ -113,11 +125,13 @@ export const useSubTaskStore = defineStore('subTask', () => {
   }
 
   function reset() {
+    latestSubTaskFetchRequestId++
     subTasksMap.value = {}
     expandedTaskIds.value = new Set()
   }
 
   function loadExpandedForCategory(categoryId: number) {
+    latestSubTaskFetchRequestId++
     expandedTaskIds.value = loadExpandedIds(categoryId)
   }
 
@@ -126,8 +140,15 @@ export const useSubTaskStore = defineStore('subTask', () => {
   }
 
   async function fetchSubTasks(parentId: number) {
+    const requestId = latestSubTaskFetchRequestId
     try {
-      subTasksMap.value[parentId] = await db.getSubTasks(parentId)
+      const nextSubTasks = await taskRepository.getSubTasks(parentId)
+
+      if (requestId !== latestSubTaskFetchRequestId) {
+        return
+      }
+
+      subTasksMap.value[parentId] = nextSubTasks
       syncParentTaskStats(parentId)
     } catch (error) {
       console.error('[subTaskStore] fetchSubTasks failed', error)
@@ -168,15 +189,15 @@ export const useSubTaskStore = defineStore('subTask', () => {
     const parentWasCompleted = parentTask?.is_completed ?? false
     let createdSubTask: Task | null = null
 
-    return runAsyncAction({
+    return runSubTaskAction({
       key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.create, parentId),
       type: SUBTASK_OPERATION_TYPES.create,
       entityId: parentId,
       execute: async () => {
-        createdSubTask = await db.createSubTask(content, parentId)
+        createdSubTask = await taskRepository.createSubTask(content, parentId)
 
         if (parentWasCompleted) {
-          await db.setTaskCompleted(parentId, false)
+          await taskRepository.setTaskCompleted(parentId, false)
         }
 
         return createdSubTask
@@ -192,10 +213,14 @@ export const useSubTaskStore = defineStore('subTask', () => {
         }
       },
       onError: async () => {
-        if (!createdSubTask) return
-
         try {
-          await db.deleteTask(createdSubTask.id)
+          if (createdSubTask) {
+            await taskRepository.deleteTask(createdSubTask.id)
+          }
+
+          if (parentTask && parentWasCompleted) {
+            await taskRepository.setTaskCompleted(parentId, true)
+          }
         } catch (error) {
           console.error('[subTaskStore] addSubTask compensation failed', error)
         }
@@ -231,7 +256,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
       }
     }
 
-    return runAsyncAction({
+    return runSubTaskAction({
       key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.toggle, id),
       type: SUBTASK_OPERATION_TYPES.toggle,
       entityId: id,
@@ -252,10 +277,10 @@ export const useSubTaskStore = defineStore('subTask', () => {
         }
       },
       execute: async () => {
-        await db.setTaskCompleted(id, nextCompleted)
+        await taskRepository.setTaskCompleted(id, nextCompleted)
 
         if (parentTask && nextParentCompleted !== parentSnapshot?.is_completed) {
-          await db.setTaskCompleted(parentId, Boolean(nextParentCompleted))
+          await taskRepository.setTaskCompleted(parentId, Boolean(nextParentCompleted))
         }
       },
       rollback: () => {
@@ -264,10 +289,10 @@ export const useSubTaskStore = defineStore('subTask', () => {
       },
       onError: async () => {
         try {
-          await db.setTaskCompleted(id, previousSubTaskCompleted)
+          await taskRepository.setTaskCompleted(id, previousSubTaskCompleted)
 
           if (parentSnapshot && nextParentCompleted !== parentSnapshot.is_completed) {
-            await db.setTaskCompleted(parentId, parentSnapshot.is_completed)
+            await taskRepository.setTaskCompleted(parentId, parentSnapshot.is_completed)
           }
         } catch (error) {
           console.error('[subTaskStore] toggleSubTask compensation failed', error)
@@ -285,7 +310,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     const previousList = list.slice()
     const parentSnapshot = captureParentTaskState(parentId)
 
-    return runAsyncAction({
+    return runSubTaskAction({
       key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.delete, id),
       type: SUBTASK_OPERATION_TYPES.delete,
       entityId: id,
@@ -293,7 +318,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
         subTasksMap.value[parentId] = list.filter((task) => task.id !== id)
         syncParentTaskStats(parentId)
       },
-      execute: () => db.deleteTask(id),
+      execute: () => taskRepository.deleteTask(id),
       rollback: () => {
         subTasksMap.value[parentId] = previousList
         restoreParentTaskState(parentId, parentSnapshot)
@@ -310,14 +335,14 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
     const previousContent = subTask.content
 
-    return runAsyncAction({
+    return runSubTaskAction({
       key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.update, id),
       type: SUBTASK_OPERATION_TYPES.update,
       entityId: id,
       before: () => {
         subTask.content = content
       },
-      execute: () => db.updateTask(id, { content }),
+      execute: () => taskRepository.updateTask(id, { content }),
       rollback: () => {
         subTask.content = previousContent
       },

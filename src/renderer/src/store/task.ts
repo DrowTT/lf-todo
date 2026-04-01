@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { db, Task } from '../db'
-import { useToast } from '../composables/useToast'
+import type { Task } from '../../../shared/types/models'
+import { useAppRuntime } from '../app/runtime'
 import {
   buildPendingOperationKey,
   hasPendingOperation,
@@ -23,8 +23,20 @@ export const useTaskStore = defineStore('task', () => {
   const tasks = ref<Task[]>([])
   const isLoading = ref(false)
   const pendingCounts = ref<Record<number, number>>({})
+  let latestFetchRequestId = 0
 
-  const toast = useToast()
+  const { repositories, toast } = useAppRuntime()
+  const taskRepository = repositories.task
+  const notifyError = (message: string) => toast.show(message)
+
+  function runTaskAction<T>(
+    options: Parameters<typeof runAsyncAction<T>>[0]
+  ) {
+    return runAsyncAction({
+      ...options,
+      notifyError
+    })
+  }
 
   const isCreatingTask = computed(() => hasPendingOperation({ type: TASK_OPERATION_TYPES.create }))
   const isClearingCompleted = computed(() =>
@@ -81,18 +93,25 @@ export const useTaskStore = defineStore('task', () => {
 
   async function initPendingCounts() {
     try {
-      pendingCounts.value = await db.getPendingTaskCounts()
+      pendingCounts.value = await taskRepository.getPendingTaskCounts()
     } catch (error) {
       console.error('[taskStore] initPendingCounts failed', error)
     }
   }
 
   async function fetchTasks(categoryId: number) {
+    const requestId = ++latestFetchRequestId
     isLoading.value = true
 
     try {
-      tasks.value = await db.getTasks(categoryId)
-      const pending = tasks.value.filter(
+      const nextTasks = await taskRepository.getTasks(categoryId)
+
+      if (requestId !== latestFetchRequestId) {
+        return
+      }
+
+      tasks.value = nextTasks
+      const pending = nextTasks.filter(
         (task) => !task.is_completed && task.parent_id === null
       ).length
       pendingCounts.value[categoryId] = pending
@@ -101,7 +120,9 @@ export const useTaskStore = defineStore('task', () => {
       toast.show('加载任务列表失败，请重试')
       throw error
     } finally {
-      isLoading.value = false
+      if (requestId === latestFetchRequestId) {
+        isLoading.value = false
+      }
     }
   }
 
@@ -110,13 +131,13 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function addTask(content: string, categoryId: number) {
-    return runAsyncAction({
+    return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.create, categoryId),
       type: TASK_OPERATION_TYPES.create,
       entityId: categoryId,
-      execute: () => db.createTask(content, categoryId),
+      execute: () => taskRepository.createTask(content, categoryId),
       onSuccess: (newTask) => {
-        tasks.value.unshift({ ...newTask, subtask_total: 0, subtask_done: 0 })
+        tasks.value.unshift(newTask)
         _adjustPendingCount(categoryId, 1)
       },
       errorMessage: '创建任务失败，请重试',
@@ -140,7 +161,7 @@ export const useTaskStore = defineStore('task', () => {
       is_completed: subTask.is_completed
     }))
 
-    return runAsyncAction({
+    return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.toggle, id),
       type: TASK_OPERATION_TYPES.toggle,
       entityId: id,
@@ -156,10 +177,10 @@ export const useTaskStore = defineStore('task', () => {
         }
       },
       execute: async () => {
-        await db.setTaskCompleted(id, nextCompleted)
+        await taskRepository.setTaskCompleted(id, nextCompleted)
 
         if (nextCompleted) {
-          await db.batchCompleteSubTasks(id)
+          await taskRepository.batchCompleteSubTasks(id)
         }
       },
       rollback: () => {
@@ -185,7 +206,15 @@ export const useTaskStore = defineStore('task', () => {
       },
       onError: async () => {
         try {
-          await db.setTaskCompleted(id, previousTaskCompleted)
+          await taskRepository.setTaskCompleted(id, previousTaskCompleted)
+
+          if (previousSubTaskStates) {
+            await Promise.all(
+              previousSubTaskStates.map((subTask) =>
+                taskRepository.setTaskCompleted(subTask.id, subTask.is_completed)
+              )
+            )
+          }
         } catch (error) {
           console.error('[taskStore] toggleTask compensation failed', error)
         }
@@ -204,7 +233,7 @@ export const useTaskStore = defineStore('task', () => {
     const previousPendingCount = pendingCounts.value[categoryId] ?? 0
     const hadPendingCount = categoryId in pendingCounts.value
 
-    return runAsyncAction({
+    return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.delete, id),
       type: TASK_OPERATION_TYPES.delete,
       entityId: id,
@@ -215,7 +244,7 @@ export const useTaskStore = defineStore('task', () => {
 
         tasks.value.splice(index, 1)
       },
-      execute: () => db.deleteTask(id),
+      execute: () => taskRepository.deleteTask(id),
       rollback: () => {
         tasks.value = previousTasks
         restorePendingCount(categoryId, previousPendingCount, hadPendingCount)
@@ -231,14 +260,14 @@ export const useTaskStore = defineStore('task', () => {
 
     const previousContent = task.content
 
-    return runAsyncAction({
+    return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.update, id),
       type: TASK_OPERATION_TYPES.update,
       entityId: id,
       before: () => {
         task.content = content
       },
-      execute: () => db.updateTask(id, { content }),
+      execute: () => taskRepository.updateTask(id, { content }),
       rollback: () => {
         task.content = previousContent
       },
@@ -247,21 +276,29 @@ export const useTaskStore = defineStore('task', () => {
     })
   }
 
-  async function clearCompletedTasks() {
+  async function clearCompletedTasks(categoryId: number) {
     const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
     if (completedIds.length === 0) return undefined
 
     const completedIdSet = new Set(completedIds)
     const previousTasks = tasks.value.slice()
 
-    const success = await runAsyncAction({
+    const success = await runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.clearCompleted, 'current'),
       type: TASK_OPERATION_TYPES.clearCompleted,
       entityId: 'current',
       before: () => {
         tasks.value = tasks.value.filter((task) => !completedIdSet.has(task.id))
       },
-      execute: () => db.deleteTasks(completedIds),
+      execute: async () => {
+        const deletedCount = await taskRepository.clearCompletedTasks(categoryId)
+
+        if (deletedCount !== completedIds.length) {
+          throw new Error(
+            `[taskStore] clearCompletedTasks mismatch: expected ${completedIds.length}, got ${deletedCount}`
+          )
+        }
+      },
       rollback: () => {
         tasks.value = previousTasks
       },
@@ -286,11 +323,11 @@ export const useTaskStore = defineStore('task', () => {
       return true
     }
 
-    return runAsyncAction({
+    return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.reorder, 'current'),
       type: TASK_OPERATION_TYPES.reorder,
       entityId: 'current',
-      execute: () => db.reorderTasks(orderedIds),
+      execute: () => taskRepository.reorderTasks(orderedIds),
       rollback: () => {
         restoreTaskOrder(previousOrderedIds)
       },

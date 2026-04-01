@@ -4,6 +4,7 @@ import './assets/main.css'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { createAppRuntime, installAppRuntime } from './app/runtime'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer] window error', {
@@ -20,6 +21,7 @@ window.addEventListener('unhandledrejection', (event) => {
 })
 
 const vueApp = createApp(App)
+const runtime = createAppRuntime(window.api)
 
 vueApp.config.errorHandler = (error, _instance, info) => {
   console.error('[renderer] vue error', {
@@ -28,4 +30,5 @@ vueApp.config.errorHandler = (error, _instance, info) => {
   })
 }
 
+installAppRuntime(vueApp, runtime)
 vueApp.use(createPinia()).mount('#app')

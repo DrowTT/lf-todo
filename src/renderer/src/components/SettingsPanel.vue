@@ -11,8 +11,8 @@ import {
   Keyboard,
   RefreshCw
 } from 'lucide-vue-next'
+import { useAppRuntime } from '../app/runtime'
 import { useHotkeys, HOTKEY_LABELS, keyToLabel, type HotkeyAction } from '../composables/useHotkeys'
-import { useConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
   visible: boolean
@@ -23,7 +23,11 @@ const emit = defineEmits<{
 }>()
 
 // 检查是否在 Electron 环境中
-const isElectron = typeof window !== 'undefined' && window.api !== undefined
+const runtime = useAppRuntime()
+const settingsRepository = runtime.repositories.settings
+const updaterService = runtime.updater
+const isElectron = settingsRepository.isAvailable
+const stopUpdateListener = ref<(() => void) | null>(null)
 
 // ─── 设置状态 ───────────────────────────────────────────────────────
 const autoLaunch = ref(false)
@@ -59,7 +63,8 @@ const updateError = ref('')
 // 监听来自主进程的更新状态
 const setupUpdateListener = () => {
   if (!isElectron) return
-  window.api.updater.onUpdateStatus((data) => {
+  stopUpdateListener.value?.()
+  stopUpdateListener.value = updaterService.onUpdateStatus((data) => {
     updateStatus.value = data.status
     if (data.status === 'available') {
       updateVersion.value = data.version || ''
@@ -77,23 +82,23 @@ const handleCheckUpdate = async () => {
   if (!isElectron) return
   updateStatus.value = 'checking'
   updateError.value = ''
-  await window.api.updater.checkForUpdates()
+  await updaterService.checkForUpdates()
 }
 
 const handleDownloadUpdate = async () => {
   if (!isElectron) return
   updatePercent.value = 0
-  await window.api.updater.downloadUpdate()
+  await updaterService.downloadUpdate()
 }
 
 const handleInstallUpdate = async () => {
   if (!isElectron) return
-  await window.api.updater.installUpdate()
+  await updaterService.installUpdate()
 }
 
 // ─── 快捷键设置 ──────────────────────────────────────────────────────
 const { hotkeyConfig, isEnabled, updateBinding, resetAllBindings } = useHotkeys()
-const { confirm } = useConfirm()
+const { confirm } = runtime.confirm
 
 /** 恢复默认：通过 useConfirm 弹出二次确认 */
 const handleResetAll = async () => {
@@ -192,13 +197,13 @@ const hotkeyActions: HotkeyAction[] = [
 // ─── 加载设置 ───────────────────────────────────────────────────────
 const loadSettings = async () => {
   if (!isElectron) return
-  const settings = await window.api.settings.getAll()
+  const settings = await settingsRepository.getAll()
   autoLaunch.value = settings.autoLaunch
   closeToTray.value = settings.closeToTray
   autoCleanupEnabled.value = settings.autoCleanup.enabled
   autoCleanupDays.value = settings.autoCleanup.days
 
-  const info = await window.api.settings.getAppInfo()
+  const info = await settingsRepository.getAppInfo()
   appInfo.value = info
 }
 
@@ -217,17 +222,17 @@ watch(
 // ─── 设置变更处理（即时生效） ─────────────────────────────────────────
 const handleAutoLaunchChange = async () => {
   if (!isElectron) return
-  await window.api.settings.setAutoLaunch(autoLaunch.value)
+  await settingsRepository.setAutoLaunch(autoLaunch.value)
 }
 
 const handleCloseToTrayChange = async () => {
   if (!isElectron) return
-  await window.api.settings.setCloseToTray(closeToTray.value)
+  await settingsRepository.setCloseToTray(closeToTray.value)
 }
 
 const handleAutoCleanupChange = async () => {
   if (!isElectron) return
-  await window.api.settings.setAutoCleanup({
+  await settingsRepository.setAutoCleanup({
     enabled: autoCleanupEnabled.value,
     days: autoCleanupDays.value
   })
@@ -244,7 +249,7 @@ const handleExportData = async () => {
   if (!isElectron || isExporting.value) return
   isExporting.value = true
   try {
-    await window.api.settings.exportData()
+    await settingsRepository.exportData()
   } finally {
     isExporting.value = false
   }
@@ -267,6 +272,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopUpdateListener.value?.()
   window.removeEventListener('keydown', handleKeydown)
 })
 </script>

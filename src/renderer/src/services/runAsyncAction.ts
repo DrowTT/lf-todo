@@ -1,5 +1,4 @@
 import { readonly, ref } from 'vue'
-import { useToast } from '../composables/useToast'
 
 export interface PendingOperation {
   type: string
@@ -23,6 +22,7 @@ interface RunAsyncActionOptions<T> {
   rollback?: () => void
   onError?: (error: unknown) => Promise<void> | void
   errorMessage?: string
+  notifyError?: (message: string) => void
   logPrefix?: string
 }
 
@@ -71,8 +71,6 @@ export async function runAsyncAction<T>(options: RunAsyncActionOptions<T>) {
     return false
   }
 
-  const toast = useToast()
-
   setPendingOperation(options.key, options.type, options.entityId)
 
   try {
@@ -87,7 +85,7 @@ export async function runAsyncAction<T>(options: RunAsyncActionOptions<T>) {
     console.error(options.logPrefix ?? `[runAsyncAction] ${options.type} failed`, error)
 
     if (options.errorMessage) {
-      toast.show(options.errorMessage)
+      options.notifyError?.(options.errorMessage)
     }
 
     return false

@@ -6,12 +6,12 @@ import ConfirmDialog from './components/ConfirmDialog.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ToastMessage from './components/ToastMessage.vue'
 import TodoList from './components/TodoList.vue'
-import { useConfirm } from './composables/useConfirm'
+import { useAppRuntime } from './app/runtime'
 import { useHotkeys } from './composables/useHotkeys'
 import { useSidebarResize } from './composables/useSidebarResize'
 import TitleBar from './layout/TitleBar.vue'
 
-const { current, handleConfirm, handleCancel } = useConfirm()
+const { current, handleConfirm, handleCancel } = useAppRuntime().confirm
 const { sidebarWidth, startResize } = useSidebarResize()
 
 useAppBootstrap()

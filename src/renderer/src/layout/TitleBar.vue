@@ -38,49 +38,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Pin, Minus, Square, X } from 'lucide-vue-next'
+import { useAppRuntime } from '../app/runtime'
 import IconRestore from '../components/icons/IconRestore.vue'
 
 const isAlwaysOnTop = ref(false)
 const isMaximized = ref(false)
-
-// 检查是否在 Electron 环境中（window.api 由 preload 脚本注入）
-const isElectron = typeof window !== 'undefined' && window.api !== undefined
+const windowService = useAppRuntime().window
+const stopAlwaysOnTopListener = ref<(() => void) | null>(null)
+const stopMaximizedListener = ref<(() => void) | null>(null)
 
 const handleTogglePin = () => {
-  if (isElectron) {
-    window.api.window.toggleAlwaysOnTop()
+  if (windowService.isAvailable) {
+    windowService.toggleAlwaysOnTop()
   }
 }
 
 const handleMinimize = () => {
-  if (isElectron) {
-    window.api.window.minimize()
+  if (windowService.isAvailable) {
+    windowService.minimize()
   }
 }
 
 const handleToggleMaximize = () => {
-  if (isElectron) {
-    window.api.window.toggleMaximize()
+  if (windowService.isAvailable) {
+    windowService.toggleMaximize()
   }
 }
 
 const handleClose = () => {
-  if (isElectron) {
-    window.api.window.close()
+  if (windowService.isAvailable) {
+    windowService.close()
   }
 }
 
 onMounted(() => {
-  if (isElectron) {
-    window.api.window.onAlwaysOnTopChanged((flag: boolean) => {
+  if (windowService.isAvailable) {
+    stopAlwaysOnTopListener.value = windowService.onAlwaysOnTopChanged((flag: boolean) => {
       isAlwaysOnTop.value = flag
     })
-    window.api.window.onMaximizedChanged((flag: boolean) => {
+    stopMaximizedListener.value = windowService.onMaximizedChanged((flag: boolean) => {
       isMaximized.value = flag
     })
   }
+})
+
+onUnmounted(() => {
+  stopAlwaysOnTopListener.value?.()
+  stopMaximizedListener.value?.()
 })
 </script>
 

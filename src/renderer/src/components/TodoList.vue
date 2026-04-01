@@ -2,23 +2,29 @@
 import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
-import { useConfirm } from '../composables/useConfirm'
-import { store } from '../store'
+import { useAppFacade } from '../app/facade/useAppFacade'
+import { useAppRuntime } from '../app/runtime'
 import { useTaskStore } from '../store/task'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
 
-const { confirm } = useConfirm()
+const app = useAppFacade()
+const { currentCategoryId, categories, tasks, isLoading } = app
+const { confirm } = useAppRuntime().confirm
 const taskStore = useTaskStore()
 
 const dragStartOrder = ref<number[]>([])
 
 const currentCategoryName = computed(() => {
-  const category = store.categories.find((item) => item.id === store.currentCategoryId)
+  const category = categories.value.find((item) => item.id === currentCategoryId.value)
   return category ? category.name : '未选择分类'
 })
 
-const completedCount = computed(() => store.tasks.filter((task) => task.is_completed).length)
+const currentPendingCount = computed(
+  () => tasks.value.filter((task) => !task.is_completed && task.parent_id === null).length
+)
+
+const completedCount = computed(() => tasks.value.filter((task) => task.is_completed).length)
 
 const draggableTasks = computed({
   get: () => taskStore.tasks,
@@ -30,7 +36,7 @@ const draggableTasks = computed({
 const handleClearCompleted = async () => {
   const confirmed = await confirm(`确认删除 ${completedCount.value} 个已完成的待办吗？`)
   if (confirmed) {
-    await store.clearCompletedTasks()
+    await app.clearCompletedTasks()
   }
 }
 
@@ -39,7 +45,7 @@ const onDragStart = () => {
 }
 
 const onDragEnd = async () => {
-  await store.reorderTasks(dragStartOrder.value)
+  await app.reorderTasks(dragStartOrder.value)
   dragStartOrder.value = []
 }
 </script>
@@ -51,15 +57,15 @@ const onDragEnd = async () => {
         {{ currentCategoryName }}
       </h1>
       <div class="todo-panel__actions">
-        <span v-if="store.currentCategoryId" class="todo-panel__badge">
+        <span v-if="currentCategoryId" class="todo-panel__badge">
           <span class="todo-panel__badge-num">
-            {{ store.pendingCounts[store.currentCategoryId] ?? 0 }}
+            {{ currentPendingCount }}
           </span>
           <span class="todo-panel__badge-label">待办</span>
         </span>
         <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中</span>
         <button
-          v-if="store.currentCategoryId"
+          v-if="currentCategoryId"
           :disabled="completedCount === 0 || taskStore.isClearingCompleted"
           class="todo-panel__clear-btn"
           title="清空已完成"
@@ -70,10 +76,10 @@ const onDragEnd = async () => {
       </div>
     </header>
 
-    <TodoInput v-if="store.currentCategoryId" />
+    <TodoInput v-if="currentCategoryId" />
 
     <div class="todo-panel__body">
-      <div v-if="store.isLoading" class="todo-panel__loading">
+      <div v-if="isLoading" class="todo-panel__loading">
         <div class="todo-panel__spinner">
           <div class="todo-panel__dot"></div>
           <div class="todo-panel__dot"></div>
@@ -81,14 +87,14 @@ const onDragEnd = async () => {
         </div>
       </div>
       <template v-else>
-        <div v-if="!store.currentCategoryId" class="todo-panel__empty">
+        <div v-if="!currentCategoryId" class="todo-panel__empty">
           <div class="todo-panel__empty-glow">
             <ClipboardList class="todo-panel__empty-svg" :size="32" />
           </div>
           <div class="todo-panel__empty-title">请选择或创建一个分类</div>
           <div class="todo-panel__empty-hint">在左侧添加分类后即可开始管理待办</div>
         </div>
-        <div v-else-if="store.tasks.length === 0" class="todo-panel__empty">
+        <div v-else-if="tasks.length === 0" class="todo-panel__empty">
           <div class="todo-panel__empty-glow todo-panel__empty-glow--spark">
             <Sparkles class="todo-panel__empty-svg" :size="32" />
           </div>

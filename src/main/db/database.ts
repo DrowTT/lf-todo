@@ -226,8 +226,15 @@ export interface Task {
  */
 function mapTask(raw: Record<string, unknown>): Task {
   return {
-    ...(raw as Omit<Task, 'is_completed'>),
-    is_completed: raw.is_completed === 1
+    id: raw.id as number,
+    content: raw.content as string,
+    is_completed: raw.is_completed === 1,
+    category_id: raw.category_id as number,
+    order_index: raw.order_index as number,
+    created_at: raw.created_at as number,
+    parent_id: (raw.parent_id as number | null | undefined) ?? null,
+    subtask_total: typeof raw.subtask_total === 'number' ? raw.subtask_total : 0,
+    subtask_done: typeof raw.subtask_done === 'number' ? raw.subtask_done : 0
   }
 }
 
@@ -299,6 +306,16 @@ export function deleteTasks(ids: number[]): void {
   getDb()
     .prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`)
     .run(...ids)
+}
+
+export function clearCompletedTasks(categoryId: number): number {
+  const result = getDb()
+    .prepare(
+      'DELETE FROM tasks WHERE category_id = ? AND parent_id IS NULL AND is_completed = 1'
+    )
+    .run(categoryId)
+
+  return result.changes
 }
 
 /** 切换任务完成状态（用于用户手动点击） */

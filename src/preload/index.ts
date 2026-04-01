@@ -1,75 +1,214 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import {
+  parseAppInfo,
+  parseAutoCleanupConfig,
+  parseCategories,
+  parseCategory,
+  parsePendingTaskCounts,
+  parseSettingsData,
+  parseTask,
+  parseTasks,
+  parseUpdateStatusData
+} from '../shared/contracts/entities'
+import {
+  parseCreateSubTaskRequest,
+  parseCreateTaskRequest,
+  parseDeleteTasksRequest,
+  parseReorderTasksRequest,
+  parseSetTaskCompletedRequest,
+  parseUpdateTaskRequest
+} from '../shared/contracts/db'
+import { parseBooleanSetting, parseSetAutoCleanupRequest } from '../shared/contracts/settings'
+import { expectBoolean, expectInteger, expectString, parseVoid } from '../shared/contracts/utils'
 
-// Custom APIs for renderer
+function invokeWithResponse<T>(
+  channel: string,
+  parser: (value: unknown, label: string) => T
+): Promise<T> {
+  return ipcRenderer.invoke(channel).then((value) => parser(value, `${channel}.response`))
+}
+
+function invokeWithPayload<Payload, Response>(
+  channel: string,
+  payload: unknown,
+  payloadParser: (value: unknown, label: string) => Payload,
+  responseParser: (value: unknown, label: string) => Response
+): Promise<Response> {
+  const parsedPayload = payloadParser(payload, `${channel}.request`)
+
+  return ipcRenderer.invoke(channel, parsedPayload).then((value) => {
+    return responseParser(value, `${channel}.response`)
+  })
+}
+
+function invokeVoidWithPayload<Payload>(
+  channel: string,
+  payload: unknown,
+  payloadParser: (value: unknown, label: string) => Payload
+): Promise<void> {
+  const parsedPayload = payloadParser(payload, `${channel}.request`)
+
+  return ipcRenderer.invoke(channel, parsedPayload).then((value) => {
+    return parseVoid(value, `${channel}.response`)
+  })
+}
+
+function subscribe<T>(
+  channel: string,
+  callback: (value: T) => void,
+  parser: (value: unknown, label: string) => T
+): () => void {
+  const listener = (_event: unknown, value: unknown) => {
+    callback(parser(value, `${channel}.event`))
+  }
+
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.off(channel, listener)
+}
+
 const api = {
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     close: () => ipcRenderer.send('window:close'),
     toggleAlwaysOnTop: () => ipcRenderer.send('window:toggle-always-on-top'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
-    onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => {
-      ipcRenderer.on('window:always-on-top-changed', (_, flag) => callback(flag))
-    },
-    onMaximizedChanged: (callback: (flag: boolean) => void) => {
-      ipcRenderer.on('window:maximized-changed', (_, flag) => callback(flag))
-    }
+    onAlwaysOnTopChanged: (callback: (flag: boolean) => void) =>
+      subscribe('window:always-on-top-changed', callback, expectBoolean),
+    onMaximizedChanged: (callback: (flag: boolean) => void) =>
+      subscribe('window:maximized-changed', callback, expectBoolean)
   },
   db: {
-    // Category 操作
-    getCategories: () => ipcRenderer.invoke('db:get-categories'),
-    createCategory: (name: string) => ipcRenderer.invoke('db:create-category', name),
-    updateCategory: (id: number, name: string) =>
-      ipcRenderer.invoke('db:update-category', id, name),
-    deleteCategory: (id: number) => ipcRenderer.invoke('db:delete-category', id),
+    getCategories: () => invokeWithResponse('db:get-categories', parseCategories),
+    createCategory: (name: string) => {
+      const parsedName = expectString(name, 'db:create-category.request.name', {
+        trim: true,
+        minLength: 1,
+        maxLength: 64
+      })
 
-    // Task 操作
-    getTasks: (categoryId: number) => ipcRenderer.invoke('db:get-tasks', categoryId),
+      return ipcRenderer.invoke('db:create-category', parsedName).then((value) => {
+        return parseCategory(value, 'db:create-category.response')
+      })
+    },
+    updateCategory: (id: number, name: string) => {
+      const parsedId = expectInteger(id, 'db:update-category.request.id', { min: 1 })
+      const parsedName = expectString(name, 'db:update-category.request.name', {
+        trim: true,
+        minLength: 1,
+        maxLength: 64
+      })
+
+      return ipcRenderer.invoke('db:update-category', parsedId, parsedName).then((value) => {
+        return parseVoid(value, 'db:update-category.response')
+      })
+    },
+    deleteCategory: (id: number) =>
+      ipcRenderer
+        .invoke('db:delete-category', expectInteger(id, 'db:delete-category.request.id', { min: 1 }))
+        .then((value) => parseVoid(value, 'db:delete-category.response')),
+    getTasks: (categoryId: number) =>
+      ipcRenderer
+        .invoke('db:get-tasks', expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))
+        .then((value) => parseTasks(value, 'db:get-tasks.response')),
     createTask: (content: string, categoryId: number) =>
-      ipcRenderer.invoke('db:create-task', content, categoryId),
-    updateTask: (id: number, updates: any) => ipcRenderer.invoke('db:update-task', id, updates),
-    deleteTask: (id: number) => ipcRenderer.invoke('db:delete-task', id),
-    deleteTasks: (ids: number[]) => ipcRenderer.invoke('db:delete-tasks', ids),
-    toggleTaskComplete: (id: number) => ipcRenderer.invoke('db:toggle-task', id),
+      invokeWithPayload('db:create-task', { content, categoryId }, parseCreateTaskRequest, parseTask),
+    updateTask: (id: number, updates: unknown) =>
+      invokeVoidWithPayload('db:update-task', { id, updates }, parseUpdateTaskRequest),
+    deleteTask: (id: number) =>
+      ipcRenderer
+        .invoke('db:delete-task', expectInteger(id, 'db:delete-task.request.id', { min: 1 }))
+        .then((value) => parseVoid(value, 'db:delete-task.response')),
+    deleteTasks: (ids: number[]) =>
+      invokeVoidWithPayload('db:delete-tasks', { ids }, parseDeleteTasksRequest),
+    toggleTaskComplete: (id: number) =>
+      ipcRenderer
+        .invoke('db:toggle-task', expectInteger(id, 'db:toggle-task.request.id', { min: 1 }))
+        .then((value) => parseVoid(value, 'db:toggle-task.response')),
     setTaskCompleted: (id: number, completed: boolean) =>
-      ipcRenderer.invoke('db:set-task-completed', id, completed),
-    getPendingTaskCounts: () => ipcRenderer.invoke('db:get-pending-counts'),
-    reorderTasks: (orderedIds: number[]) => ipcRenderer.invoke('db:reorder-tasks', orderedIds),
-
-    // SubTask 操作
-    getSubTasks: (parentId: number) => ipcRenderer.invoke('db:get-subtasks', parentId),
+      invokeVoidWithPayload(
+        'db:set-task-completed',
+        { id, completed },
+        parseSetTaskCompletedRequest
+      ),
+    getPendingTaskCounts: () =>
+      invokeWithResponse('db:get-pending-counts', parsePendingTaskCounts),
+    clearCompletedTasks: (categoryId: number) =>
+      ipcRenderer
+        .invoke(
+          'db:clear-completed-tasks',
+          expectInteger(categoryId, 'db:clear-completed-tasks.request.categoryId', { min: 1 })
+        )
+        .then((value) =>
+          expectInteger(value, 'db:clear-completed-tasks.response', { min: 0 })
+        ),
+    reorderTasks: (orderedIds: number[]) =>
+      invokeVoidWithPayload('db:reorder-tasks', { orderedIds }, parseReorderTasksRequest),
+    getSubTasks: (parentId: number) =>
+      ipcRenderer
+        .invoke('db:get-subtasks', expectInteger(parentId, 'db:get-subtasks.request.parentId', { min: 1 }))
+        .then((value) => parseTasks(value, 'db:get-subtasks.response')),
     createSubTask: (content: string, parentId: number) =>
-      ipcRenderer.invoke('db:create-subtask', content, parentId),
+      invokeWithPayload(
+        'db:create-subtask',
+        { content, parentId },
+        parseCreateSubTaskRequest,
+        parseTask
+      ),
     batchCompleteSubTasks: (parentId: number) =>
-      ipcRenderer.invoke('db:batch-complete-subtasks', parentId)
+      ipcRenderer
+        .invoke(
+          'db:batch-complete-subtasks',
+          expectInteger(parentId, 'db:batch-complete-subtasks.request.parentId', { min: 1 })
+        )
+        .then((value) =>
+          expectInteger(value, 'db:batch-complete-subtasks.response', { min: 0 })
+        )
   },
   settings: {
-    getAll: () => ipcRenderer.invoke('settings:get-all'),
-    setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('settings:set-auto-launch', enabled),
-    setCloseToTray: (enabled: boolean) => ipcRenderer.invoke('settings:set-close-to-tray', enabled),
+    getAll: () => invokeWithResponse('settings:get-all', parseSettingsData),
+    setAutoLaunch: (enabled: boolean) =>
+      ipcRenderer
+        .invoke(
+          'settings:set-auto-launch',
+          parseBooleanSetting(enabled, 'settings:set-auto-launch.request')
+        )
+        .then((value) => expectBoolean(value, 'settings:set-auto-launch.response')),
+    setCloseToTray: (enabled: boolean) =>
+      ipcRenderer
+        .invoke(
+          'settings:set-close-to-tray',
+          parseBooleanSetting(enabled, 'settings:set-close-to-tray.request')
+        )
+        .then((value) => expectBoolean(value, 'settings:set-close-to-tray.response')),
     setAutoCleanup: (config: { enabled: boolean; days: number }) =>
-      ipcRenderer.invoke('settings:set-auto-cleanup', config),
-    exportData: () => ipcRenderer.invoke('settings:export-data'),
-    getAppInfo: () => ipcRenderer.invoke('settings:get-app-info')
+      invokeWithPayload(
+        'settings:set-auto-cleanup',
+        config,
+        parseSetAutoCleanupRequest,
+        parseAutoCleanupConfig
+      ),
+    exportData: () =>
+      ipcRenderer
+        .invoke('settings:export-data')
+        .then((value) => expectBoolean(value, 'settings:export-data.response')),
+    getAppInfo: () => invokeWithResponse('settings:get-app-info', parseAppInfo)
   },
   updater: {
-    // 手动检查更新
-    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
-    // 开始下载更新
-    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
-    // 退出并安装更新
-    installUpdate: () => ipcRenderer.invoke('updater:install'),
-    // 监听更新状态变化
-    onUpdateStatus: (callback: (data: Record<string, unknown>) => void) => {
-      ipcRenderer.on('updater:status', (_, data) => callback(data))
-    }
+    checkForUpdates: () =>
+      ipcRenderer.invoke('updater:check').then((value) => parseVoid(value, 'updater:check.response')),
+    downloadUpdate: () =>
+      ipcRenderer
+        .invoke('updater:download')
+        .then((value) => parseVoid(value, 'updater:download.response')),
+    installUpdate: () =>
+      ipcRenderer
+        .invoke('updater:install')
+        .then((value) => parseVoid(value, 'updater:install.response')),
+    onUpdateStatus: (callback: (data: Record<string, unknown>) => void) =>
+      subscribe('updater:status', callback, parseUpdateStatusData)
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-// 仅暴露业务所需的最小 API（sandbox: true 模式的最佳实践）
-// electronAPI 已移除，不再向渲染进程暴露原生 Node.js 能力
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('api', api)

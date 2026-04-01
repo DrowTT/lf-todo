@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { CircleAlert, CircleCheck, Info } from 'lucide-vue-next'
-import { useToast } from '../composables/useToast'
+import { useAppRuntime } from '../app/runtime'
 
-const { message, hide } = useToast()
+const { message, hide } = useAppRuntime().toast
 </script>
 
 <template>
