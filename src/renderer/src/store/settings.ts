@@ -32,6 +32,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const isSavingCloseToTray = ref(false)
   const isSavingAutoCleanup = ref(false)
   const error = ref('')
+  const loadError = ref('')
   const lastSyncedAt = ref<number | null>(null)
   const hydrated = ref(false)
 
@@ -48,6 +49,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
     isLoading.value = true
     error.value = ''
+    loadError.value = ''
 
     try {
       const [nextSettings, nextAppInfo] = await Promise.all([
@@ -58,8 +60,10 @@ export const useSettingsStore = defineStore('settings', () => {
       settings.value = nextSettings
       appInfo.value = nextAppInfo
       hydrated.value = true
+      loadError.value = ''
       markSynced()
     } catch (err) {
+      loadError.value = '设置加载失败，建议先重启应用；如果仍然失败，请检查系统权限或稍后重试。'
       error.value = '加载设置失败，请重试'
       runtime.toast.show(error.value)
       throw err
@@ -169,6 +173,7 @@ export const useSettingsStore = defineStore('settings', () => {
     isSavingCloseToTray,
     isSavingAutoCleanup,
     error,
+    loadError,
     lastSyncedAt,
     hydrated,
     hydrate,

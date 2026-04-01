@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, dialog, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, dialog, screen, globalShortcut } from 'electron'
 import type { Display, Rectangle } from 'electron'
 import { appendFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -14,6 +14,14 @@ interface AutoCleanupConfig {
   days: number
 }
 
+interface HotkeyBinding {
+  key: string
+  label: string
+}
+
+type GlobalHotkeyAction = 'showWindow' | 'showWindowAndFocusInput'
+type GlobalHotkeyConfig = Record<GlobalHotkeyAction, HotkeyBinding>
+
 interface StoreType {
   windowBounds: {
     width: number
@@ -26,15 +34,125 @@ interface StoreType {
   autoLaunch: boolean
   closeToTray: boolean
   autoCleanup: AutoCleanupConfig
+  globalHotkeys: GlobalHotkeyConfig
 }
 
 const store = new Store<StoreType>()
 const DEFAULT_WINDOW_SIZE = { width: 900, height: 670 }
 const MIN_WINDOW_SIZE = { width: 400, height: 500 }
+const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyConfig = {
+  showWindow: { key: 'Control+Alt+L', label: 'Ctrl+Alt+L' },
+  showWindowAndFocusInput: { key: 'Control+Alt+N', label: 'Ctrl+Alt+N' }
+}
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
+let releaseTopMostTimer: NodeJS.Timeout | null = null
+
+function isHotkeyBinding(value: unknown): value is HotkeyBinding {
+  if (!value || typeof value !== 'object') return false
+
+  const binding = value as Partial<HotkeyBinding>
+  return typeof binding.key === 'string' && typeof binding.label === 'string'
+}
+
+function hasAtLeastTwoKeys(binding: HotkeyBinding): boolean {
+  return binding.key
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean).length >= 2
+}
+
+function sanitizeGlobalHotkeys(raw: unknown): GlobalHotkeyConfig {
+  const input = raw && typeof raw === 'object' ? (raw as Partial<GlobalHotkeyConfig>) : {}
+  const nextConfig = {} as GlobalHotkeyConfig
+
+  for (const action of Object.keys(DEFAULT_GLOBAL_HOTKEYS) as GlobalHotkeyAction[]) {
+    const candidate = input[action]
+    nextConfig[action] =
+      isHotkeyBinding(candidate) && hasAtLeastTwoKeys(candidate)
+        ? candidate
+        : { ...DEFAULT_GLOBAL_HOTKEYS[action] }
+  }
+
+  return nextConfig
+}
+
+function toElectronAccelerator(key: string): string {
+  return key
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      if (part === 'Control') return 'CommandOrControl'
+      if (part.length === 1) return part.toUpperCase()
+      return part
+    })
+    .join('+')
+}
+
+function bringWindowToFront(win: BrowserWindow, options?: { focusMainInput?: boolean }): void {
+  if (win.isDestroyed()) return
+
+  if (releaseTopMostTimer) {
+    clearTimeout(releaseTopMostTimer)
+    releaseTopMostTimer = null
+  }
+
+  if (win.isMinimized()) {
+    win.restore()
+  }
+
+  const persistedAlwaysOnTop = store.get('alwaysOnTop', false)
+  const shouldUseTemporaryTopMost = !persistedAlwaysOnTop && !win.isAlwaysOnTop()
+
+  if (shouldUseTemporaryTopMost) {
+    win.setAlwaysOnTop(true)
+  }
+
+  win.show()
+  win.focus()
+  win.moveTop()
+
+  if (options?.focusMainInput) {
+    win.webContents.send('window:focus-main-input')
+  }
+
+  if (shouldUseTemporaryTopMost) {
+    releaseTopMostTimer = setTimeout(() => {
+      if (!win.isDestroyed() && !store.get('alwaysOnTop', false)) {
+        win.setAlwaysOnTop(false)
+      }
+      releaseTopMostTimer = null
+    }, 500)
+  }
+}
+
+function registerGlobalHotkeys(): void {
+  globalShortcut.unregisterAll()
+
+  const config = sanitizeGlobalHotkeys(store.get('globalHotkeys'))
+  store.set('globalHotkeys', config)
+
+  for (const action of Object.keys(config) as GlobalHotkeyAction[]) {
+    const accelerator = toElectronAccelerator(config[action].key)
+    const success = globalShortcut.register(accelerator, () => {
+      if (!mainWindow) return
+
+      bringWindowToFront(mainWindow, {
+        focusMainInput: action === 'showWindowAndFocusInput'
+      })
+    })
+
+    if (!success) {
+      writeStartupLog('main', 'global shortcut registration failed', {
+        action,
+        accelerator
+      })
+    }
+  }
+}
 
 function getScaledMinWindowSize(display: Display): Pick<Rectangle, 'width' | 'height'> {
   const scaleFactor = display.scaleFactor > 0 ? display.scaleFactor : 1
@@ -269,6 +387,12 @@ function registerSettingsHandlers(): void {
     return nextConfig
   })
 
+  ipcMain.handle('settings:set-global-hotkeys', (_event, config: unknown) => {
+    const nextConfig = sanitizeGlobalHotkeys(config)
+    store.set('globalHotkeys', nextConfig)
+    registerGlobalHotkeys()
+  })
+
   ipcMain.handle('settings:export-data', async () => {
     const win = mainWindow
     if (!win) return false
@@ -331,8 +455,7 @@ function createTray(win: BrowserWindow, setQuitting: () => void): void {
       {
         label: '显示',
         click: () => {
-          win.show()
-          win.focus()
+          bringWindowToFront(win)
         }
       },
       {
@@ -347,8 +470,7 @@ function createTray(win: BrowserWindow, setQuitting: () => void): void {
     tray.setToolTip('极简待办')
     tray.setContextMenu(contextMenu)
     tray.on('click', () => {
-      win.show()
-      win.focus()
+      bringWindowToFront(win)
     })
   } catch (error) {
     tray = null
@@ -477,12 +599,7 @@ if (!gotTheLock) {
 app.on('second-instance', () => {
   if (!mainWindow) return
 
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore()
-  }
-
-  mainWindow.show()
-  mainWindow.focus()
+  bringWindowToFront(mainWindow)
 })
 
 app.whenReady().then(() => {
@@ -514,6 +631,7 @@ app.whenReady().then(() => {
   registerSettingsHandlers()
 
   createWindow()
+  registerGlobalHotkeys()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -530,6 +648,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll()
   db.closeDatabase()
 })
 

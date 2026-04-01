@@ -13,7 +13,12 @@ import {
   X
 } from 'lucide-vue-next'
 import { useAppRuntime } from '../app/runtime'
-import { HOTKEY_LABELS, keyToLabel, useHotkeys, type HotkeyAction } from '../composables/useHotkeys'
+import {
+  HOTKEY_LABELS,
+  keyToLabel,
+  useHotkeys,
+  type HotkeyAction
+} from '../composables/useHotkeys'
 import { useSettingsStore } from '../store/settings'
 import { useUpdaterStore } from '../store/updater'
 
@@ -27,7 +32,15 @@ const emit = defineEmits<{
 
 const runtime = useAppRuntime()
 const { confirm } = runtime.confirm
-const { hotkeyConfig, isEnabled, updateBinding, resetAllBindings } = useHotkeys()
+const {
+  hotkeyConfig,
+  isEnabled,
+  updateBinding,
+  resetAllBindings,
+  isGlobalHotkeyAction,
+  hasAtLeastTwoKeys,
+  reservedCategoryShortcutPattern
+} = useHotkeys()
 const settingsStore = useSettingsStore()
 const updaterStore = useUpdaterStore()
 
@@ -39,8 +52,7 @@ const {
   isSavingAutoLaunch,
   isSavingCloseToTray,
   isSavingAutoCleanup,
-  error,
-  lastSyncedAt
+  loadError
 } = storeToRefs(settingsStore)
 const {
   status: updateStatus,
@@ -54,7 +66,9 @@ const hotkeyActions: HotkeyAction[] = [
   'toggleComplete',
   'quickDelete',
   'toggleExpand',
-  'focusInput'
+  'focusInput',
+  'showWindow',
+  'showWindowAndFocusInput'
 ]
 
 const autoLaunch = computed({
@@ -92,10 +106,8 @@ const autoCleanupDays = computed({
 })
 
 const settingsStatusText = computed(() => {
-  if (isLoading.value) return '正在同步设置...'
-  if (error.value) return error.value
-  if (lastSyncedAt.value) return '设置已同步'
-  return ''
+  if (isLoading.value || !loadError.value) return ''
+  return loadError.value
 })
 
 const updaterStatusText = computed(() => {
@@ -153,8 +165,17 @@ function handleRecordKeydown(event: KeyboardEvent) {
 
   const newKey = parts.join('+')
 
-  if (/^Control\+[1-9]$/.test(newKey)) {
+  if (reservedCategoryShortcutPattern.test(newKey)) {
     conflictMessage.value = 'Ctrl+数字键为切换分类的系统快捷键，无法绑定'
+    return
+  }
+
+  if (
+    recordingAction.value &&
+    isGlobalHotkeyAction(recordingAction.value) &&
+    !hasAtLeastTwoKeys(newKey)
+  ) {
+    conflictMessage.value = '全局快捷键至少要包含两个键，请至少加一个修饰键'
     return
   }
 
@@ -341,6 +362,7 @@ onUnmounted(() => {
           >
             <div class="hotkey-row__info">
               <span class="hotkey-row__name">{{ HOTKEY_LABELS[action].name }}</span>
+              <span v-if="isGlobalHotkeyAction(action)" class="hotkey-tag">全局</span>
               <span
                 v-if="recordingAction === action && conflictMessage"
                 class="hotkey-row__conflict"
@@ -636,6 +658,9 @@ onUnmounted(() => {
     position: absolute;
     top: 0;
     right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 46px;
     height: 40px;
     border: none;

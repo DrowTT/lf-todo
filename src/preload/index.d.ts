@@ -14,6 +14,7 @@ interface API {
     close: () => void
     toggleAlwaysOnTop: () => void
     toggleMaximize: () => void
+    onFocusMainInputRequested: (callback: () => void) => () => void
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => () => void
     onMaximizedChanged: (callback: (flag: boolean) => void) => () => void
   }
@@ -44,6 +45,9 @@ interface API {
     setAutoLaunch: (enabled: boolean) => Promise<boolean>
     setCloseToTray: (enabled: boolean) => Promise<boolean>
     setAutoCleanup: (config: AutoCleanupConfig) => Promise<AutoCleanupConfig>
+    setGlobalHotkeys: (
+      config: Record<'showWindow' | 'showWindowAndFocusInput', { key: string; label: string }>
+    ) => Promise<void>
     exportData: () => Promise<boolean>
     getAppInfo: () => Promise<AppInfo>
   }

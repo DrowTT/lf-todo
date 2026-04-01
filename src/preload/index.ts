@@ -72,6 +72,8 @@ const api = {
     close: () => ipcRenderer.send('window:close'),
     toggleAlwaysOnTop: () => ipcRenderer.send('window:toggle-always-on-top'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    onFocusMainInputRequested: (callback: () => void) =>
+      subscribe('window:focus-main-input', callback, parseVoid),
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) =>
       subscribe('window:always-on-top-changed', callback, expectBoolean),
     onMaximizedChanged: (callback: (flag: boolean) => void) =>
@@ -196,6 +198,10 @@ const api = {
         parseSetAutoCleanupRequest,
         parseAutoCleanupConfig
       ),
+    setGlobalHotkeys: (config: unknown) =>
+      ipcRenderer.invoke('settings:set-global-hotkeys', config).then((value) => {
+        return parseVoid(value, 'settings:set-global-hotkeys.response')
+      }),
     exportData: () =>
       ipcRenderer
         .invoke('settings:export-data')
