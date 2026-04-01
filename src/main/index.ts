@@ -32,6 +32,53 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
 
+function isHiddenLaunch(): boolean {
+  return process.argv.includes('--hidden')
+}
+
+function getAutoLaunchState(): boolean {
+  const loginItemSettings = app.getLoginItemSettings()
+
+  if (process.platform === 'win32') {
+    return loginItemSettings.openAtLogin || loginItemSettings.executableWillLaunchAtLogin
+  }
+
+  return loginItemSettings.openAtLogin
+}
+
+function setAutoLaunchEnabled(enabled: boolean): boolean {
+  const loginItemSettings =
+    process.platform === 'win32'
+      ? {
+          openAtLogin: enabled,
+          path: process.execPath,
+          args: enabled ? ['--hidden'] : [],
+          enabled
+        }
+      : {
+          openAtLogin: enabled,
+          openAsHidden: enabled
+        }
+
+  app.setLoginItemSettings(loginItemSettings)
+
+  const actualEnabled = getAutoLaunchState()
+
+  if (actualEnabled !== enabled) {
+    writeStartupLog('settings', 'auto launch state mismatch after update', {
+      requested: enabled,
+      actual: actualEnabled,
+      execPath: process.execPath,
+      argv: process.argv,
+      loginItemSettings: app.getLoginItemSettings(),
+      platform: process.platform
+    })
+  }
+
+  store.set('autoLaunch', actualEnabled)
+  return actualEnabled
+}
+
 function writeStartupLog(scope: string, message: string, detail?: unknown): void {
   try {
     const logPath = join(app.getPath('userData'), 'startup.log')
@@ -65,8 +112,11 @@ function registerSettingsHandlers(): void {
   settingsHandlersRegistered = true
 
   ipcMain.handle('settings:get-all', () => {
+    const autoLaunch = getAutoLaunchState()
+    store.set('autoLaunch', autoLaunch)
+
     return {
-      autoLaunch: store.get('autoLaunch', false),
+      autoLaunch,
       closeToTray: store.get('closeToTray', true),
       autoCleanup: store.get('autoCleanup', { enabled: false, days: 7 })
     }
@@ -74,9 +124,7 @@ function registerSettingsHandlers(): void {
 
   ipcMain.handle('settings:set-auto-launch', (_, enabled: boolean) => {
     const nextEnabled = parseBooleanSetting(enabled, 'settings:set-auto-launch.request')
-    app.setLoginItemSettings({ openAtLogin: nextEnabled })
-    store.set('autoLaunch', nextEnabled)
-    return nextEnabled
+    return setAutoLaunchEnabled(nextEnabled)
   })
 
   ipcMain.handle('settings:set-close-to-tray', (_, enabled: boolean) => {
@@ -180,6 +228,7 @@ function createTray(win: BrowserWindow, setQuitting: () => void): void {
 
 function createWindow(): void {
   const bounds = store.get('windowBounds')
+  const launchedHidden = isHiddenLaunch()
 
   const win = new BrowserWindow({
     width: bounds?.width || 900,
@@ -208,7 +257,9 @@ function createWindow(): void {
       win.webContents.send('window:always-on-top-changed', true)
     }
 
-    win.show()
+    if (!launchedHidden) {
+      win.show()
+    }
 
     // 初始化自动更新模块
     initAutoUpdater(win)
@@ -316,6 +367,14 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   db.initDatabase()
+
+  const persistedAutoLaunch = store.get('autoLaunch')
+  const actualAutoLaunch = getAutoLaunchState()
+  if (typeof persistedAutoLaunch === 'boolean' && persistedAutoLaunch !== actualAutoLaunch) {
+    setAutoLaunchEnabled(persistedAutoLaunch)
+  } else if (persistedAutoLaunch !== actualAutoLaunch) {
+    store.set('autoLaunch', actualAutoLaunch)
+  }
 
   const cleanupConfig = store.get('autoCleanup', { enabled: false, days: 7 })
   if (cleanupConfig.enabled && cleanupConfig.days > 0) {
