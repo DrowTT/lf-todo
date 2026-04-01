@@ -62,10 +62,7 @@ export function parseCreateTaskRequest(value: unknown, label = 'payload'): Creat
   }
 }
 
-export function parseCreateSubTaskRequest(
-  value: unknown,
-  label = 'payload'
-): CreateSubTaskRequest {
+export function parseCreateSubTaskRequest(value: unknown, label = 'payload'): CreateSubTaskRequest {
   const record = expectRecord(value, label)
   assertAllowedKeys(record, ['content', 'parentId'], label)
 

@@ -1,9 +1,7 @@
 import { parseCategories, parseCategory } from '../../../../../shared/contracts/entities'
 import type { CategoryRepository } from '../categoryRepository'
 
-export function createElectronCategoryRepository(
-  api: Window['api']
-): CategoryRepository {
+export function createElectronCategoryRepository(api: Window['api']): CategoryRepository {
   return {
     async getCategories() {
       return parseCategories(await api.db.getCategories(), 'db:get-categories.response')

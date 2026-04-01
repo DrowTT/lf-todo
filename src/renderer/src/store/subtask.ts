@@ -8,6 +8,7 @@ import {
   pendingOperations,
   runAsyncAction
 } from '../services/runAsyncAction'
+import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 import { useTaskStore } from './task'
 
 const SUBTASK_OPERATION_TYPES = {
@@ -36,20 +37,11 @@ export interface DeletedSubTaskSnapshot {
 }
 
 function loadExpandedIds(categoryId: number): Set<number> {
-  try {
-    const raw = localStorage.getItem(expandedKey(categoryId))
-    if (raw) {
-      return new Set(JSON.parse(raw) as number[])
-    }
-  } catch {
-    return new Set()
-  }
-
-  return new Set()
+  return new Set(readStoredJson<number[]>(expandedKey(categoryId), []))
 }
 
 function saveExpandedIds(categoryId: number, ids: Set<number>) {
-  localStorage.setItem(expandedKey(categoryId), JSON.stringify([...ids]))
+  writeStoredJson(expandedKey(categoryId), [...ids])
 }
 
 export const useSubTaskStore = defineStore('subTask', () => {
@@ -423,7 +415,12 @@ export const useSubTaskStore = defineStore('subTask', () => {
     persistExpanded(categoryId)
   }
 
-  function restoreTaskBundle(parentId: number, categoryId: number, subTasks: Task[], wasExpanded: boolean) {
+  function restoreTaskBundle(
+    parentId: number,
+    categoryId: number,
+    subTasks: Task[],
+    wasExpanded: boolean
+  ) {
     subTasksMap.value[parentId] = subTasks
     if (wasExpanded) {
       setExpanded(parentId, categoryId, true)

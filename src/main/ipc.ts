@@ -14,7 +14,9 @@ import { expectInteger, expectString } from '../shared/contracts/utils'
 export function registerIpcHandlers(): void {
   ipcMain.handle('db:get-categories', () => db.getAllCategories())
   ipcMain.handle('db:create-category', (_event, name: unknown) =>
-    db.createCategory(expectString(name, 'db:create-category.request.name', { trim: true, minLength: 1 }))
+    db.createCategory(
+      expectString(name, 'db:create-category.request.name', { trim: true, minLength: 1 })
+    )
   )
   ipcMain.handle('db:update-category', (_event, id: unknown, name: unknown) =>
     db.updateCategory(

@@ -1,4 +1,8 @@
-import { parsePendingTaskCounts, parseTask, parseTasks } from '../../../../../shared/contracts/entities'
+import {
+  parsePendingTaskCounts,
+  parseTask,
+  parseTasks
+} from '../../../../../shared/contracts/entities'
 import type { TaskRepository } from '../taskRepository'
 
 export function createElectronTaskRepository(api: Window['api']): TaskRepository {

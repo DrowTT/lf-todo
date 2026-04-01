@@ -58,7 +58,7 @@ function subscribe<T>(
   callback: (value: T) => void,
   parser: (value: unknown, label: string) => T
 ): () => void {
-  const listener = (_event: unknown, value: unknown) => {
+  const listener = (_event: unknown, value: unknown): void => {
     callback(parser(value, `${channel}.event`))
   }
 
@@ -104,14 +104,25 @@ const api = {
     },
     deleteCategory: (id: number) =>
       ipcRenderer
-        .invoke('db:delete-category', expectInteger(id, 'db:delete-category.request.id', { min: 1 }))
+        .invoke(
+          'db:delete-category',
+          expectInteger(id, 'db:delete-category.request.id', { min: 1 })
+        )
         .then((value) => parseVoid(value, 'db:delete-category.response')),
     getTasks: (categoryId: number) =>
       ipcRenderer
-        .invoke('db:get-tasks', expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))
+        .invoke(
+          'db:get-tasks',
+          expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 })
+        )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
     createTask: (content: string, categoryId: number) =>
-      invokeWithPayload('db:create-task', { content, categoryId }, parseCreateTaskRequest, parseTask),
+      invokeWithPayload(
+        'db:create-task',
+        { content, categoryId },
+        parseCreateTaskRequest,
+        parseTask
+      ),
     updateTask: (id: number, updates: unknown) =>
       invokeVoidWithPayload('db:update-task', { id, updates }, parseUpdateTaskRequest),
     deleteTask: (id: number) =>
@@ -130,22 +141,22 @@ const api = {
         { id, completed },
         parseSetTaskCompletedRequest
       ),
-    getPendingTaskCounts: () =>
-      invokeWithResponse('db:get-pending-counts', parsePendingTaskCounts),
+    getPendingTaskCounts: () => invokeWithResponse('db:get-pending-counts', parsePendingTaskCounts),
     clearCompletedTasks: (categoryId: number) =>
       ipcRenderer
         .invoke(
           'db:clear-completed-tasks',
           expectInteger(categoryId, 'db:clear-completed-tasks.request.categoryId', { min: 1 })
         )
-        .then((value) =>
-          expectInteger(value, 'db:clear-completed-tasks.response', { min: 0 })
-        ),
+        .then((value) => expectInteger(value, 'db:clear-completed-tasks.response', { min: 0 })),
     reorderTasks: (orderedIds: number[]) =>
       invokeVoidWithPayload('db:reorder-tasks', { orderedIds }, parseReorderTasksRequest),
     getSubTasks: (parentId: number) =>
       ipcRenderer
-        .invoke('db:get-subtasks', expectInteger(parentId, 'db:get-subtasks.request.parentId', { min: 1 }))
+        .invoke(
+          'db:get-subtasks',
+          expectInteger(parentId, 'db:get-subtasks.request.parentId', { min: 1 })
+        )
         .then((value) => parseTasks(value, 'db:get-subtasks.response')),
     createSubTask: (content: string, parentId: number) =>
       invokeWithPayload(
@@ -160,9 +171,7 @@ const api = {
           'db:batch-complete-subtasks',
           expectInteger(parentId, 'db:batch-complete-subtasks.request.parentId', { min: 1 })
         )
-        .then((value) =>
-          expectInteger(value, 'db:batch-complete-subtasks.response', { min: 0 })
-        )
+        .then((value) => expectInteger(value, 'db:batch-complete-subtasks.response', { min: 0 }))
   },
   settings: {
     getAll: () => invokeWithResponse('settings:get-all', parseSettingsData),
@@ -195,7 +204,9 @@ const api = {
   },
   updater: {
     checkForUpdates: () =>
-      ipcRenderer.invoke('updater:check').then((value) => parseVoid(value, 'updater:check.response')),
+      ipcRenderer
+        .invoke('updater:check')
+        .then((value) => parseVoid(value, 'updater:check.response')),
     downloadUpdate: () =>
       ipcRenderer
         .invoke('updater:download')

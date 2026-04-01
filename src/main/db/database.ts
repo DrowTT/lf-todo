@@ -310,9 +310,7 @@ export function deleteTasks(ids: number[]): void {
 
 export function clearCompletedTasks(categoryId: number): number {
   const result = getDb()
-    .prepare(
-      'DELETE FROM tasks WHERE category_id = ? AND parent_id IS NULL AND is_completed = 1'
-    )
+    .prepare('DELETE FROM tasks WHERE category_id = ? AND parent_id IS NULL AND is_completed = 1')
     .run(categoryId)
 
   return result.changes

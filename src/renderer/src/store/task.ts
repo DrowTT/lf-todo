@@ -289,7 +289,10 @@ export const useTaskStore = defineStore('task', () => {
     options: { reorderToPrevious?: boolean } = {}
   ) {
     const subTaskStore = useSubTaskStore()
-    const createdTask = await taskRepository.createTask(snapshot.task.content, snapshot.task.category_id)
+    const createdTask = await taskRepository.createTask(
+      snapshot.task.content,
+      snapshot.task.category_id
+    )
 
     if (snapshot.task.is_completed) {
       await taskRepository.setTaskCompleted(createdTask.id, true)

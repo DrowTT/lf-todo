@@ -4,6 +4,8 @@ import { useSubTaskStore } from '../../store/subtask'
 import { useTaskStore } from '../../store/task'
 import { useUndoStore } from '../../store/undo'
 
+const UNDO_LABEL = '撤销'
+
 export function useAppFacade() {
   const categoryStore = useCategoryStore()
   const taskStore = useTaskStore()
@@ -14,6 +16,14 @@ export function useAppFacade() {
   const { categories, currentCategoryId } = storeToRefs(categoryStore)
   const { tasks, isLoading, pendingCounts } = storeToRefs(taskStore)
   const { subTasksMap, expandedTaskIds } = storeToRefs(subTaskStore)
+
+  function registerUndo(text: string, undo: () => Promise<boolean>) {
+    undoStore.register({
+      label: UNDO_LABEL,
+      text,
+      undo
+    })
+  }
 
   async function ensureCategoryReady(categoryId: number) {
     if (categoryStore.currentCategoryId === categoryId) return
@@ -80,10 +90,6 @@ export function useAppFacade() {
 
     subTaskStore.loadExpandedForCategory(categoryId)
     await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
-
-    if (requestId !== latestTaskRequestId || categoryStore.currentCategoryId !== categoryId) {
-      return
-    }
   }
 
   async function addTask(content: string) {
@@ -105,19 +111,14 @@ export function useAppFacade() {
     if (!categoryId) return false
 
     const deleted = await taskStore.deleteTask(id, categoryId)
-
     if (!deleted) return false
 
     subTaskStore.removeTask(id, categoryId)
 
-    undoStore.register({
-      label: '撤销',
-      text: '任务已删除',
-      undo: async () => {
-        await ensureCategoryReady(deleted.task.category_id)
-        await taskStore.restoreDeletedTask(deleted)
-        return true
-      }
+    registerUndo('任务已删除', async () => {
+      await ensureCategoryReady(deleted.task.category_id)
+      await taskStore.restoreDeletedTask(deleted)
+      return true
     })
 
     return deleted
@@ -132,7 +133,6 @@ export function useAppFacade() {
     if (!categoryId) return undefined
 
     const deleted = await taskStore.clearCompletedTasks(categoryId)
-
     if (!deleted) return undefined
 
     subTaskStore.removeCompletedTasks(
@@ -140,14 +140,10 @@ export function useAppFacade() {
       categoryId
     )
 
-    undoStore.register({
-      label: '撤销',
-      text: `已清空 ${deleted.tasks.length} 个已完成任务`,
-      undo: async () => {
-        await ensureCategoryReady(deleted.categoryId)
-        await taskStore.restoreClearedCompleted(deleted)
-        return true
-      }
+    registerUndo(`已清空 ${deleted.tasks.length} 个已完成任务`, async () => {
+      await ensureCategoryReady(deleted.categoryId)
+      await taskStore.restoreClearedCompleted(deleted)
+      return true
     })
 
     return deleted
@@ -176,20 +172,17 @@ export function useAppFacade() {
     const deleted = await subTaskStore.deleteSubTask(id, parentId)
     if (!deleted) return false
 
-    undoStore.register({
-      label: '撤销',
-      text: '子任务已删除',
-      undo: async () => {
-        const categoryId =
-          deleted.parentSnapshot?.category_id ??
-          taskStore.tasks.find((task) => task.id === parentId)?.category_id
+    registerUndo('子任务已删除', async () => {
+      const categoryId =
+        deleted.parentSnapshot?.category_id ??
+        taskStore.tasks.find((task) => task.id === parentId)?.category_id
 
-        if (categoryId) {
-          await ensureCategoryReady(categoryId)
-        }
-        await subTaskStore.restoreDeletedSubTask(deleted)
-        return true
+      if (categoryId) {
+        await ensureCategoryReady(categoryId)
       }
+
+      await subTaskStore.restoreDeletedSubTask(deleted)
+      return true
     })
 
     return deleted

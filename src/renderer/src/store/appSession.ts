@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 
 interface SessionSnapshot {
   settingsPanelOpen: boolean
@@ -9,25 +10,13 @@ interface SessionSnapshot {
 
 const STORAGE_KEY = 'lf-todo:app-session'
 
-const defaultSnapshot = (): SessionSnapshot => ({
-  settingsPanelOpen: false,
-  taskDrafts: {},
-  subTaskDrafts: {}
-})
-
 function loadSnapshot(): SessionSnapshot {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaultSnapshot()
+  const parsed = readStoredJson<Partial<SessionSnapshot>>(STORAGE_KEY, {})
 
-    const parsed = JSON.parse(raw) as Partial<SessionSnapshot>
-    return {
-      settingsPanelOpen: parsed.settingsPanelOpen ?? false,
-      taskDrafts: parsed.taskDrafts ?? {},
-      subTaskDrafts: parsed.subTaskDrafts ?? {}
-    }
-  } catch {
-    return defaultSnapshot()
+  return {
+    settingsPanelOpen: parsed.settingsPanelOpen ?? false,
+    taskDrafts: parsed.taskDrafts ?? {},
+    subTaskDrafts: parsed.subTaskDrafts ?? {}
   }
 }
 
@@ -39,7 +28,8 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
   const hasDrafts = computed(
     () =>
-      Object.values(taskDrafts.value).some(Boolean) || Object.values(subTaskDrafts.value).some(Boolean)
+      Object.values(taskDrafts.value).some(Boolean) ||
+      Object.values(subTaskDrafts.value).some(Boolean)
   )
 
   function persist() {
@@ -48,7 +38,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
       taskDrafts: taskDrafts.value,
       subTaskDrafts: subTaskDrafts.value
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    writeStoredJson(STORAGE_KEY, snapshot)
   }
 
   function hydrate() {

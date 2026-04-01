@@ -4,13 +4,10 @@ import {
   parseSettingsData,
   parseUpdateStatusData
 } from '../../../../../shared/contracts/entities'
-import type {
-  SettingsRepository,
-  UpdaterService,
-  WindowService
-} from '../settingsRepository'
+import type { SettingsRepository, UpdaterService, WindowService } from '../settingsRepository'
 
 const noop = () => {}
+const asyncNoop = async (): Promise<void> => undefined
 
 export function createElectronSettingsRepository(
   api: Window['api'] | undefined
@@ -85,9 +82,9 @@ export function createElectronUpdaterService(api: Window['api'] | undefined): Up
   if (!api) {
     return {
       isAvailable: false,
-      async checkForUpdates() {},
-      async downloadUpdate() {},
-      async installUpdate() {},
+      checkForUpdates: asyncNoop,
+      downloadUpdate: asyncNoop,
+      installUpdate: asyncNoop,
       onUpdateStatus() {
         return noop
       }

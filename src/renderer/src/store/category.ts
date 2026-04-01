@@ -2,22 +2,16 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Category } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
+import { clearStoredValue, readStoredNumber, writeStoredNumber } from '../utils/localStorage'
 
 // ─── localStorage 持久化封装 ──────────────────────────────────────
 // 统一使用 lf-todo: 前缀（与 useSidebarResize.ts、subtask store 保持一致的命名规范）
 const STORAGE_KEY = 'lf-todo:current-category-id'
 
 const persistence = {
-  get(): number | null {
-    const v = localStorage.getItem(STORAGE_KEY)
-    return v ? parseInt(v) : null
-  },
-  set(id: number) {
-    localStorage.setItem(STORAGE_KEY, String(id))
-  },
-  clear() {
-    localStorage.removeItem(STORAGE_KEY)
-  }
+  get: () => readStoredNumber(STORAGE_KEY),
+  set: (id: number) => writeStoredNumber(STORAGE_KEY, id),
+  clear: () => clearStoredValue(STORAGE_KEY)
 }
 // ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +43,19 @@ export const useCategoryStore = defineStore('category', () => {
     }
   }
 
+  function selectFallbackCategory(): boolean {
+    const firstCategoryId = categories.value[0]?.id ?? null
+    currentCategoryId.value = firstCategoryId
+
+    if (firstCategoryId === null) {
+      persistence.clear()
+      return false
+    }
+
+    persistence.set(firstCategoryId)
+    return true
+  }
+
   /**
    * 加载列表并恢复历史选中分类（应用初始化时调用一次）
    * 返回 true 表示已有有效选中分类
@@ -65,12 +72,22 @@ export const useCategoryStore = defineStore('category', () => {
         }
       }
 
+      if (currentCategoryId.value) {
+        const hasCurrentCategory = categories.value.some(
+          (category) => category.id === currentCategoryId.value
+        )
+        if (hasCurrentCategory) {
+          return true
+        }
+      }
+
       if (!currentCategoryId.value && categories.value.length > 0) {
         currentCategoryId.value = categories.value[0].id
+        persistence.set(currentCategoryId.value)
         return true
       }
 
-      return false
+      return selectFallbackCategory()
     } catch (e) {
       console.error('[categoryStore] fetchCategories 失败:', e)
       toast.show('加载分类列表失败，请重试')
@@ -98,13 +115,7 @@ export const useCategoryStore = defineStore('category', () => {
       await categoryRepository.deleteCategory(id)
       await _loadList()
       if (currentCategoryId.value === id) {
-        if (categories.value.length > 0) {
-          currentCategoryId.value = categories.value[0].id
-          persistence.set(currentCategoryId.value)
-        } else {
-          currentCategoryId.value = null
-          persistence.clear()
-        }
+        selectFallbackCategory()
       }
     } catch (e) {
       console.error('[categoryStore] deleteCategory 失败:', e)

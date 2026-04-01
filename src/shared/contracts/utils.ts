@@ -98,4 +98,6 @@ export function expectUndefined(value: unknown, label: string): void {
   }
 }
 
-export function parseVoid(_value: unknown, _label?: string): void {}
+export function parseVoid(value: unknown, label = 'payload'): void {
+  expectUndefined(value, label)
+}

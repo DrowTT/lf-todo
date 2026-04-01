@@ -13,6 +13,7 @@ title: 'Recovery-oriented features work better when UI state is owned by stores,
 ## 根因分析
 
 根因不是单个功能缺失，而是 UI 状态生命周期分散：
+
 - destructive action 的结果只停留在组件交互层，没有统一的撤销入口
 - 草稿和面板开关只存在于组件实例里，组件卸载后状态也跟着丢失
 - settings / updater 直接在组件里调 repository，缺少可复用的 loading / error / lastSyncedAt 状态模型
@@ -20,6 +21,7 @@ title: 'Recovery-oriented features work better when UI state is owned by stores,
 ## 解决方案
 
 把这类“跨组件、跨时刻、需要恢复”的状态上提到 Pinia：
+
 - `undo` store 负责最近一次 destructive action 和 Toast 撤销入口
 - `appSession` store 负责任务草稿、子任务草稿和设置面板开关的持久化
 - `settings` / `updater` store 负责 repository 调用结果和异步生命周期状态

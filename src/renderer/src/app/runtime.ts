@@ -38,61 +38,50 @@ function createUnavailableError(capability: string): Error {
   return new Error(`${capability} is unavailable because AppRuntime was created without window.api`)
 }
 
+function createUnavailableAction<TArgs extends unknown[], TResult>(
+  capability: string
+): (...args: TArgs) => Promise<TResult> {
+  return async (...args: TArgs): Promise<TResult> => {
+    void args
+    throw createUnavailableError(capability)
+  }
+}
+
 function createUnavailableCategoryRepository(): CategoryRepository {
   return {
-    async getCategories() {
-      throw createUnavailableError('categoryRepository.getCategories')
-    },
-    async createCategory(_name: string): Promise<Category> {
-      throw createUnavailableError('categoryRepository.createCategory')
-    },
-    async updateCategory(_id: number, _name: string) {
-      throw createUnavailableError('categoryRepository.updateCategory')
-    },
-    async deleteCategory(_id: number) {
-      throw createUnavailableError('categoryRepository.deleteCategory')
-    }
+    getCategories: createUnavailableAction<[], Category[]>('categoryRepository.getCategories'),
+    createCategory: createUnavailableAction<[string], Category>(
+      'categoryRepository.createCategory'
+    ),
+    updateCategory: createUnavailableAction<[number, string], void>(
+      'categoryRepository.updateCategory'
+    ),
+    deleteCategory: createUnavailableAction<[number], void>('categoryRepository.deleteCategory')
   }
 }
 
 function createUnavailableTaskRepository(): TaskRepository {
   return {
-    async getTasks(_categoryId: number): Promise<Task[]> {
-      throw createUnavailableError('taskRepository.getTasks')
-    },
-    async createTask(_content: string, _categoryId: number): Promise<Task> {
-      throw createUnavailableError('taskRepository.createTask')
-    },
-    async updateTask(_id: number, _updates: TaskUpdate) {
-      throw createUnavailableError('taskRepository.updateTask')
-    },
-    async deleteTask(_id: number) {
-      throw createUnavailableError('taskRepository.deleteTask')
-    },
-    async deleteTasks(_ids: number[]) {
-      throw createUnavailableError('taskRepository.deleteTasks')
-    },
-    async setTaskCompleted(_id: number, _completed: boolean) {
-      throw createUnavailableError('taskRepository.setTaskCompleted')
-    },
-    async getPendingTaskCounts(): Promise<Record<number, number>> {
-      throw createUnavailableError('taskRepository.getPendingTaskCounts')
-    },
-    async clearCompletedTasks(_categoryId: number): Promise<number> {
-      throw createUnavailableError('taskRepository.clearCompletedTasks')
-    },
-    async reorderTasks(_orderedIds: number[]) {
-      throw createUnavailableError('taskRepository.reorderTasks')
-    },
-    async getSubTasks(_parentId: number): Promise<Task[]> {
-      throw createUnavailableError('taskRepository.getSubTasks')
-    },
-    async createSubTask(_content: string, _parentId: number): Promise<Task> {
-      throw createUnavailableError('taskRepository.createSubTask')
-    },
-    async batchCompleteSubTasks(_parentId: number): Promise<number> {
-      throw createUnavailableError('taskRepository.batchCompleteSubTasks')
-    }
+    getTasks: createUnavailableAction<[number], Task[]>('taskRepository.getTasks'),
+    createTask: createUnavailableAction<[string, number], Task>('taskRepository.createTask'),
+    updateTask: createUnavailableAction<[number, TaskUpdate], void>('taskRepository.updateTask'),
+    deleteTask: createUnavailableAction<[number], void>('taskRepository.deleteTask'),
+    deleteTasks: createUnavailableAction<[number[]], void>('taskRepository.deleteTasks'),
+    setTaskCompleted: createUnavailableAction<[number, boolean], void>(
+      'taskRepository.setTaskCompleted'
+    ),
+    getPendingTaskCounts: createUnavailableAction<[], Record<number, number>>(
+      'taskRepository.getPendingTaskCounts'
+    ),
+    clearCompletedTasks: createUnavailableAction<[number], number>(
+      'taskRepository.clearCompletedTasks'
+    ),
+    reorderTasks: createUnavailableAction<[number[]], void>('taskRepository.reorderTasks'),
+    getSubTasks: createUnavailableAction<[number], Task[]>('taskRepository.getSubTasks'),
+    createSubTask: createUnavailableAction<[string, number], Task>('taskRepository.createSubTask'),
+    batchCompleteSubTasks: createUnavailableAction<[number], number>(
+      'taskRepository.batchCompleteSubTasks'
+    )
   }
 }
 

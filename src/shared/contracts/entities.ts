@@ -93,10 +93,7 @@ export function parsePendingTaskCounts(
   return counts
 }
 
-export function parseAutoCleanupConfig(
-  value: unknown,
-  label = 'autoCleanup'
-): AutoCleanupConfig {
+export function parseAutoCleanupConfig(value: unknown, label = 'autoCleanup'): AutoCleanupConfig {
   const record = expectRecord(value, label)
   assertAllowedKeys(record, ['enabled', 'days'], label)
 
@@ -142,10 +139,7 @@ export function parseAppInfo(value: unknown, label = 'appInfo'): AppInfo {
   }
 }
 
-export function parseUpdateStatusData(
-  value: unknown,
-  label = 'updateStatus'
-): UpdateStatusData {
+export function parseUpdateStatusData(value: unknown, label = 'updateStatus'): UpdateStatusData {
   const record = expectRecord(value, label)
   const status = expectString(record.status, `${label}.status`, { trim: true, minLength: 1 })
 
