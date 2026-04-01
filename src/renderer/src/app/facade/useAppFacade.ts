@@ -2,16 +2,23 @@ import { storeToRefs } from 'pinia'
 import { useCategoryStore } from '../../store/category'
 import { useSubTaskStore } from '../../store/subtask'
 import { useTaskStore } from '../../store/task'
+import { useUndoStore } from '../../store/undo'
 
 export function useAppFacade() {
   const categoryStore = useCategoryStore()
   const taskStore = useTaskStore()
   const subTaskStore = useSubTaskStore()
+  const undoStore = useUndoStore()
   let latestTaskRequestId = 0
 
   const { categories, currentCategoryId } = storeToRefs(categoryStore)
   const { tasks, isLoading, pendingCounts } = storeToRefs(taskStore)
   const { subTasksMap, expandedTaskIds } = storeToRefs(subTaskStore)
+
+  async function ensureCategoryReady(categoryId: number) {
+    if (categoryStore.currentCategoryId === categoryId) return
+    await selectCategory(categoryId)
+  }
 
   async function fetchCategories() {
     const hasCurrentCategory = await categoryStore.fetchCategories()
@@ -99,9 +106,19 @@ export function useAppFacade() {
 
     const deleted = await taskStore.deleteTask(id, categoryId)
 
-    if (deleted) {
-      subTaskStore.removeTask(id, categoryId)
-    }
+    if (!deleted) return false
+
+    subTaskStore.removeTask(id, categoryId)
+
+    undoStore.register({
+      label: '撤销',
+      text: '任务已删除',
+      undo: async () => {
+        await ensureCategoryReady(deleted.task.category_id)
+        await taskStore.restoreDeletedTask(deleted)
+        return true
+      }
+    })
 
     return deleted
   }
@@ -114,13 +131,26 @@ export function useAppFacade() {
     const categoryId = categoryStore.currentCategoryId
     if (!categoryId) return undefined
 
-    const completedIds = await taskStore.clearCompletedTasks(categoryId)
+    const deleted = await taskStore.clearCompletedTasks(categoryId)
 
-    if (completedIds) {
-      subTaskStore.removeCompletedTasks(completedIds, categoryId)
-    }
+    if (!deleted) return undefined
 
-    return completedIds
+    subTaskStore.removeCompletedTasks(
+      deleted.tasks.map((task) => task.task.id),
+      categoryId
+    )
+
+    undoStore.register({
+      label: '撤销',
+      text: `已清空 ${deleted.tasks.length} 个已完成任务`,
+      undo: async () => {
+        await ensureCategoryReady(deleted.categoryId)
+        await taskStore.restoreClearedCompleted(deleted)
+        return true
+      }
+    })
+
+    return deleted
   }
 
   async function reorderTasks(previousOrderedIds: number[]) {
@@ -143,7 +173,26 @@ export function useAppFacade() {
   }
 
   async function deleteSubTask(id: number, parentId: number) {
-    return await subTaskStore.deleteSubTask(id, parentId)
+    const deleted = await subTaskStore.deleteSubTask(id, parentId)
+    if (!deleted) return false
+
+    undoStore.register({
+      label: '撤销',
+      text: '子任务已删除',
+      undo: async () => {
+        const categoryId =
+          deleted.parentSnapshot?.category_id ??
+          taskStore.tasks.find((task) => task.id === parentId)?.category_id
+
+        if (categoryId) {
+          await ensureCategoryReady(categoryId)
+        }
+        await subTaskStore.restoreDeletedSubTask(deleted)
+        return true
+      }
+    })
+
+    return deleted
   }
 
   async function updateSubTaskContent(id: number, parentId: number, content: string) {
@@ -154,6 +203,7 @@ export function useAppFacade() {
     categoryStore,
     taskStore,
     subTaskStore,
+    undoStore,
     categories,
     currentCategoryId,
     tasks,

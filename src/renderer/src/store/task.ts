@@ -19,6 +19,19 @@ const TASK_OPERATION_TYPES = {
   reorder: 'task:reorder'
 } as const
 
+export interface DeletedTaskSnapshot {
+  task: Task
+  subTasks: Task[]
+  wasExpanded: boolean
+  previousOrderedIds: number[]
+}
+
+export interface ClearedCompletedSnapshot {
+  categoryId: number
+  previousOrderedIds: number[]
+  tasks: DeletedTaskSnapshot[]
+}
+
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref<Task[]>([])
   const isLoading = ref(false)
@@ -29,9 +42,7 @@ export const useTaskStore = defineStore('task', () => {
   const taskRepository = repositories.task
   const notifyError = (message: string) => toast.show(message)
 
-  function runTaskAction<T>(
-    options: Parameters<typeof runAsyncAction<T>>[0]
-  ) {
+  function runTaskAction<T>(options: Parameters<typeof runAsyncAction<T>>[0]) {
     return runAsyncAction({
       ...options,
       notifyError
@@ -64,14 +75,28 @@ export const useTaskStore = defineStore('task', () => {
     delete pendingCounts.value[categoryId]
   }
 
-  function restoreTaskOrder(previousOrderedIds: number[]) {
+  function restoreTaskOrder(orderedIds: number[]) {
     const tasksById = new Map(tasks.value.map((task) => [task.id, task]))
-    const restoredTasks = previousOrderedIds
+    const restoredTasks = orderedIds
       .map((id) => tasksById.get(id))
       .filter((task): task is Task => Boolean(task))
 
     if (restoredTasks.length === tasks.value.length) {
       tasks.value = restoredTasks
+    }
+  }
+
+  function captureDeletedTaskSnapshot(taskId: number): DeletedTaskSnapshot | null {
+    const task = tasks.value.find((item) => item.id === taskId)
+    if (!task) return null
+
+    const subTaskStore = useSubTaskStore()
+
+    return {
+      task: { ...task },
+      subTasks: (subTaskStore.subTasksMap[taskId] ?? []).map((subTask) => ({ ...subTask })),
+      wasExpanded: subTaskStore.expandedTaskIds.has(taskId),
+      previousOrderedIds: tasks.value.map((item) => item.id)
     }
   }
 
@@ -232,8 +257,11 @@ export const useTaskStore = defineStore('task', () => {
     const previousTasks = tasks.value.slice()
     const previousPendingCount = pendingCounts.value[categoryId] ?? 0
     const hadPendingCount = categoryId in pendingCounts.value
+    const snapshot = captureDeletedTaskSnapshot(id)
 
-    return runTaskAction({
+    if (!snapshot) return false
+
+    const success = await runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.delete, id),
       type: TASK_OPERATION_TYPES.delete,
       entityId: id,
@@ -252,6 +280,61 @@ export const useTaskStore = defineStore('task', () => {
       errorMessage: '删除任务失败，请重试',
       logPrefix: '[taskStore] deleteTask failed'
     })
+
+    return success ? snapshot : false
+  }
+
+  async function restoreDeletedTask(
+    snapshot: DeletedTaskSnapshot,
+    options: { reorderToPrevious?: boolean } = {}
+  ) {
+    const subTaskStore = useSubTaskStore()
+    const createdTask = await taskRepository.createTask(snapshot.task.content, snapshot.task.category_id)
+
+    if (snapshot.task.is_completed) {
+      await taskRepository.setTaskCompleted(createdTask.id, true)
+    }
+
+    const restoredSubTasks: Task[] = []
+    for (const subTask of snapshot.subTasks) {
+      const createdSubTask = await taskRepository.createSubTask(subTask.content, createdTask.id)
+      if (subTask.is_completed) {
+        await taskRepository.setTaskCompleted(createdSubTask.id, true)
+      }
+      restoredSubTasks.push({
+        ...createdSubTask,
+        is_completed: subTask.is_completed
+      })
+    }
+
+    const restoredTask: Task = {
+      ...createdTask,
+      is_completed: snapshot.task.is_completed,
+      subtask_total: restoredSubTasks.length,
+      subtask_done: restoredSubTasks.filter((subTask) => subTask.is_completed).length
+    }
+
+    tasks.value = [...tasks.value, restoredTask]
+    if (!restoredTask.is_completed) {
+      _adjustPendingCount(restoredTask.category_id, 1)
+    }
+
+    subTaskStore.restoreTaskBundle(
+      restoredTask.id,
+      restoredTask.category_id,
+      restoredSubTasks,
+      snapshot.wasExpanded
+    )
+
+    if (options.reorderToPrevious !== false) {
+      const nextOrderedIds = snapshot.previousOrderedIds.map((id) =>
+        id === snapshot.task.id ? restoredTask.id : id
+      )
+      restoreTaskOrder(nextOrderedIds)
+      await taskRepository.reorderTasks(nextOrderedIds)
+    }
+
+    return restoredTask
   }
 
   async function updateTaskContent(id: number, content: string) {
@@ -282,6 +365,9 @@ export const useTaskStore = defineStore('task', () => {
 
     const completedIdSet = new Set(completedIds)
     const previousTasks = tasks.value.slice()
+    const snapshots = completedIds
+      .map((id) => captureDeletedTaskSnapshot(id))
+      .filter((snapshot): snapshot is DeletedTaskSnapshot => Boolean(snapshot))
 
     const success = await runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.clearCompleted, 'current'),
@@ -306,7 +392,26 @@ export const useTaskStore = defineStore('task', () => {
       logPrefix: '[taskStore] clearCompletedTasks failed'
     })
 
-    return success ? completedIds : undefined
+    if (!success) return undefined
+
+    return {
+      categoryId,
+      previousOrderedIds: previousTasks.map((task) => task.id),
+      tasks: snapshots
+    } satisfies ClearedCompletedSnapshot
+  }
+
+  async function restoreClearedCompleted(snapshot: ClearedCompletedSnapshot) {
+    const restoredIds = new Map<number, number>()
+
+    for (const deletedTask of snapshot.tasks) {
+      const restoredTask = await restoreDeletedTask(deletedTask, { reorderToPrevious: false })
+      restoredIds.set(deletedTask.task.id, restoredTask.id)
+    }
+
+    const nextOrderedIds = snapshot.previousOrderedIds.map((id) => restoredIds.get(id) ?? id)
+    restoreTaskOrder(nextOrderedIds)
+    await taskRepository.reorderTasks(nextOrderedIds)
   }
 
   function removePendingCount(id: number) {
@@ -351,8 +456,10 @@ export const useTaskStore = defineStore('task', () => {
     addTask,
     toggleTask,
     deleteTask,
+    restoreDeletedTask,
     updateTaskContent,
     clearCompletedTasks,
+    restoreClearedCompleted,
     removePendingCount,
     reorderTasks,
     isTaskDeleting,

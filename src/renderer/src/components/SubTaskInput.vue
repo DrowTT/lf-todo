@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAutoHeight } from '../composables/useAutoHeight'
+import { useAppSessionStore } from '../store/appSession'
 import { useSubTaskStore } from '../store/subtask'
 
 const props = defineProps<{
@@ -8,9 +9,10 @@ const props = defineProps<{
 }>()
 
 const subTaskStore = useSubTaskStore()
+const appSessionStore = useAppSessionStore()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const content = ref('')
+const content = ref(appSessionStore.getSubTaskDraft(props.parentId))
 
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 const isSubmitting = computed(() => subTaskStore.isCreatingSubTask(props.parentId))
@@ -23,11 +25,16 @@ const handleSubmit = async () => {
   if (!created) return
 
   content.value = ''
+  appSessionStore.clearSubTaskDraft(props.parentId)
   nextTick(resetHeight)
   textareaRef.value?.focus()
 }
 
 onMounted(() => adjustHeight())
+
+watch(content, (value) => {
+  appSessionStore.setSubTaskDraft(props.parentId, value)
+})
 </script>
 
 <template>

@@ -1,11 +1,18 @@
 import { onMounted, ref } from 'vue'
 import { useAppFacade } from './facade/useAppFacade'
+import { useAppSessionStore } from '../store/appSession'
+import { useSettingsStore } from '../store/settings'
+import { useUpdaterStore } from '../store/updater'
 
 async function bootstrapRuntimeFeatures() {
+  const appSessionStore = useAppSessionStore()
+  const settingsStore = useSettingsStore()
+  const updaterStore = useUpdaterStore()
+
   await Promise.all([
-    Promise.resolve(), // Reserved for settings bootstrap.
-    Promise.resolve(), // Reserved for updater bootstrap.
-    Promise.resolve() // Reserved for draft recovery.
+    settingsStore.hydrate(),
+    Promise.resolve().then(() => updaterStore.initialize()),
+    Promise.resolve().then(() => appSessionStore.hydrate())
   ])
 }
 

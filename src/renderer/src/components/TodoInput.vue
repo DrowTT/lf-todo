@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
+import { useCategoryStore } from '../store/category'
+import { useAppSessionStore } from '../store/appSession'
 import { useTaskStore } from '../store/task'
 
 const app = useAppFacade()
 const taskStore = useTaskStore()
+const categoryStore = useCategoryStore()
+const appSessionStore = useAppSessionStore()
 
-const content = ref('')
+const content = ref(appSessionStore.getTaskDraft(categoryStore.currentCategoryId))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
@@ -22,8 +26,22 @@ const handleSubmit = async () => {
   if (!created) return
 
   content.value = ''
+  appSessionStore.clearTaskDraft(categoryStore.currentCategoryId)
   nextTick(resetHeight)
 }
+
+watch(
+  () => categoryStore.currentCategoryId,
+  (categoryId) => {
+    content.value = appSessionStore.getTaskDraft(categoryId)
+    nextTick(adjustHeight)
+  },
+  { immediate: true }
+)
+
+watch(content, (value) => {
+  appSessionStore.setTaskDraft(categoryStore.currentCategoryId, value)
+})
 </script>
 
 <template>

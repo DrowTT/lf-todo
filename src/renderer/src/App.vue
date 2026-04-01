@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import { useAppBootstrap } from './app/useAppBootstrap'
 import CategoryList from './components/CategoryList.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
@@ -10,14 +10,19 @@ import { useAppRuntime } from './app/runtime'
 import { useHotkeys } from './composables/useHotkeys'
 import { useSidebarResize } from './composables/useSidebarResize'
 import TitleBar from './layout/TitleBar.vue'
+import { useAppSessionStore } from './store/appSession'
 
 const { current, handleConfirm, handleCancel } = useAppRuntime().confirm
 const { sidebarWidth, startResize } = useSidebarResize()
+const appSessionStore = useAppSessionStore()
 
 useAppBootstrap()
 useHotkeys()
 
-const showSettings = ref(false)
+const showSettings = computed({
+  get: () => appSessionStore.settingsPanelOpen,
+  set: (value: boolean) => appSessionStore.setSettingsPanelOpen(value)
+})
 </script>
 
 <template>

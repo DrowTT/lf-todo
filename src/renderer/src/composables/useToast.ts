@@ -3,22 +3,29 @@ import { ref } from 'vue'
 export interface ToastMessage {
   text: string
   type: 'error' | 'info' | 'success'
+  actionLabel?: string
+  onAction?: () => void
+  duration?: number
 }
 
-// 模块级单例 state：全局同一时刻只有一个 Toast
-// （当前规模的单一窗口应用不会出现并发冲突）
 const message = ref<ToastMessage | null>(null)
 let timer: ReturnType<typeof setTimeout> | null = null
 
 export function useToast() {
-  function show(text: string, type: ToastMessage['type'] = 'error') {
-    // 清除上一个未消失的 Toast
+  function show(
+    text: string,
+    type: ToastMessage['type'] = 'error',
+    options: Pick<ToastMessage, 'actionLabel' | 'onAction' | 'duration'> = {}
+  ) {
     if (timer) clearTimeout(timer)
-    message.value = { text, type }
+
+    const duration = options.duration ?? 3000
+    message.value = { text, type, ...options, duration }
+
     timer = setTimeout(() => {
       message.value = null
       timer = null
-    }, 3000)
+    }, duration)
   }
 
   function hide() {
@@ -27,5 +34,11 @@ export function useToast() {
     timer = null
   }
 
-  return { message, show, hide }
+  function triggerAction() {
+    const action = message.value?.onAction
+    hide()
+    action?.()
+  }
+
+  return { message, show, hide, triggerAction }
 }

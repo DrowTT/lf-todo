@@ -19,6 +19,22 @@ const SUBTASK_OPERATION_TYPES = {
 
 const expandedKey = (categoryId: number) => `lf-todo:expanded-${categoryId}`
 
+export interface ParentTaskSnapshot {
+  is_completed: boolean
+  subtask_total: number
+  subtask_done: number
+  category_id: number
+  pendingCount: number
+  hadPendingCount: boolean
+}
+
+export interface DeletedSubTaskSnapshot {
+  task: Task
+  parentId: number
+  index: number
+  parentSnapshot: ParentTaskSnapshot | null
+}
+
 function loadExpandedIds(categoryId: number): Set<number> {
   try {
     const raw = localStorage.getItem(expandedKey(categoryId))
@@ -45,9 +61,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
   const taskRepository = repositories.task
   const notifyError = (message: string) => toast.show(message)
 
-  function runSubTaskAction<T>(
-    options: Parameters<typeof runAsyncAction<T>>[0]
-  ) {
+  function runSubTaskAction<T>(options: Parameters<typeof runAsyncAction<T>>[0]) {
     return runAsyncAction({
       ...options,
       notifyError
@@ -65,7 +79,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     parentTask.subtask_done = subTasks.filter((subTask) => subTask.is_completed).length
   }
 
-  function captureParentTaskState(parentId: number) {
+  function captureParentTaskState(parentId: number): ParentTaskSnapshot | null {
     const taskStore = useTaskStore()
     const parentTask = taskStore.tasks.find((task) => task.id === parentId)
 
@@ -81,10 +95,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     }
   }
 
-  function restoreParentTaskState(
-    parentId: number,
-    snapshot: ReturnType<typeof captureParentTaskState>
-  ) {
+  function restoreParentTaskState(parentId: number, snapshot: ParentTaskSnapshot | null) {
     if (!snapshot) return
 
     const taskStore = useTaskStore()
@@ -139,6 +150,19 @@ export const useSubTaskStore = defineStore('subTask', () => {
     saveExpandedIds(categoryId, expandedTaskIds.value)
   }
 
+  function setExpanded(taskId: number, categoryId: number, expanded: boolean) {
+    const next = new Set(expandedTaskIds.value)
+
+    if (expanded) {
+      next.add(taskId)
+    } else {
+      next.delete(taskId)
+    }
+
+    expandedTaskIds.value = next
+    persistExpanded(categoryId)
+  }
+
   async function fetchSubTasks(parentId: number) {
     const requestId = latestSubTaskFetchRequestId
     try {
@@ -163,23 +187,20 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
   async function toggleExpand(taskId: number, categoryId: number) {
     if (expandedTaskIds.value.has(taskId)) {
-      const next = new Set(expandedTaskIds.value)
-      next.delete(taskId)
-      expandedTaskIds.value = next
-    } else {
-      if (!subTasksMap.value[taskId]) {
-        try {
-          await fetchSubTasks(taskId)
-        } catch {
-          toast.show('加载子任务失败，请重试')
-          return false
-        }
-      }
-
-      expandedTaskIds.value = new Set(expandedTaskIds.value).add(taskId)
+      setExpanded(taskId, categoryId, false)
+      return true
     }
 
-    persistExpanded(categoryId)
+    if (!subTasksMap.value[taskId]) {
+      try {
+        await fetchSubTasks(taskId)
+      } catch {
+        toast.show('加载子任务失败，请重试')
+        return false
+      }
+    }
+
+    setExpanded(taskId, categoryId, true)
     return true
   }
 
@@ -305,12 +326,19 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
   async function deleteSubTask(id: number, parentId: number) {
     const list = subTasksMap.value[parentId]
-    if (!list) return false
+    const subTask = list?.find((task) => task.id === id)
+    if (!list || !subTask) return false
 
     const previousList = list.slice()
     const parentSnapshot = captureParentTaskState(parentId)
+    const snapshot: DeletedSubTaskSnapshot = {
+      task: { ...subTask },
+      parentId,
+      index: list.findIndex((task) => task.id === id),
+      parentSnapshot
+    }
 
-    return runSubTaskAction({
+    const success = await runSubTaskAction({
       key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.delete, id),
       type: SUBTASK_OPERATION_TYPES.delete,
       entityId: id,
@@ -326,6 +354,30 @@ export const useSubTaskStore = defineStore('subTask', () => {
       errorMessage: '删除子任务失败，请重试',
       logPrefix: '[subTaskStore] deleteSubTask failed'
     })
+
+    return success ? snapshot : false
+  }
+
+  async function restoreDeletedSubTask(snapshot: DeletedSubTaskSnapshot) {
+    const created = await taskRepository.createSubTask(snapshot.task.content, snapshot.parentId)
+
+    if (snapshot.task.is_completed) {
+      await taskRepository.setTaskCompleted(created.id, true)
+    }
+
+    const restoredTask: Task = {
+      ...created,
+      is_completed: snapshot.task.is_completed
+    }
+
+    const currentList = subTasksMap.value[snapshot.parentId] ?? []
+    const nextList = currentList.slice()
+    nextList.splice(Math.max(0, snapshot.index), 0, restoredTask)
+    subTasksMap.value[snapshot.parentId] = nextList
+    syncParentTaskStats(snapshot.parentId)
+    restoreParentTaskState(snapshot.parentId, snapshot.parentSnapshot)
+
+    return restoredTask
   }
 
   async function updateSubTaskContent(id: number, parentId: number, content: string) {
@@ -355,10 +407,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     delete subTasksMap.value[id]
 
     if (expandedTaskIds.value.has(id)) {
-      const next = new Set(expandedTaskIds.value)
-      next.delete(id)
-      expandedTaskIds.value = next
-      persistExpanded(categoryId)
+      setExpanded(id, categoryId, false)
     }
   }
 
@@ -374,6 +423,18 @@ export const useSubTaskStore = defineStore('subTask', () => {
     persistExpanded(categoryId)
   }
 
+  function restoreTaskBundle(parentId: number, categoryId: number, subTasks: Task[], wasExpanded: boolean) {
+    subTasksMap.value[parentId] = subTasks
+    if (wasExpanded) {
+      setExpanded(parentId, categoryId, true)
+      return
+    }
+
+    if (expandedTaskIds.value.has(parentId)) {
+      setExpanded(parentId, categoryId, false)
+    }
+  }
+
   return {
     subTasksMap,
     expandedTaskIds,
@@ -384,12 +445,16 @@ export const useSubTaskStore = defineStore('subTask', () => {
     fetchExpandedSubTasks,
     toggleExpand,
     syncParentTaskStats,
+    captureParentTaskState,
+    restoreParentTaskState,
     addSubTask,
     toggleSubTask,
     deleteSubTask,
+    restoreDeletedSubTask,
     updateSubTaskContent,
     removeTask,
     removeCompletedTasks,
+    restoreTaskBundle,
     isCreatingSubTask,
     isSubTaskDeleting,
     isSubTaskSaving,

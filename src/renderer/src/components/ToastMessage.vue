@@ -2,18 +2,28 @@
 import { CircleAlert, CircleCheck, Info } from 'lucide-vue-next'
 import { useAppRuntime } from '../app/runtime'
 
-const { message, hide } = useAppRuntime().toast
+const { message, hide, triggerAction } = useAppRuntime().toast
 </script>
 
 <template>
   <Transition name="toast">
     <div v-if="message" class="toast" :class="`toast--${message.type}`" @click="hide">
-      <span class="toast-icon">
-        <CircleAlert v-if="message.type === 'error'" :size="16" />
-        <CircleCheck v-else-if="message.type === 'success'" :size="16" />
-        <Info v-else :size="16" />
-      </span>
-      <span class="toast-text">{{ message.text }}</span>
+      <div class="toast__body">
+        <span class="toast-icon">
+          <CircleAlert v-if="message.type === 'error'" :size="16" />
+          <CircleCheck v-else-if="message.type === 'success'" :size="16" />
+          <Info v-else :size="16" />
+        </span>
+        <span class="toast-text">{{ message.text }}</span>
+      </div>
+      <button
+        v-if="message.actionLabel"
+        class="toast__action"
+        type="button"
+        @click.stop="triggerAction"
+      >
+        {{ message.actionLabel }}
+      </button>
     </div>
   </Transition>
 </template>
@@ -28,7 +38,8 @@ const { message, hide } = useAppRuntime().toast
   z-index: 9999;
   display: flex;
   align-items: center;
-  gap: $spacing-sm;
+  gap: $spacing-md;
+  justify-content: space-between;
   padding: $spacing-md $spacing-lg;
   border-radius: $radius-lg;
   font-size: $font-md;
@@ -56,6 +67,13 @@ const { message, hide } = useAppRuntime().toast
   }
 }
 
+.toast__body {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  min-width: 0;
+}
+
 .toast-icon {
   flex-shrink: 0;
   width: 16px;
@@ -69,6 +87,23 @@ const { message, hide } = useAppRuntime().toast
 .toast-text {
   font-weight: 500;
   line-height: 1.4;
+}
+
+.toast__action {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  font-size: $font-xs;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color $transition-fast;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.28);
+  }
 }
 
 // 进出动画
