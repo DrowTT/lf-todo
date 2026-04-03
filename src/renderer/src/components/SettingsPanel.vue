@@ -10,7 +10,6 @@ import {
   Power,
   RefreshCw,
   Settings,
-  Timer,
   Trash2,
   X
 } from 'lucide-vue-next'
@@ -54,7 +53,6 @@ const {
   isSavingAutoLaunch,
   isSavingCloseToTray,
   isSavingAutoCleanup,
-  isSavingPomodoroDuration,
   loadError
 } = storeToRefs(settingsStore)
 const {
@@ -108,32 +106,12 @@ const autoCleanupDays = computed({
   }
 })
 
-const pomodoroFocusDurationMinutes = computed({
-  get: () => Math.round(settings.value.pomodoro.focusDurationSeconds / 60),
-  set: (value: number) => {
-    settings.value = {
-      ...settings.value,
-      pomodoro: { ...settings.value.pomodoro, focusDurationSeconds: value * 60 }
-    }
-  }
-})
-
 // ---- 自定义 Dropdown 状态 ----
 interface DropdownOption {
   value: number
   label: string
 }
 
-const pomodoroDurationOptions: DropdownOption[] = [
-  { value: 5, label: '5 分钟' },
-  { value: 10, label: '10 分钟' },
-  { value: 15, label: '15 分钟' },
-  { value: 20, label: '20 分钟' },
-  { value: 25, label: '25 分钟' },
-  { value: 30, label: '30 分钟' },
-  { value: 45, label: '45 分钟' },
-  { value: 60, label: '60 分钟' }
-]
 
 const cleanupDaysOptions: DropdownOption[] = [
   { value: 3, label: '3 天' },
@@ -142,11 +120,8 @@ const cleanupDaysOptions: DropdownOption[] = [
   { value: 30, label: '30 天' }
 ]
 
-const pomodoroDropdownOpen = ref(false)
 const cleanupDropdownOpen = ref(false)
-const pomodoroDropdownRef = ref<HTMLElement | null>(null)
 const cleanupDropdownRef = ref<HTMLElement | null>(null)
-const pomodoroDropdownPanelRef = ref<HTMLElement | null>(null)
 const cleanupDropdownPanelRef = ref<HTMLElement | null>(null)
 
 interface DropdownPosition {
@@ -155,23 +130,14 @@ interface DropdownPosition {
   width: number
 }
 
-const pomodoroDropdownPosition = ref<DropdownPosition | null>(null)
 const cleanupDropdownPosition = ref<DropdownPosition | null>(null)
 
-const pomodoroDisplayLabel = computed(() => {
-  const opt = pomodoroDurationOptions.find(o => o.value === pomodoroFocusDurationMinutes.value)
-  return opt?.label ?? `${pomodoroFocusDurationMinutes.value} 分钟`
-})
 
 const cleanupDisplayLabel = computed(() => {
   const opt = cleanupDaysOptions.find(o => o.value === autoCleanupDays.value)
   return opt?.label ?? `${autoCleanupDays.value} 天`
 })
 
-function selectPomodoroDuration(value: number) {
-  pomodoroFocusDurationMinutes.value = value
-  pomodoroDropdownOpen.value = false
-}
 
 function selectCleanupDays(value: number) {
   autoCleanupDays.value = value
@@ -192,32 +158,18 @@ function getDropdownPosition(container: HTMLElement | null): DropdownPosition | 
   }
 }
 
-function updatePomodoroDropdownPosition() {
-  pomodoroDropdownPosition.value = getDropdownPosition(pomodoroDropdownRef.value)
-}
 
 function updateCleanupDropdownPosition() {
   cleanupDropdownPosition.value = getDropdownPosition(cleanupDropdownRef.value)
 }
 
 function syncOpenDropdownPositions() {
-  if (pomodoroDropdownOpen.value) updatePomodoroDropdownPosition()
   if (cleanupDropdownOpen.value) updateCleanupDropdownPosition()
 }
 
-async function togglePomodoroDropdown() {
-  pomodoroDropdownOpen.value = !pomodoroDropdownOpen.value
-  cleanupDropdownOpen.value = false
-
-  if (pomodoroDropdownOpen.value) {
-    await nextTick()
-    updatePomodoroDropdownPosition()
-  }
-}
 
 async function toggleCleanupDropdown() {
   cleanupDropdownOpen.value = !cleanupDropdownOpen.value
-  pomodoroDropdownOpen.value = false
 
   if (cleanupDropdownOpen.value) {
     await nextTick()
@@ -227,14 +179,6 @@ async function toggleCleanupDropdown() {
 
 function handleDropdownOutsideClick(event: MouseEvent) {
   const target = event.target as Node
-  if (
-    pomodoroDropdownOpen.value &&
-    pomodoroDropdownRef.value &&
-    !pomodoroDropdownRef.value.contains(target) &&
-    !pomodoroDropdownPanelRef.value?.contains(target)
-  ) {
-    pomodoroDropdownOpen.value = false
-  }
   if (
     cleanupDropdownOpen.value &&
     cleanupDropdownRef.value &&
@@ -357,10 +301,6 @@ async function handleExportData() {
   await settingsStore.exportData()
 }
 
-async function handlePomodoroDurationChange() {
-  if (!isElectron) return
-  await settingsStore.setPomodoroFocusDuration(pomodoroFocusDurationMinutes.value * 60)
-}
 
 async function handleCheckUpdate() {
   if (!isElectron) return
@@ -399,7 +339,6 @@ watch(
       return
     }
 
-    pomodoroDropdownOpen.value = false
     cleanupDropdownOpen.value = false
 
     if (recordingAction.value) {
@@ -414,9 +353,6 @@ watch(autoCleanupDays, () => {
   }
 })
 
-watch(pomodoroFocusDurationMinutes, () => {
-  void handlePomodoroDurationChange()
-})
 
 onMounted(() => {
   void settingsStore.hydrate()
@@ -504,56 +440,6 @@ onUnmounted(() => {
               />
               <span class="toggle-switch__slider"></span>
             </label>
-          </div>
-
-          <div class="settings-item">
-            <div class="settings-item__info">
-              <label class="settings-item__label">
-                <Timer :size="14" class="settings-item__inline-icon" />
-                番茄钟时长
-              </label>
-              <span class="settings-item__desc">每次专注的持续时间</span>
-            </div>
-            <div ref="pomodoroDropdownRef" class="dropdown">
-              <button
-                class="dropdown__trigger"
-                type="button"
-                :disabled="!isElectron || isSavingPomodoroDuration"
-                @click="togglePomodoroDropdown"
-              >
-                <span class="dropdown__value">{{ pomodoroDisplayLabel }}</span>
-                <ChevronDown
-                  :size="13"
-                  class="dropdown__chevron"
-                  :class="{ 'dropdown__chevron--open': pomodoroDropdownOpen }"
-                />
-              </button>
-              <Transition name="dropdown-pop">
-                <Teleport to="body">
-                  <div
-                    v-if="pomodoroDropdownOpen && pomodoroDropdownPosition"
-                    ref="pomodoroDropdownPanelRef"
-                    class="dropdown__panel dropdown__panel--teleported"
-                    :style="{
-                      top: `${pomodoroDropdownPosition.top}px`,
-                      left: `${pomodoroDropdownPosition.left}px`,
-                      minWidth: `${pomodoroDropdownPosition.width}px`
-                    }"
-                  >
-                    <button
-                      v-for="opt in pomodoroDurationOptions"
-                      :key="opt.value"
-                      class="dropdown__option"
-                      :class="{ 'dropdown__option--active': opt.value === pomodoroFocusDurationMinutes }"
-                      type="button"
-                      @click="selectPomodoroDuration(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </Teleport>
-              </Transition>
-            </div>
           </div>
         </section>
 

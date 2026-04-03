@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useAppBootstrap } from './app/useAppBootstrap'
 import CategoryList from './components/CategoryList.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
@@ -12,8 +12,13 @@ import { useHotkeys } from './composables/useHotkeys'
 import { useSidebarResize } from './composables/useSidebarResize'
 import TitleBar from './layout/TitleBar.vue'
 import { useAppSessionStore } from './store/appSession'
+import { usePomodoroStore } from './store/pomodoro'
+import { useSettingsStore } from './store/settings'
 
-const { current, handleConfirm, handleCancel } = useAppRuntime().confirm
+const runtime = useAppRuntime()
+const { current, handleConfirm, handleCancel, confirm } = runtime.confirm
+const pomodoroStore = usePomodoroStore()
+const settingsStore = useSettingsStore()
 const { sidebarWidth, startResize } = useSidebarResize()
 const appSessionStore = useAppSessionStore()
 
@@ -26,11 +31,58 @@ const showSettings = computed({
 })
 
 const currentMainView = computed(() => appSessionStore.currentMainView)
+
+async function confirmQuitIfNeeded(): Promise<boolean> {
+  if (!pomodoroStore.activeSession) return true
+
+  const confirmed = await confirm('退出将终止当前番茄钟，且不会记录本次专注。确认继续退出吗？')
+  if (!confirmed) return false
+
+  await settingsStore.setPomodoroActiveSession(null)
+  return true
+}
+
+async function handleCloseRequest() {
+  if (!runtime.window.isAvailable) return
+
+  if (settingsStore.settings.closeToTray || !pomodoroStore.activeSession) {
+    runtime.window.close()
+    return
+  }
+
+  const confirmed = await confirmQuitIfNeeded()
+  if (!confirmed) return
+
+  runtime.window.quit()
+}
+
+async function handleQuitRequested() {
+  if (!runtime.window.isAvailable) return
+
+  const confirmed = await confirmQuitIfNeeded()
+  if (!confirmed) return
+
+  runtime.window.quit()
+}
+
+let stopQuitRequestedListener: (() => void) | null = null
+
+onMounted(() => {
+  if (runtime.window.isAvailable) {
+    stopQuitRequestedListener = runtime.window.onQuitRequested(() => {
+      void handleQuitRequested()
+    })
+  }
+})
+
+onUnmounted(() => {
+  stopQuitRequestedListener?.()
+})
 </script>
 
 <template>
   <div class="app-container">
-    <TitleBar />
+    <TitleBar @close-request="handleCloseRequest" />
     <div class="app-content">
       <div :style="{ width: sidebarWidth + 'px' }" class="sidebar-wrapper">
         <CategoryList @open-settings="showSettings = true" />

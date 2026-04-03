@@ -173,8 +173,12 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
       isAvailable: false,
       minimize: noop,
       close: noop,
+      quit: noop,
       toggleAlwaysOnTop: noop,
       toggleMaximize: noop,
+      onQuitRequested() {
+        return noop
+      },
       onAlwaysOnTopChanged() {
         return noop
       },
@@ -192,11 +196,17 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
     close() {
       api.window.close()
     },
+    quit() {
+      api.window.quit()
+    },
     toggleAlwaysOnTop() {
       api.window.toggleAlwaysOnTop()
     },
     toggleMaximize() {
       api.window.toggleMaximize()
+    },
+    onQuitRequested(callback) {
+      return api.window.onQuitRequested(callback)
     },
     onAlwaysOnTopChanged(callback) {
       return api.window.onAlwaysOnTopChanged(callback)

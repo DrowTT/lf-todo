@@ -78,8 +78,11 @@ const api = {
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     close: () => ipcRenderer.send('window:close'),
+    quit: () => ipcRenderer.send('window:quit'),
     toggleAlwaysOnTop: () => ipcRenderer.send('window:toggle-always-on-top'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    onQuitRequested: (callback: () => void) =>
+      subscribe('window:quit-requested', callback, parseVoid),
     onFocusMainInputRequested: (callback: () => void) =>
       subscribe('window:focus-main-input', callback, parseVoid),
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) =>

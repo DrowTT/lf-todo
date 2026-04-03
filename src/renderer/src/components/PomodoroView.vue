@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ChevronDown, Flame, ListTodo, Play, Square, Target, Trophy, Zap } from 'lucide-vue-next'
 import { usePomodoroStore } from '../store/pomodoro'
+import { useSettingsStore } from '../store/settings'
 
 const pomodoroStore = usePomodoroStore()
+const settingsStore = useSettingsStore()
 const {
   activeSession,
   activeTaskLabel,
@@ -18,6 +20,33 @@ const {
   totalCompletedCount,
   weekCompletedCount
 } = storeToRefs(pomodoroStore)
+const { settings, isSavingPomodoroDuration } = storeToRefs(settingsStore)
+
+interface PomodoroDurationOption {
+  value: number
+  label: string
+}
+
+const pomodoroDurationOptions: PomodoroDurationOption[] = [
+  { value: 5, label: '5 分钟' },
+  { value: 10, label: '10 分钟' },
+  { value: 15, label: '15 分钟' },
+  { value: 20, label: '20 分钟' },
+  { value: 25, label: '25 分钟' },
+  { value: 30, label: '30 分钟' },
+  { value: 45, label: '45 分钟' },
+  { value: 60, label: '60 分钟' }
+]
+
+const pomodoroDurationMinutes = computed(() =>
+  Math.round(settings.value.pomodoro.focusDurationSeconds / 60)
+)
+const pomodoroDurationLabel = computed(() => {
+  const option = pomodoroDurationOptions.find((item) => item.value === pomodoroDurationMinutes.value)
+  return option?.label ?? `${pomodoroDurationMinutes.value} 分钟`
+})
+const durationMenuOpen = ref(false)
+const durationMenuRef = ref<HTMLElement | null>(null)
 
 // 圆环参数 — 稍微缩小以适配垂直布局
 const RING_RADIUS = 110
@@ -40,8 +69,36 @@ const activeSessionLabel = computed(() => {
 // 提示区域折叠状态
 const tipsExpanded = ref(false)
 
+async function toggleDurationMenu() {
+  if (isRunning.value) return
+
+  durationMenuOpen.value = !durationMenuOpen.value
+  if (durationMenuOpen.value) {
+    await nextTick()
+  }
+}
+
+async function selectDuration(minutes: number) {
+  durationMenuOpen.value = false
+  if (minutes === pomodoroDurationMinutes.value) return
+  await settingsStore.setPomodoroFocusDuration(minutes * 60)
+}
+
+function handlePointerDown(event: MouseEvent) {
+  const target = event.target as Node
+  if (durationMenuOpen.value && durationMenuRef.value && !durationMenuRef.value.contains(target)) {
+    durationMenuOpen.value = false
+  }
+}
+
 onMounted(() => {
+  void settingsStore.hydrate()
   void pomodoroStore.hydrate()
+  document.addEventListener('mousedown', handlePointerDown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handlePointerDown)
 })
 </script>
 
@@ -53,13 +110,50 @@ onMounted(() => {
     <!-- 页面标题栏 -->
     <header class="pomo__header">
       <h1 class="pomo__title">专注计时</h1>
-      <span
-        class="pomo__status-pill"
-        :class="{ 'pomo__status-pill--active': isRunning }"
-      >
-        <span v-if="isRunning" class="pomo__status-dot" />
-        {{ activeSessionLabel }}
-      </span>
+      <div class="pomo__header-actions">
+        <span
+          class="pomo__status-pill"
+          :class="{ 'pomo__status-pill--active': isRunning }"
+        >
+          <span v-if="isRunning" class="pomo__status-dot" />
+          {{ activeSessionLabel }}
+        </span>
+
+        <div ref="durationMenuRef" class="pomo__duration">
+          <button
+            class="pomo__duration-trigger"
+            :class="{ 'pomo__duration-trigger--open': durationMenuOpen }"
+            type="button"
+            :disabled="isRunning || isSavingPomodoroDuration"
+            @click="toggleDurationMenu"
+          >
+            <span class="pomo__duration-label">时长</span>
+            <span class="pomo__duration-value">{{ pomodoroDurationLabel }}</span>
+            <ChevronDown
+              :size="13"
+              class="pomo__duration-chevron"
+              :class="{ 'pomo__duration-chevron--open': durationMenuOpen }"
+            />
+          </button>
+
+          <Transition name="duration-pop">
+            <div v-if="durationMenuOpen" class="pomo__duration-panel">
+              <button
+                v-for="option in pomodoroDurationOptions"
+                :key="option.value"
+                class="pomo__duration-option"
+                :class="{
+                  'pomo__duration-option--active': option.value === pomodoroDurationMinutes
+                }"
+                type="button"
+                @click="selectDuration(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </Transition>
+        </div>
+      </div>
     </header>
 
     <!-- 核心区域：圆环 + 按钮（垂直居中） -->
@@ -297,6 +391,12 @@ onMounted(() => {
   margin-bottom: $spacing-sm;
 }
 
+.pomo__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .pomo__title {
   margin: 0;
   font-size: $font-lg;
@@ -320,6 +420,108 @@ onMounted(() => {
 
   &--active {
     background: rgba($accent-color, 0.1);
+    color: $accent-color;
+  }
+}
+
+.pomo__duration {
+  position: relative;
+}
+
+.pomo__duration-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: $text-secondary;
+  font-size: $font-xs;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    border-color $transition-normal,
+    background-color $transition-normal,
+    box-shadow $transition-normal,
+    color $transition-normal;
+
+  &:hover:not(:disabled),
+  &--open {
+    color: $accent-color;
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(37, 99, 235, 0.16);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.pomo__duration-label {
+  color: $text-muted;
+}
+
+.pomo__duration-value {
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo__duration-chevron {
+  color: inherit;
+  transition: transform $transition-normal;
+
+  &--open {
+    transform: rotate(180deg);
+  }
+}
+
+.pomo__duration-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 108px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.08),
+    0 2px 8px rgba(15, 23, 42, 0.04);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  z-index: 5;
+}
+
+.pomo__duration-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: $text-secondary;
+  font-size: $font-sm;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color $transition-fast,
+    color $transition-fast;
+
+  &:hover {
+    background: rgba(37, 99, 235, 0.06);
+    color: $accent-color;
+  }
+
+  &--active {
+    background: rgba(37, 99, 235, 0.09);
     color: $accent-color;
   }
 }
@@ -683,6 +885,17 @@ onMounted(() => {
   max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+.duration-pop-enter-active,
+.duration-pop-leave-active {
+  transition: all 0.16s ease;
+}
+
+.duration-pop-enter-from,
+.duration-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
 }
 
 /* ---- 响应式 ---- */

@@ -563,30 +563,6 @@ function registerSettingsHandlers(): void {
   })
 }
 
-async function confirmQuitWithRunningPomodoro(win: BrowserWindow): Promise<boolean> {
-  const pomodoro = getStoredPomodoroData()
-  if (!pomodoro.activeSession) return true
-
-  bringWindowToFront(win)
-
-  const result = await dialog.showMessageBox(win, {
-    type: 'warning',
-    buttons: ['继续退出', '取消'],
-    defaultId: 1,
-    cancelId: 1,
-    title: '番茄钟进行中',
-    message: '退出将终止当前番茄钟，且不会记录本次专注。',
-    detail: '确认继续退出吗？'
-  })
-
-  if (result.response !== 0) {
-    return false
-  }
-
-  store.set('pomodoro', { ...pomodoro, activeSession: null })
-  return true
-}
-
 function attachWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on(
     'did-fail-load',
@@ -613,7 +589,7 @@ function attachWindowDiagnostics(win: BrowserWindow): void {
   })
 }
 
-function createTray(win: BrowserWindow, setQuitting: () => void): void {
+function createTray(win: BrowserWindow): void {
   try {
     tray = new Tray(resolveRuntimeAsset('tray-icon.png'))
 
@@ -626,12 +602,9 @@ function createTray(win: BrowserWindow, setQuitting: () => void): void {
       },
       {
         label: '退出',
-        click: async () => {
-          const canQuit = await confirmQuitWithRunningPomodoro(win)
-          if (!canQuit) return
-
-          setQuitting()
-          app.quit()
+        click: () => {
+          bringWindowToFront(win)
+          win.webContents.send('window:quit-requested')
         }
       }
     ])
@@ -698,9 +671,7 @@ function createWindow(): void {
   })
 
   let isQuitting = false
-  createTray(win, () => {
-    isQuitting = true
-  })
+  createTray(win)
 
   win.on('close', (event) => {
     persistWindowBounds(win)
@@ -725,6 +696,12 @@ function createWindow(): void {
       return
     }
 
+    isQuitting = true
+    app.quit()
+  })
+
+  ipcMain.on('window:quit', () => {
+    persistWindowBounds(win)
     isQuitting = true
     app.quit()
   })

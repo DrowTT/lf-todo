@@ -43,6 +43,10 @@ import { Pin, Minus, Square, X } from 'lucide-vue-next'
 import { useAppRuntime } from '../app/runtime'
 import IconRestore from '../components/icons/IconRestore.vue'
 
+const emit = defineEmits<{
+  'close-request': []
+}>()
+
 const isAlwaysOnTop = ref(false)
 const isMaximized = ref(false)
 const windowService = useAppRuntime().window
@@ -68,9 +72,7 @@ const handleToggleMaximize = () => {
 }
 
 const handleClose = () => {
-  if (windowService.isAvailable) {
-    windowService.close()
-  }
+  emit('close-request')
 }
 
 onMounted(() => {

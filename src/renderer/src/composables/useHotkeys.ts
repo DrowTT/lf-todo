@@ -1,6 +1,7 @@
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
+import { useAppSessionStore } from '../store/appSession'
 import { useHoverTarget } from './useHoverTarget'
 
 export type LocalHotkeyAction = 'toggleComplete' | 'quickDelete' | 'toggleExpand' | 'focusInput'
@@ -174,6 +175,7 @@ function matchAction(normalizedKey: string): HotkeyAction | null {
 
 export function useHotkeys() {
   const app = useAppFacade()
+  const appSessionStore = useAppSessionStore()
   const { hoveredTarget, hoveredParentTaskId } = useHoverTarget()
   const { confirm } = useAppRuntime().confirm
 
@@ -242,7 +244,7 @@ export function useHotkeys() {
   }
 
   function handleCategorySwitch(event: KeyboardEvent): boolean {
-    if (!(event.ctrlKey || event.metaKey)) return false
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return false
 
     const num = parseInt(event.key, 10)
     if (Number.isNaN(num) || num < 1 || num > 9) return false
@@ -250,9 +252,13 @@ export function useHotkeys() {
     const categories = app.categories.value
     const index = num - 1
     if (index >= categories.length) return false
-    if (categories[index].id === app.currentCategoryId.value) return true
 
     event.preventDefault()
+    event.stopPropagation()
+    appSessionStore.setCurrentMainView('tasks')
+
+    if (categories[index].id === app.currentCategoryId.value) return true
+
     void app.selectCategory(categories[index].id)
     return true
   }

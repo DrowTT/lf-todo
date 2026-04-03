@@ -35,8 +35,10 @@ export interface WindowService {
   isAvailable: boolean
   minimize(): void
   close(): void
+  quit(): void
   toggleAlwaysOnTop(): void
   toggleMaximize(): void
+  onQuitRequested(callback: () => void): () => void
   onAlwaysOnTopChanged(callback: (flag: boolean) => void): () => void
   onMaximizedChanged(callback: (flag: boolean) => void): () => void
 }

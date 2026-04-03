@@ -319,14 +319,13 @@ const cancelRename = () => {
   }
 
   &__footer {
-    padding: 10px 14px 14px;
-    border-top: 1px solid rgba(15, 23, 42, 0.06);
+    padding: 10px 14px 10px;
   }
 
   &__footer-divider {
     height: 1px;
-    background: $border-subtle;
-    margin: $spacing-xs 0;
+    background: rgba(15, 23, 42, 0.06);
+    margin: 10px -14px;
   }
 
   &__settings-btn {
