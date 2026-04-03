@@ -147,7 +147,7 @@ const onCardMouseLeave = () => clearHover()
         :title="`已完成 ${pomodoroCount} 个番茄`"
       >
         <Timer class="card__pomodoro-badge-icon" :size="11" />
-        <span>{{ pomodoroCount }}</span>
+        <span class="card__pomodoro-badge-count">{{ pomodoroCount }}</span>
       </span>
 
       <button
@@ -405,20 +405,38 @@ const onCardMouseLeave = () => clearHover()
 .card__pomodoro-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  box-sizing: border-box;
+  gap: 4px;
+  height: 22px;
   font-size: $font-xs;
   font-weight: 600;
-  color: #ea580c;
-  background: rgba(249, 115, 22, 0.08);
-  border-radius: 100px;
-  padding: 2px 8px;
-  letter-spacing: 0.3px;
-  line-height: 1.4;
+  color: #c2410c;
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.94), rgba(255, 247, 237, 0.98));
+  border: 1px solid rgba(249, 115, 22, 0.14);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+  padding: 0 7px;
+  letter-spacing: 0.25px;
+  line-height: 1;
   flex-shrink: 0;
 }
 
 .card__pomodoro-badge-icon {
-  color: inherit;
+  color: #f97316;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  opacity: 0.9;
+}
+
+.card__pomodoro-badge-count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  min-width: 9px;
+  transform: translateY(0.25px);
 }
 
 .card__status {
