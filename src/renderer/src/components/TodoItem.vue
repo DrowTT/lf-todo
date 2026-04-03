@@ -151,16 +151,16 @@ const onCardMouseLeave = () => clearHover()
       </span>
 
       <button
-        class="card__pomodoro-btn"
+        class="card__action card__pomodoro-btn"
         :class="{
           'card__pomodoro-btn--active': isPomodoroRunningForTask,
-          'card__pomodoro-btn--hidden': isEditing
+          'card__action--hidden': isEditing
         }"
         :disabled="isBusy || isPomodoroBusy"
         :title="isPomodoroRunningForTask ? '该待办番茄钟进行中' : '开始番茄钟'"
         @click="handleStartPomodoro"
       >
-        <Play :size="12" />
+        <Play :size="14" />
       </button>
 
       <button
@@ -455,6 +455,9 @@ const onCardMouseLeave = () => clearHover()
 
 .card__action {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
   padding: 4px;
   background: transparent;
@@ -463,6 +466,8 @@ const onCardMouseLeave = () => clearHover()
   cursor: pointer;
   transition: all 0.15s ease;
   border-radius: 6px;
+  line-height: 0;
+  vertical-align: middle;
 
   &:disabled {
     cursor: not-allowed;
@@ -489,35 +494,15 @@ const onCardMouseLeave = () => clearHover()
 
 /* 番茄钟播放按钮 — 微型圆形强调按钮，始终微可见 */
 .card__pomodoro-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba($accent-color, 0.06);
   color: $text-muted;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s ease;
-
-  .card:hover & {
-    opacity: 0.6;
-  }
 
   &:hover:not(:disabled) {
-    opacity: 1 !important;
     color: $accent-color;
     background: $accent-soft;
-    transform: scale(1.1);
   }
 
   &:disabled {
-    cursor: not-allowed;
-    opacity: 0.3;
+    opacity: 0.4;
   }
 
   /* 运行态 — 显示脉冲光圈 */
@@ -531,11 +516,6 @@ const onCardMouseLeave = () => clearHover()
       color: $success-color;
       background: rgba($success-color, 0.15);
     }
-  }
-
-  &--hidden {
-    visibility: hidden;
-    pointer-events: none;
   }
 }
 

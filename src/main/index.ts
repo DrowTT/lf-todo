@@ -18,7 +18,17 @@ import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
 import { initAutoUpdater } from './updater'
-import { parseBooleanSetting, parseSetAutoCleanupRequest } from '../shared/contracts/settings'
+import {
+  parseBooleanSetting,
+  parseNotifyPomodoroCompletedRequest,
+  parseSetAutoCleanupRequest,
+  parseSetPomodoroFocusDurationRequest
+} from '../shared/contracts/settings'
+import {
+  createPomodoroCompletionMessage,
+  DEFAULT_FOCUS_DURATION_SECONDS,
+  normalizePomodoroDurationSeconds
+} from '../shared/constants/pomodoro'
 
 interface AutoCleanupConfig {
   enabled: boolean
@@ -83,7 +93,7 @@ const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyConfig = {
   showWindowAndFocusInput: { key: 'Control+Alt+N', label: 'Ctrl+Alt+N' }
 }
 const DEFAULT_POMODORO_DATA: PomodoroData = {
-  focusDurationSeconds: 25 * 60,
+  focusDurationSeconds: DEFAULT_FOCUS_DURATION_SECONDS,
   totalCompletedCount: 0,
   activeSession: null,
   history: []
@@ -93,6 +103,20 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
 let releaseTopMostTimer: NodeJS.Timeout | null = null
+
+function getStoredPomodoroData(): PomodoroData {
+  const raw = store.get('pomodoro', DEFAULT_POMODORO_DATA) as Partial<PomodoroData> | undefined
+
+  return {
+    focusDurationSeconds: normalizePomodoroDurationSeconds(raw?.focusDurationSeconds),
+    totalCompletedCount:
+      typeof raw?.totalCompletedCount === 'number' && raw.totalCompletedCount >= 0
+        ? raw.totalCompletedCount
+        : DEFAULT_POMODORO_DATA.totalCompletedCount,
+    activeSession: raw?.activeSession ?? DEFAULT_POMODORO_DATA.activeSession,
+    history: Array.isArray(raw?.history) ? raw.history : DEFAULT_POMODORO_DATA.history
+  }
+}
 
 function isHotkeyBinding(value: unknown): value is HotkeyBinding {
   if (!value || typeof value !== 'object') return false
@@ -418,11 +442,14 @@ function registerSettingsHandlers(): void {
     const autoLaunch = getAutoLaunchState()
     store.set('autoLaunch', autoLaunch)
 
+    const pomodoro = getStoredPomodoroData()
+
     return {
       autoLaunch,
       closeToTray: store.get('closeToTray', true),
       autoCleanup: store.get('autoCleanup', { enabled: false, days: 7 }),
-      pomodoro: store.get('pomodoro', DEFAULT_POMODORO_DATA)
+      // focusDurationSeconds 由持久化值恢复，用户可在设置中修改
+      pomodoro
     }
   })
 
@@ -443,10 +470,21 @@ function registerSettingsHandlers(): void {
     return nextConfig
   })
 
+  ipcMain.handle('settings:set-pomodoro-focus-duration', (_event, durationSecondsRaw: unknown) => {
+    const durationSeconds = parseSetPomodoroFocusDurationRequest(
+      durationSecondsRaw,
+      'settings:set-pomodoro-focus-duration.request'
+    )
+    const current = getStoredPomodoroData()
+    const nextPomodoro: PomodoroData = { ...current, focusDurationSeconds: durationSeconds }
+    store.set('pomodoro', nextPomodoro)
+    return durationSeconds
+  })
+
   ipcMain.handle(
     'settings:set-pomodoro-active-session',
     (_event, session: PomodoroSessionState | null) => {
-      const current = store.get('pomodoro', DEFAULT_POMODORO_DATA)
+      const current = getStoredPomodoroData()
       const nextPomodoro = { ...current, activeSession: session }
       store.set('pomodoro', nextPomodoro)
       return nextPomodoro.activeSession
@@ -454,7 +492,7 @@ function registerSettingsHandlers(): void {
   )
 
   ipcMain.handle('settings:complete-pomodoro-session', (_event, session: PomodoroSessionState) => {
-    const current = store.get('pomodoro', DEFAULT_POMODORO_DATA)
+    const current = getStoredPomodoroData()
     const completedAt = Date.now()
     const nextRecord: PomodoroRecord = {
       id: `${completedAt}-${Math.random().toString(36).slice(2, 10)}`,
@@ -509,19 +547,24 @@ function registerSettingsHandlers(): void {
     }
   })
 
-  ipcMain.handle('settings:notify-pomodoro-completed', () => {
+  ipcMain.handle('settings:notify-pomodoro-completed', (_event, durationSecondsRaw: unknown) => {
     if (!Notification.isSupported()) return
+
+    const durationSeconds = parseNotifyPomodoroCompletedRequest(
+      durationSecondsRaw,
+      'settings:notify-pomodoro-completed.request'
+    )
 
     new Notification({
       title: '番茄钟完成',
-      body: '25 分钟专注已完成，记得休息一下。',
+      body: createPomodoroCompletionMessage(durationSeconds),
       silent: false
     }).show()
   })
 }
 
 async function confirmQuitWithRunningPomodoro(win: BrowserWindow): Promise<boolean> {
-  const pomodoro = store.get('pomodoro', DEFAULT_POMODORO_DATA)
+  const pomodoro = getStoredPomodoroData()
   if (!pomodoro.activeSession) return true
 
   bringWindowToFront(win)

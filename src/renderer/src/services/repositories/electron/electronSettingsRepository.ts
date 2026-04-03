@@ -7,6 +7,8 @@ import {
   parseUpdateStatusData
 } from '../../../../../shared/contracts/entities'
 import type { SettingsRepository, UpdaterService, WindowService } from '../settingsRepository'
+import { DEFAULT_FOCUS_DURATION_SECONDS } from '../../../../../shared/constants/pomodoro'
+import { expectInteger } from '../../../../../shared/contracts/utils'
 
 const noop = () => {}
 const asyncNoop = async (): Promise<void> => undefined
@@ -24,7 +26,7 @@ export function createElectronSettingsRepository(
             closeToTray: true,
             autoCleanup: { enabled: false, days: 7 },
             pomodoro: {
-              focusDurationSeconds: 1500,
+              focusDurationSeconds: DEFAULT_FOCUS_DURATION_SECONDS,
               totalCompletedCount: 0,
               activeSession: null,
               history: []
@@ -42,6 +44,12 @@ export function createElectronSettingsRepository(
       async setAutoCleanup(config) {
         return parseAutoCleanupConfig(config, 'settings:set-auto-cleanup.fallback')
       },
+      async setPomodoroFocusDuration(durationSeconds) {
+        return expectInteger(durationSeconds, 'settings:set-pomodoro-focus-duration.fallback', {
+          min: 1,
+          max: 86400
+        })
+      },
       async setPomodoroActiveSession(session) {
         return session
           ? parsePomodoroSessionState(session, 'settings:set-pomodoro-session.fallback')
@@ -50,7 +58,7 @@ export function createElectronSettingsRepository(
       async completePomodoroSession() {
         return parsePomodoroData(
           {
-            focusDurationSeconds: 1500,
+            focusDurationSeconds: DEFAULT_FOCUS_DURATION_SECONDS,
             totalCompletedCount: 0,
             activeSession: null,
             history: []
@@ -73,7 +81,7 @@ export function createElectronSettingsRepository(
           'settings:get-app-info.fallback'
         )
       },
-      async notifyPomodoroCompleted() {
+      async notifyPomodoroCompleted(_durationSeconds) {
         return undefined
       }
     }
@@ -96,6 +104,13 @@ export function createElectronSettingsRepository(
         'settings:set-auto-cleanup.response'
       )
     },
+    async setPomodoroFocusDuration(durationSeconds) {
+      return expectInteger(
+        await api.settings.setPomodoroFocusDuration(durationSeconds),
+        'settings:set-pomodoro-focus-duration.response',
+        { min: 1, max: 86400 }
+      )
+    },
     async setPomodoroActiveSession(session) {
       const response = await api.settings.setPomodoroActiveSession(session)
       return response === null
@@ -114,8 +129,8 @@ export function createElectronSettingsRepository(
     async getAppInfo() {
       return parseAppInfo(await api.settings.getAppInfo(), 'settings:get-app-info.response')
     },
-    async notifyPomodoroCompleted() {
-      await api.settings.notifyPomodoroCompleted()
+    async notifyPomodoroCompleted(durationSeconds) {
+      await api.settings.notifyPomodoroCompleted(durationSeconds)
     }
   }
 }

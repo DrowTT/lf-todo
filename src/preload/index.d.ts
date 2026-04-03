@@ -47,6 +47,7 @@ interface API {
     setAutoLaunch: (enabled: boolean) => Promise<boolean>
     setCloseToTray: (enabled: boolean) => Promise<boolean>
     setAutoCleanup: (config: AutoCleanupConfig) => Promise<AutoCleanupConfig>
+    setPomodoroFocusDuration: (durationSeconds: number) => Promise<number>
     setPomodoroActiveSession: (
       session: PomodoroSessionState | null
     ) => Promise<PomodoroSessionState | null>
@@ -54,7 +55,7 @@ interface API {
     setGlobalHotkeys: (
       config: Record<'showWindow' | 'showWindowAndFocusInput', { key: string; label: string }>
     ) => Promise<void>
-    notifyPomodoroCompleted: () => Promise<void>
+    notifyPomodoroCompleted: (durationSeconds: number) => Promise<void>
     exportData: () => Promise<boolean>
     getAppInfo: () => Promise<AppInfo>
   }

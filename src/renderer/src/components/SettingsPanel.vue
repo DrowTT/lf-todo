@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
+  ChevronDown,
   Download,
   Info,
   Keyboard,
@@ -9,6 +10,7 @@ import {
   Power,
   RefreshCw,
   Settings,
+  Timer,
   Trash2,
   X
 } from 'lucide-vue-next'
@@ -52,6 +54,7 @@ const {
   isSavingAutoLaunch,
   isSavingCloseToTray,
   isSavingAutoCleanup,
+  isSavingPomodoroDuration,
   loadError
 } = storeToRefs(settingsStore)
 const {
@@ -104,6 +107,143 @@ const autoCleanupDays = computed({
     }
   }
 })
+
+const pomodoroFocusDurationMinutes = computed({
+  get: () => Math.round(settings.value.pomodoro.focusDurationSeconds / 60),
+  set: (value: number) => {
+    settings.value = {
+      ...settings.value,
+      pomodoro: { ...settings.value.pomodoro, focusDurationSeconds: value * 60 }
+    }
+  }
+})
+
+// ---- 自定义 Dropdown 状态 ----
+interface DropdownOption {
+  value: number
+  label: string
+}
+
+const pomodoroDurationOptions: DropdownOption[] = [
+  { value: 5, label: '5 分钟' },
+  { value: 10, label: '10 分钟' },
+  { value: 15, label: '15 分钟' },
+  { value: 20, label: '20 分钟' },
+  { value: 25, label: '25 分钟' },
+  { value: 30, label: '30 分钟' },
+  { value: 45, label: '45 分钟' },
+  { value: 60, label: '60 分钟' }
+]
+
+const cleanupDaysOptions: DropdownOption[] = [
+  { value: 3, label: '3 天' },
+  { value: 7, label: '7 天' },
+  { value: 14, label: '14 天' },
+  { value: 30, label: '30 天' }
+]
+
+const pomodoroDropdownOpen = ref(false)
+const cleanupDropdownOpen = ref(false)
+const pomodoroDropdownRef = ref<HTMLElement | null>(null)
+const cleanupDropdownRef = ref<HTMLElement | null>(null)
+const pomodoroDropdownPanelRef = ref<HTMLElement | null>(null)
+const cleanupDropdownPanelRef = ref<HTMLElement | null>(null)
+
+interface DropdownPosition {
+  top: number
+  left: number
+  width: number
+}
+
+const pomodoroDropdownPosition = ref<DropdownPosition | null>(null)
+const cleanupDropdownPosition = ref<DropdownPosition | null>(null)
+
+const pomodoroDisplayLabel = computed(() => {
+  const opt = pomodoroDurationOptions.find(o => o.value === pomodoroFocusDurationMinutes.value)
+  return opt?.label ?? `${pomodoroFocusDurationMinutes.value} 分钟`
+})
+
+const cleanupDisplayLabel = computed(() => {
+  const opt = cleanupDaysOptions.find(o => o.value === autoCleanupDays.value)
+  return opt?.label ?? `${autoCleanupDays.value} 天`
+})
+
+function selectPomodoroDuration(value: number) {
+  pomodoroFocusDurationMinutes.value = value
+  pomodoroDropdownOpen.value = false
+}
+
+function selectCleanupDays(value: number) {
+  autoCleanupDays.value = value
+  cleanupDropdownOpen.value = false
+}
+
+function getDropdownPosition(container: HTMLElement | null): DropdownPosition | null {
+  if (!container) return null
+
+  const trigger = container.querySelector<HTMLElement>('.dropdown__trigger')
+  if (!trigger) return null
+
+  const rect = trigger.getBoundingClientRect()
+  return {
+    top: rect.bottom + 4,
+    left: rect.left,
+    width: rect.width
+  }
+}
+
+function updatePomodoroDropdownPosition() {
+  pomodoroDropdownPosition.value = getDropdownPosition(pomodoroDropdownRef.value)
+}
+
+function updateCleanupDropdownPosition() {
+  cleanupDropdownPosition.value = getDropdownPosition(cleanupDropdownRef.value)
+}
+
+function syncOpenDropdownPositions() {
+  if (pomodoroDropdownOpen.value) updatePomodoroDropdownPosition()
+  if (cleanupDropdownOpen.value) updateCleanupDropdownPosition()
+}
+
+async function togglePomodoroDropdown() {
+  pomodoroDropdownOpen.value = !pomodoroDropdownOpen.value
+  cleanupDropdownOpen.value = false
+
+  if (pomodoroDropdownOpen.value) {
+    await nextTick()
+    updatePomodoroDropdownPosition()
+  }
+}
+
+async function toggleCleanupDropdown() {
+  cleanupDropdownOpen.value = !cleanupDropdownOpen.value
+  pomodoroDropdownOpen.value = false
+
+  if (cleanupDropdownOpen.value) {
+    await nextTick()
+    updateCleanupDropdownPosition()
+  }
+}
+
+function handleDropdownOutsideClick(event: MouseEvent) {
+  const target = event.target as Node
+  if (
+    pomodoroDropdownOpen.value &&
+    pomodoroDropdownRef.value &&
+    !pomodoroDropdownRef.value.contains(target) &&
+    !pomodoroDropdownPanelRef.value?.contains(target)
+  ) {
+    pomodoroDropdownOpen.value = false
+  }
+  if (
+    cleanupDropdownOpen.value &&
+    cleanupDropdownRef.value &&
+    !cleanupDropdownRef.value.contains(target) &&
+    !cleanupDropdownPanelRef.value?.contains(target)
+  ) {
+    cleanupDropdownOpen.value = false
+  }
+}
 
 const settingsStatusText = computed(() => {
   if (isLoading.value || !loadError.value) return ''
@@ -217,6 +357,11 @@ async function handleExportData() {
   await settingsStore.exportData()
 }
 
+async function handlePomodoroDurationChange() {
+  if (!isElectron) return
+  await settingsStore.setPomodoroFocusDuration(pomodoroFocusDurationMinutes.value * 60)
+}
+
 async function handleCheckUpdate() {
   if (!isElectron) return
   await updaterStore.checkForUpdates()
@@ -245,12 +390,17 @@ function handleKeydown(event: KeyboardEvent) {
 
 watch(
   () => props.visible,
-  (visible) => {
+  async (visible) => {
     if (visible) {
       void settingsStore.load()
       updaterStore.initialize()
+      await nextTick()
+      syncOpenDropdownPositions()
       return
     }
+
+    pomodoroDropdownOpen.value = false
+    cleanupDropdownOpen.value = false
 
     if (recordingAction.value) {
       cancelRecording()
@@ -264,14 +414,24 @@ watch(autoCleanupDays, () => {
   }
 })
 
+watch(pomodoroFocusDurationMinutes, () => {
+  void handlePomodoroDurationChange()
+})
+
 onMounted(() => {
   void settingsStore.hydrate()
   updaterStore.initialize()
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('click', handleDropdownOutsideClick, true)
+  window.addEventListener('resize', syncOpenDropdownPositions)
+  window.addEventListener('scroll', syncOpenDropdownPositions, true)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('click', handleDropdownOutsideClick, true)
+  window.removeEventListener('resize', syncOpenDropdownPositions)
+  window.removeEventListener('scroll', syncOpenDropdownPositions, true)
 })
 </script>
 
@@ -344,6 +504,56 @@ onUnmounted(() => {
               />
               <span class="toggle-switch__slider"></span>
             </label>
+          </div>
+
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label">
+                <Timer :size="14" class="settings-item__inline-icon" />
+                番茄钟时长
+              </label>
+              <span class="settings-item__desc">每次专注的持续时间</span>
+            </div>
+            <div ref="pomodoroDropdownRef" class="dropdown">
+              <button
+                class="dropdown__trigger"
+                type="button"
+                :disabled="!isElectron || isSavingPomodoroDuration"
+                @click="togglePomodoroDropdown"
+              >
+                <span class="dropdown__value">{{ pomodoroDisplayLabel }}</span>
+                <ChevronDown
+                  :size="13"
+                  class="dropdown__chevron"
+                  :class="{ 'dropdown__chevron--open': pomodoroDropdownOpen }"
+                />
+              </button>
+              <Transition name="dropdown-pop">
+                <Teleport to="body">
+                  <div
+                    v-if="pomodoroDropdownOpen && pomodoroDropdownPosition"
+                    ref="pomodoroDropdownPanelRef"
+                    class="dropdown__panel dropdown__panel--teleported"
+                    :style="{
+                      top: `${pomodoroDropdownPosition.top}px`,
+                      left: `${pomodoroDropdownPosition.left}px`,
+                      minWidth: `${pomodoroDropdownPosition.width}px`
+                    }"
+                  >
+                    <button
+                      v-for="opt in pomodoroDurationOptions"
+                      :key="opt.value"
+                      class="dropdown__option"
+                      :class="{ 'dropdown__option--active': opt.value === pomodoroFocusDurationMinutes }"
+                      type="button"
+                      @click="selectPomodoroDuration(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </Teleport>
+              </Transition>
+            </div>
           </div>
         </section>
 
@@ -441,17 +651,46 @@ onUnmounted(() => {
             </div>
             <div class="cleanup-days-selector">
               <span class="cleanup-days-selector__text">清理</span>
-              <select
-                id="cleanup-days"
-                v-model.number="autoCleanupDays"
-                class="cleanup-days-selector__select"
-                :disabled="!isElectron || isSavingAutoCleanup"
-              >
-                <option :value="3">3 天</option>
-                <option :value="7">7 天</option>
-                <option :value="14">14 天</option>
-                <option :value="30">30 天</option>
-              </select>
+              <div ref="cleanupDropdownRef" class="dropdown dropdown--inline">
+                <button
+                  class="dropdown__trigger"
+                  type="button"
+                  :disabled="!isElectron || isSavingAutoCleanup"
+                  @click="toggleCleanupDropdown"
+                >
+                  <span class="dropdown__value">{{ cleanupDisplayLabel }}</span>
+                  <ChevronDown
+                    :size="11"
+                    class="dropdown__chevron"
+                    :class="{ 'dropdown__chevron--open': cleanupDropdownOpen }"
+                  />
+                </button>
+                <Transition name="dropdown-pop">
+                  <Teleport to="body">
+                    <div
+                      v-if="cleanupDropdownOpen && cleanupDropdownPosition"
+                      ref="cleanupDropdownPanelRef"
+                      class="dropdown__panel dropdown__panel--teleported"
+                      :style="{
+                        top: `${cleanupDropdownPosition.top}px`,
+                        left: `${cleanupDropdownPosition.left}px`,
+                        minWidth: `${cleanupDropdownPosition.width}px`
+                      }"
+                    >
+                      <button
+                        v-for="opt in cleanupDaysOptions"
+                        :key="opt.value"
+                        class="dropdown__option"
+                        :class="{ 'dropdown__option--active': opt.value === autoCleanupDays }"
+                        type="button"
+                        @click="selectCleanupDays(opt.value)"
+                      >
+                        {{ opt.label }}
+                      </button>
+                    </div>
+                  </Teleport>
+                </Transition>
+              </div>
               <span class="cleanup-days-selector__text">前的已完成任务</span>
             </div>
           </div>
@@ -948,14 +1187,147 @@ onUnmounted(() => {
     font-size: $font-xs;
     color: $text-secondary;
   }
+}
 
-  &__select {
-    padding: 4px 8px;
-    border-radius: $radius-sm;
-    border: 1px solid $border-light;
-    background: $bg-input;
+/* ---- 自定义 Dropdown 组件 ---- */
+.dropdown {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+
+  &__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: $radius-md;
+    border: 1px solid $border-color;
+    background: $bg-elevated;
     color: $text-primary;
+    font-size: $font-sm;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all $transition-fast;
+    outline: none;
+    min-width: 88px;
+    justify-content: space-between;
+
+    &:hover:not(:disabled) {
+      border-color: $border-light;
+      background: rgba(15, 23, 42, 0.03);
+    }
+
+    &:focus-visible {
+      border-color: $accent-color;
+      box-shadow: $shadow-glow;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   }
+
+  &__value {
+    white-space: nowrap;
+  }
+
+  &__chevron {
+    color: $text-muted;
+    transition: transform $transition-fast, color $transition-fast;
+    flex-shrink: 0;
+
+    &--open {
+      transform: rotate(180deg);
+      color: $accent-color;
+    }
+  }
+
+  &__panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 50;
+    min-width: 100%;
+    padding: 4px;
+    border-radius: $radius-md;
+    border: 1px solid $border-color;
+    background: $bg-elevated;
+    box-shadow: $shadow-md;
+    display: flex;
+    flex-direction: column;
+    transform-origin: top left;
+  }
+
+  &__panel--teleported {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 260;
+  }
+
+  &__option {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-secondary;
+    font-size: $font-sm;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all $transition-fast;
+
+    &:hover {
+      background: rgba($accent-color, 0.06);
+      color: $text-primary;
+    }
+
+    &--active {
+      color: $accent-color;
+      background: $accent-soft;
+      font-weight: 600;
+
+      &:hover {
+        background: rgba($accent-color, 0.12);
+      }
+    }
+  }
+
+  /* 内联变体 */
+  &--inline &__trigger {
+    padding: 4px 8px;
+    min-width: 60px;
+    font-size: $font-xs;
+    border-radius: $radius-sm;
+    gap: 4px;
+  }
+
+  &--inline &__panel {
+    padding: 3px;
+  }
+
+  &--inline &__option {
+    padding: 4px 10px;
+    font-size: $font-xs;
+  }
+}
+
+/* ---- Dropdown 弹出动画 ---- */
+.dropdown-pop-enter-active {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-pop-leave-active {
+  transition: all 0.1s ease;
+}
+
+.dropdown-pop-enter-from,
+.dropdown-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-4px);
 }
 
 .settings-about {

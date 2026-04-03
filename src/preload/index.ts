@@ -22,7 +22,9 @@ import {
 } from '../shared/contracts/db'
 import {
   parseBooleanSetting,
+  parseNotifyPomodoroCompletedRequest,
   parseSetAutoCleanupRequest,
+  parseSetPomodoroFocusDurationRequest,
   parseSetPomodoroActiveSessionRequest
 } from '../shared/contracts/settings'
 import { expectBoolean, expectInteger, expectString, parseVoid } from '../shared/contracts/utils'
@@ -204,6 +206,21 @@ const api = {
         parseSetAutoCleanupRequest,
         parseAutoCleanupConfig
       ),
+    setPomodoroFocusDuration: (durationSeconds: unknown) =>
+      ipcRenderer
+        .invoke(
+          'settings:set-pomodoro-focus-duration',
+          parseSetPomodoroFocusDurationRequest(
+            durationSeconds,
+            'settings:set-pomodoro-focus-duration.request'
+          )
+        )
+        .then((value) =>
+          expectInteger(value, 'settings:set-pomodoro-focus-duration.response', {
+            min: 1,
+            max: 86400
+          })
+        ),
     setPomodoroActiveSession: (session: unknown) =>
       ipcRenderer
         .invoke(
@@ -229,9 +246,15 @@ const api = {
       ipcRenderer.invoke('settings:set-global-hotkeys', config).then((value) => {
         return parseVoid(value, 'settings:set-global-hotkeys.response')
       }),
-    notifyPomodoroCompleted: () =>
+    notifyPomodoroCompleted: (durationSeconds: unknown) =>
       ipcRenderer
-        .invoke('settings:notify-pomodoro-completed')
+        .invoke(
+          'settings:notify-pomodoro-completed',
+          parseNotifyPomodoroCompletedRequest(
+            durationSeconds,
+            'settings:notify-pomodoro-completed.request'
+          )
+        )
         .then((value) => parseVoid(value, 'settings:notify-pomodoro-completed.response')),
     exportData: () =>
       ipcRenderer

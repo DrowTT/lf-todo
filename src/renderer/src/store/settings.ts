@@ -8,6 +8,7 @@ import type {
   SettingsData
 } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
+import { DEFAULT_FOCUS_DURATION_SECONDS } from '../../../shared/constants/pomodoro'
 
 const defaultSettings = (): SettingsData => ({
   autoLaunch: false,
@@ -17,7 +18,7 @@ const defaultSettings = (): SettingsData => ({
     days: 7
   },
   pomodoro: {
-    focusDurationSeconds: 25 * 60,
+    focusDurationSeconds: DEFAULT_FOCUS_DURATION_SECONDS,
     totalCompletedCount: 0,
     activeSession: null,
     history: []
@@ -44,6 +45,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const isSavingCloseToTray = ref(false)
   const isSavingAutoCleanup = ref(false)
   const isSavingPomodoro = ref(false)
+  const isSavingPomodoroDuration = ref(false)
   const error = ref('')
   const loadError = ref('')
   const lastSyncedAt = ref<number | null>(null)
@@ -176,6 +178,37 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setPomodoroFocusDuration(durationSeconds: number) {
+    if (!repository.isAvailable) return false
+
+    const previous = settings.value.pomodoro.focusDurationSeconds
+    settings.value = {
+      ...settings.value,
+      pomodoro: { ...settings.value.pomodoro, focusDurationSeconds: durationSeconds }
+    }
+    isSavingPomodoroDuration.value = true
+
+    try {
+      const nextDuration = await repository.setPomodoroFocusDuration(durationSeconds)
+      settings.value = {
+        ...settings.value,
+        pomodoro: { ...settings.value.pomodoro, focusDurationSeconds: nextDuration }
+      }
+      markSynced()
+      return true
+    } catch (err) {
+      settings.value = {
+        ...settings.value,
+        pomodoro: { ...settings.value.pomodoro, focusDurationSeconds: previous }
+      }
+      error.value = '保存番茄钟时长失败，请重试'
+      runtime.toast.show(error.value)
+      throw err
+    } finally {
+      isSavingPomodoroDuration.value = false
+    }
+  }
+
   async function setPomodoroActiveSession(session: PomodoroSessionState | null) {
     const previous = settings.value.pomodoro.activeSession
     settings.value = {
@@ -262,9 +295,9 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function notifyPomodoroCompleted() {
+  async function notifyPomodoroCompleted(durationSeconds: number) {
     if (!repository.isAvailable) return
-    await repository.notifyPomodoroCompleted()
+    await repository.notifyPomodoroCompleted(durationSeconds)
   }
 
   return {
@@ -277,6 +310,7 @@ export const useSettingsStore = defineStore('settings', () => {
     isSavingCloseToTray,
     isSavingAutoCleanup,
     isSavingPomodoro,
+    isSavingPomodoroDuration,
     error,
     loadError,
     lastSyncedAt,
@@ -286,6 +320,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setAutoLaunch,
     setCloseToTray,
     setAutoCleanup,
+    setPomodoroFocusDuration,
     setPomodoroActiveSession,
     completePomodoroSession,
     notifyPomodoroCompleted,

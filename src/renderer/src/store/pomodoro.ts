@@ -1,6 +1,10 @@
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import type { PomodoroRecord, PomodoroSessionState, Task } from '../../../shared/types/models'
+import {
+  createPomodoroStartMessage,
+  formatPomodoroDurationLabel
+} from '../../../shared/constants/pomodoro'
 import { useAppRuntime } from '../app/runtime'
 import { useSettingsStore } from './settings'
 
@@ -65,6 +69,7 @@ export const usePomodoroStore = defineStore('pomodoro', () => {
   const activeSession = computed(() => settingsStore.settings.pomodoro.activeSession)
   const history = computed(() => settingsStore.settings.pomodoro.history)
   const focusDurationSeconds = computed(() => settingsStore.settings.pomodoro.focusDurationSeconds)
+  const focusDurationLabel = computed(() => formatPomodoroDurationLabel(focusDurationSeconds.value))
   const totalCompletedCount = computed(() => settingsStore.settings.pomodoro.totalCompletedCount)
   const remainingSeconds = computed(() => {
     const session = activeSession.value
@@ -124,7 +129,7 @@ export const usePomodoroStore = defineStore('pomodoro', () => {
     try {
       await settingsStore.completePomodoroSession(session)
       stopTicking()
-      await settingsStore.notifyPomodoroCompleted()
+      await settingsStore.notifyPomodoroCompleted(session.durationSeconds)
       runtime.toast.show('番茄钟完成，已记录 1 个番茄。', 'success', { duration: 5000 })
     } finally {
       isBusy.value = false
@@ -138,7 +143,8 @@ export const usePomodoroStore = defineStore('pomodoro', () => {
       return
     }
 
-    completionPromise = finalizeSession(session)
+    // toRaw 解包 Vue Proxy，避免 contextBridge structuredClone 序列化失败
+    completionPromise = finalizeSession(toRaw(session))
 
     try {
       await completionPromise
@@ -174,7 +180,7 @@ export const usePomodoroStore = defineStore('pomodoro', () => {
       await settingsStore.setPomodoroActiveSession(session)
       now.value = Date.now()
       startTicking()
-      runtime.toast.show('番茄钟已开始，25 分钟后提醒你休息。', 'info')
+      runtime.toast.show(createPomodoroStartMessage(session.durationSeconds), 'info')
     } finally {
       isBusy.value = false
     }
@@ -236,6 +242,7 @@ export const usePomodoroStore = defineStore('pomodoro', () => {
     activeTaskLabel,
     history,
     focusDurationSeconds,
+    focusDurationLabel,
     totalCompletedCount,
     todayCompletedCount,
     weekCompletedCount,

@@ -13,13 +13,14 @@ export interface SettingsRepository {
   setAutoLaunch(enabled: boolean): Promise<boolean>
   setCloseToTray(enabled: boolean): Promise<boolean>
   setAutoCleanup(config: AutoCleanupConfig): Promise<AutoCleanupConfig>
+  setPomodoroFocusDuration(durationSeconds: number): Promise<number>
   setPomodoroActiveSession(
     session: PomodoroSessionState | null
   ): Promise<PomodoroSessionState | null>
   completePomodoroSession(session: PomodoroSessionState): Promise<PomodoroData>
   exportData(): Promise<boolean>
   getAppInfo(): Promise<AppInfo>
-  notifyPomodoroCompleted(): Promise<void>
+  notifyPomodoroCompleted(durationSeconds: number): Promise<void>
 }
 
 export interface UpdaterService {

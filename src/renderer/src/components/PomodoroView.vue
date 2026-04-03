@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ChevronDown, Flame, ListTodo, Pause, Play, Square, Target, Trophy, Zap } from 'lucide-vue-next'
+import { ChevronDown, Flame, ListTodo, Play, Square, Target, Trophy, Zap } from 'lucide-vue-next'
 import { usePomodoroStore } from '../store/pomodoro'
 
 const pomodoroStore = usePomodoroStore()
 const {
   activeSession,
   activeTaskLabel,
+  focusDurationLabel,
   isBusy,
   isRunning,
   formattedRemaining,
@@ -154,7 +155,7 @@ onMounted(() => {
           @click="pomodoroStore.start()"
         >
           <Play :size="14" />
-          <span>开始 25 分钟专注</span>
+          <span>开始 {{ focusDurationLabel }}专注</span>
         </button>
 
         <button
