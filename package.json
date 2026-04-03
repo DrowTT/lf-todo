@@ -1,6 +1,6 @@
 {
   "name": "lf-todo",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "极简待办 - 轻量级本地待办事项管理工具",
   "packageManager": "pnpm@10.18.3",
   "main": "./out/main/index.js",
