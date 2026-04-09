@@ -164,6 +164,8 @@ const api = {
         .then((value) => expectInteger(value, 'db:clear-completed-tasks.response', { min: 0 })),
     reorderTasks: (orderedIds: number[]) =>
       invokeVoidWithPayload('db:reorder-tasks', { orderedIds }, parseReorderTasksRequest),
+    reorderSubTasks: (orderedIds: number[]) =>
+      invokeVoidWithPayload('db:reorder-subtasks', { orderedIds }, parseReorderTasksRequest),
     getSubTasks: (parentId: number) =>
       ipcRenderer
         .invoke(

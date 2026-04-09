@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
@@ -9,6 +9,7 @@ import { useTaskStore } from '../store/task'
 import CategoryList from './CategoryList.vue'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
+import TodoSearchBar from './TodoSearchBar.vue'
 
 const app = useAppFacade()
 const { currentCategoryId, categories, tasks, isLoading } = app
@@ -17,6 +18,8 @@ const taskStore = useTaskStore()
 const { sidebarWidth, startResize } = useSidebarResize()
 
 const dragStartOrder = ref<number[]>([])
+const searchQuery = ref('')
+const isSearchExpanded = ref(false)
 
 const currentCategoryName = computed(() => {
   const category = categories.value.find((item) => item.id === currentCategoryId.value)
@@ -28,6 +31,17 @@ const currentPendingCount = computed(
 )
 
 const completedCount = computed(() => tasks.value.filter((task) => task.is_completed).length)
+const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
+const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0)
+const filteredTasks = computed(() => {
+  if (!normalizedSearchQuery.value) {
+    return tasks.value
+  }
+
+  return tasks.value.filter((task) =>
+    task.content.toLocaleLowerCase().includes(normalizedSearchQuery.value)
+  )
+})
 
 const draggableTasks = computed({
   get: () => taskStore.tasks,
@@ -51,6 +65,11 @@ const onDragEnd = async () => {
   await app.reorderTasks(dragStartOrder.value)
   dragStartOrder.value = []
 }
+
+watch(currentCategoryId, () => {
+  searchQuery.value = ''
+  isSearchExpanded.value = false
+})
 </script>
 
 <template>
@@ -66,9 +85,16 @@ const onDragEnd = async () => {
 
     <div class="todo-panel">
       <header class="todo-panel__header">
-        <h1 class="todo-panel__title">
-          {{ currentCategoryName }}
-        </h1>
+        <div class="todo-panel__title-group">
+          <h1 class="todo-panel__title">
+            {{ currentCategoryName }}
+          </h1>
+          <TodoSearchBar
+            v-if="currentCategoryId"
+            v-model="searchQuery"
+            v-model:expanded="isSearchExpanded"
+          />
+        </div>
         <div class="todo-panel__actions">
           <span v-if="currentCategoryId" class="todo-panel__badge">
             <span class="todo-panel__badge-num">
@@ -114,9 +140,16 @@ const onDragEnd = async () => {
             <div class="todo-panel__empty-title">暂无任务</div>
             <div class="todo-panel__empty-hint">在上方输入框添加你的第一个待办吧</div>
           </div>
+          <div v-else-if="filteredTasks.length === 0" class="todo-panel__empty">
+            <div class="todo-panel__empty-glow">
+              <ClipboardList class="todo-panel__empty-svg" :size="32" />
+            </div>
+            <div class="todo-panel__empty-title">没有匹配结果</div>
+            <div class="todo-panel__empty-hint">试试更短的关键词，或者换一个说法</div>
+          </div>
 
           <draggable
-            v-else
+            v-else-if="!hasActiveSearch"
             v-model="draggableTasks"
             item-key="id"
             handle=".card__drag-handle"
@@ -132,6 +165,9 @@ const onDragEnd = async () => {
               <TodoItem :task="element" />
             </template>
           </draggable>
+          <div v-else class="todo-panel__cards">
+            <TodoItem v-for="task in filteredTasks" :key="task.id" :task="task" />
+          </div>
         </template>
       </div>
     </div>
@@ -193,20 +229,33 @@ const onDragEnd = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: $spacing-lg;
   padding: $spacing-lg $spacing-xl;
   background: linear-gradient(135deg, rgba($bg-sidebar, 0.35) 0%, rgba($bg-sidebar, 0.15) 100%);
   border-bottom: 1px solid $border-subtle;
 }
 
+.todo-panel__title-group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: visible;
+}
+
 .todo-panel__title {
+  flex-shrink: 0;
   font-size: $font-xl;
   font-weight: 700;
   color: $text-primary;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .todo-panel__actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: $spacing-md;
 }

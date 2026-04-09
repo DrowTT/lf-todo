@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import draggable from 'vuedraggable'
 import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 // lucide-vue-next 中无专用番茄图标，改用 Timer 代替 Clock3 以区分
@@ -29,14 +30,28 @@ const props = defineProps<{
 
 const isExpanded = computed(() => subTaskStore.expandedTaskIds.has(props.task.id))
 const subTasks = computed(() => subTaskStore.subTasksMap[props.task.id] ?? [])
+const draggableSubTasks = computed({
+  get: () => subTasks.value,
+  set: (value) => {
+    subTaskStore.subTasksMap[props.task.id] = value
+  }
+})
 const isDeleting = computed(() => taskStore.isTaskDeleting(props.task.id))
 const isSaving = computed(() => taskStore.isTaskSaving(props.task.id))
 const isBusy = computed(() => taskStore.isTaskBusy(props.task.id))
+const isSubTaskReordering = ref(false)
+const hasBusySubTasks = computed(() =>
+  subTasks.value.some((subTask) => subTaskStore.isSubTaskBusy(subTask.id))
+)
+const isSubTaskDragDisabled = computed(
+  () => isBusy.value || isSubTaskReordering.value || hasBusySubTasks.value
+)
 const pomodoroCount = computed(() => pomodoroStore.getTaskPomodoroCount(props.task.id))
 const isPomodoroRunningForTask = computed(
   () => pomodoroStore.activeSession?.taskId === props.task.id
 )
 const isPomodoroBusy = computed(() => pomodoroStore.isBusy)
+const dragStartSubTaskOrder = ref<number[]>([])
 
 const subTaskProgress = computed(() => {
   if (isExpanded.value && subTasks.value.length > 0) {
@@ -96,6 +111,66 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
 
 const onCardMouseEnter = () => setHoverTask(props.task.id)
 const onCardMouseLeave = () => clearHover()
+
+const restoreSubTaskOrder = (orderedIds: number[]) => {
+  const subTasksById = new Map(subTasks.value.map((subTask) => [subTask.id, subTask]))
+  const restoredSubTasks = orderedIds
+    .map((id) => subTasksById.get(id))
+    .filter((task): task is Task => Boolean(task))
+
+  if (restoredSubTasks.length === subTasks.value.length) {
+    subTaskStore.subTasksMap[props.task.id] = restoredSubTasks
+  }
+}
+
+const onSubTaskDragStart = () => {
+  dragStartSubTaskOrder.value = subTasks.value.map((subTask) => subTask.id)
+}
+
+const onSubTaskDragEnd = async () => {
+  const previousOrderedIds = dragStartSubTaskOrder.value
+  dragStartSubTaskOrder.value = []
+
+  const orderedIds = subTasks.value.map((subTask) => subTask.id)
+
+  if (
+    previousOrderedIds.length === orderedIds.length &&
+    previousOrderedIds.every((taskId, index) => taskId === orderedIds[index])
+  ) {
+    return
+  }
+
+  isSubTaskReordering.value = true
+
+  try {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        runtime.repositories.task.updateTask(id, {
+          order_index: index
+        })
+      )
+    )
+  } catch (error) {
+    console.error('[TodoItem] reorderSubTasks failed', error)
+    restoreSubTaskOrder(previousOrderedIds)
+
+    try {
+      await Promise.all(
+        previousOrderedIds.map((id, index) =>
+          runtime.repositories.task.updateTask(id, {
+            order_index: index
+          })
+        )
+      )
+    } catch (rollbackError) {
+      console.error('[TodoItem] reorderSubTasks compensation failed', rollbackError)
+    }
+
+    runtime.toast.show('保存子任务排序失败，请重试')
+  } finally {
+    isSubTaskReordering.value = false
+  }
+}
 </script>
 
 <template>
@@ -185,7 +260,22 @@ const onCardMouseLeave = () => clearHover()
 
     <Transition name="sub-slide">
       <div v-if="isExpanded" class="card__subs">
-        <SubTaskItem v-for="sub in subTasks" :key="sub.id" :task="sub" :parent-id="task.id" />
+        <draggable
+          v-model="draggableSubTasks"
+          item-key="id"
+          handle=".sub__drag-handle"
+          ghost-class="sub--ghost"
+          drag-class="sub--dragging"
+          :animation="180"
+          :disabled="isSubTaskDragDisabled"
+          class="card__sub-list"
+          @start="onSubTaskDragStart"
+          @end="onSubTaskDragEnd"
+        >
+          <template #item="{ element }">
+            <SubTaskItem :task="element" :parent-id="task.id" :reordering="isSubTaskReordering" />
+          </template>
+        </draggable>
         <SubTaskInput :parent-id="task.id" />
       </div>
     </Transition>
@@ -538,7 +628,8 @@ const onCardMouseLeave = () => clearHover()
 }
 
 @keyframes pomo-pulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba($success-color, 0.2);
   }
   50% {
@@ -564,11 +655,17 @@ const onCardMouseLeave = () => clearHover()
 
 .card__subs {
   margin: 0 12px 12px;
-  padding: 8px 4px 4px 14px;
+  padding: 8px 4px 4px 4px;
   background: $bg-deep;
   border-radius: 10px;
   border-left: 3px solid rgba($accent-color, 0.25);
   overflow: hidden;
+}
+
+.card__sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .sub-slide-enter-active {

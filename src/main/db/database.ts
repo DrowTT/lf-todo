@@ -144,9 +144,15 @@ export function initDatabase(): void {
     getTaskById: db.prepare('SELECT * FROM tasks WHERE id = ?'),
     // Task 写入
     createTask: db.prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)'),
-    createSubTask: db.prepare(
-      'INSERT INTO tasks (content, category_id, parent_id) VALUES (?, (SELECT category_id FROM tasks WHERE id = ?), ?)'
-    ),
+    createSubTask: db.prepare(`
+      INSERT INTO tasks (content, category_id, parent_id, order_index)
+      VALUES (
+        ?,
+        (SELECT category_id FROM tasks WHERE id = ?),
+        ?,
+        COALESCE((SELECT MAX(order_index) + 1 FROM tasks WHERE parent_id = ?), 0)
+      )
+    `),
     updateContent: db.prepare('UPDATE tasks SET content = ? WHERE id = ?'),
     updateCompleted: db.prepare('UPDATE tasks SET is_completed = ? WHERE id = ?'),
     updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?'),
@@ -250,7 +256,7 @@ export function getSubTasks(parentId: number): Task[] {
  * 创建子任务 — 用子查询继承父任务的 category_id，避免额外 SELECT
  */
 export function createSubTask(content: string, parentId: number): Task {
-  const info = getStmts().createSubTask.run(content, parentId, parentId)
+  const info = getStmts().createSubTask.run(content, parentId, parentId, parentId)
   return getTaskById(info.lastInsertRowid as number)!
 }
 
@@ -345,12 +351,29 @@ export function getPendingTaskCounts(): Record<number, number> {
  * orderedIds 数组按展示顺序排列，第一个 = 最大 order_index（匹配 ORDER BY DESC）
  */
 export function reorderTasks(orderedIds: number[]): void {
+  reorderTaskIds(orderedIds, (index, total) => total - index)
+}
+
+/**
+ * 批量更新子任务排序（事务内执行）
+ * orderedIds 数组按展示顺序排列，第一个 = 最小 order_index（匹配 ORDER BY ASC）
+ */
+export function reorderSubTasks(orderedIds: number[]): void {
+  reorderTaskIds(orderedIds, (index) => index)
+}
+
+function reorderTaskIds(
+  orderedIds: number[],
+  resolveOrderIndex: (index: number, total: number) => number
+): void {
+  if (orderedIds.length === 0) return
+
   const s = getStmts()
   const total = orderedIds.length
+
   getDb().transaction(() => {
     for (let i = 0; i < total; i++) {
-      // 第一个任务 order_index 最大，最后一个最小
-      s.updateOrderIndex.run(total - i, orderedIds[i])
+      s.updateOrderIndex.run(resolveOrderIndex(i, total), orderedIds[i])
     }
   })()
 }

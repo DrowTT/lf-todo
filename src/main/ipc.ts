@@ -66,6 +66,10 @@ export function registerIpcHandlers(): void {
     const request = parseReorderTasksRequest(payload, 'db:reorder-tasks.request')
     return db.reorderTasks(request.orderedIds)
   })
+  ipcMain.handle('db:reorder-subtasks', (_event, payload: unknown) => {
+    const request = parseReorderTasksRequest(payload, 'db:reorder-subtasks.request')
+    return db.reorderSubTasks(request.orderedIds)
+  })
 
   ipcMain.handle('db:get-subtasks', (_event, parentId: unknown) =>
     db.getSubTasks(expectInteger(parentId, 'db:get-subtasks.request.parentId', { min: 1 }))

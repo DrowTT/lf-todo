@@ -10,6 +10,7 @@ export interface TaskRepository {
   getPendingTaskCounts(): Promise<Record<number, number>>
   clearCompletedTasks(categoryId: number): Promise<number>
   reorderTasks(orderedIds: number[]): Promise<void>
+  reorderSubTasks(orderedIds: number[]): Promise<void>
   getSubTasks(parentId: number): Promise<Task[]>
   createSubTask(content: string, parentId: number): Promise<Task>
   batchCompleteSubTasks(parentId: number): Promise<number>

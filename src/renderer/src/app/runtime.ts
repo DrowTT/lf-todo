@@ -77,6 +77,7 @@ function createUnavailableTaskRepository(): TaskRepository {
       'taskRepository.clearCompletedTasks'
     ),
     reorderTasks: createUnavailableAction<[number[]], void>('taskRepository.reorderTasks'),
+    reorderSubTasks: createUnavailableAction<[number[]], void>('taskRepository.reorderSubTasks'),
     getSubTasks: createUnavailableAction<[number], Task[]>('taskRepository.getSubTasks'),
     createSubTask: createUnavailableAction<[string, number], Task>('taskRepository.createSubTask'),
     batchCompleteSubTasks: createUnavailableAction<[number], number>(

@@ -15,7 +15,8 @@ const SUBTASK_OPERATION_TYPES = {
   create: 'subtask:create',
   toggle: 'subtask:toggle',
   delete: 'subtask:delete',
-  update: 'subtask:update'
+  update: 'subtask:update',
+  reorder: 'subtask:reorder'
 } as const
 
 const expandedKey = (categoryId: number) => `lf-todo:expanded-${categoryId}`
@@ -71,6 +72,24 @@ export const useSubTaskStore = defineStore('subTask', () => {
     parentTask.subtask_done = subTasks.filter((subTask) => subTask.is_completed).length
   }
 
+  function replaceSubTasks(parentId: number, nextSubTasks: Task[]) {
+    subTasksMap.value[parentId] = nextSubTasks
+  }
+
+  function restoreSubTaskOrder(parentId: number, orderedIds: number[]) {
+    const currentSubTasks = subTasksMap.value[parentId]
+    if (!currentSubTasks) return
+
+    const subTasksById = new Map(currentSubTasks.map((task) => [task.id, task]))
+    const restoredSubTasks = orderedIds
+      .map((id) => subTasksById.get(id))
+      .filter((task): task is Task => Boolean(task))
+
+    if (restoredSubTasks.length === currentSubTasks.length) {
+      subTasksMap.value[parentId] = restoredSubTasks
+    }
+  }
+
   function captureParentTaskState(parentId: number): ParentTaskSnapshot | null {
     const taskStore = useTaskStore()
     const parentTask = taskStore.tasks.find((task) => task.id === parentId)
@@ -121,6 +140,10 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
   function isSubTaskToggling(id: number) {
     return hasPendingOperation({ type: SUBTASK_OPERATION_TYPES.toggle, entityId: id })
+  }
+
+  function isSubTaskReordering(parentId: number) {
+    return hasPendingOperation({ type: SUBTASK_OPERATION_TYPES.reorder, entityId: parentId })
   }
 
   function isSubTaskBusy(id: number) {
@@ -395,6 +418,32 @@ export const useSubTaskStore = defineStore('subTask', () => {
     })
   }
 
+  async function reorderSubTasks(parentId: number, previousOrderedIds: number[]) {
+    const currentSubTasks = subTasksMap.value[parentId]
+    if (!currentSubTasks) return false
+
+    const orderedIds = currentSubTasks.map((task) => task.id)
+
+    if (
+      previousOrderedIds.length === orderedIds.length &&
+      previousOrderedIds.every((taskId, index) => taskId === orderedIds[index])
+    ) {
+      return true
+    }
+
+    return runSubTaskAction({
+      key: buildPendingOperationKey(SUBTASK_OPERATION_TYPES.reorder, parentId),
+      type: SUBTASK_OPERATION_TYPES.reorder,
+      entityId: parentId,
+      execute: () => taskRepository.reorderSubTasks(orderedIds),
+      rollback: () => {
+        restoreSubTaskOrder(parentId, previousOrderedIds)
+      },
+      errorMessage: '保存子任务排序失败，请重试',
+      logPrefix: '[subTaskStore] reorderSubTasks failed'
+    })
+  }
+
   function removeTask(id: number, categoryId: number) {
     delete subTasksMap.value[id]
 
@@ -442,6 +491,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     fetchExpandedSubTasks,
     toggleExpand,
     syncParentTaskStats,
+    replaceSubTasks,
     captureParentTaskState,
     restoreParentTaskState,
     addSubTask,
@@ -449,6 +499,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     deleteSubTask,
     restoreDeletedSubTask,
     updateSubTaskContent,
+    reorderSubTasks,
     removeTask,
     removeCompletedTasks,
     restoreTaskBundle,
@@ -456,6 +507,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     isSubTaskDeleting,
     isSubTaskSaving,
     isSubTaskToggling,
+    isSubTaskReordering,
     isSubTaskBusy
   }
 })

@@ -5,7 +5,7 @@ import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from '../composables/useHoverTarget'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import { useSubTaskStore } from '../store/subtask'
-import { Check, X } from 'lucide-vue-next'
+import { Check, GripVertical, X } from 'lucide-vue-next'
 
 const { confirm } = useAppRuntime().confirm
 const { setHoverSubTask, setHoverTask } = useHoverTarget()
@@ -14,11 +14,14 @@ const subTaskStore = useSubTaskStore()
 const props = defineProps<{
   task: Task
   parentId: number
+  reordering?: boolean
 }>()
 
 const isDeleting = computed(() => subTaskStore.isSubTaskDeleting(props.task.id))
 const isSaving = computed(() => subTaskStore.isSubTaskSaving(props.task.id))
-const isBusy = computed(() => subTaskStore.isSubTaskBusy(props.task.id))
+const isBusy = computed(
+  () => Boolean(props.reordering) || subTaskStore.isSubTaskBusy(props.task.id)
+)
 
 const handleToggle = () => {
   void subTaskStore.toggleSubTask(props.task.id, props.parentId)
@@ -54,6 +57,10 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
     @mouseenter="onSubMouseEnter"
     @mouseleave="onSubMouseLeave"
   >
+    <div class="sub__drag-handle" :class="{ 'sub__drag-handle--hidden': isEditing }">
+      <GripVertical :size="12" />
+    </div>
+
     <button
       class="sub__check"
       :class="{ 'sub__check--on': task.is_completed }"
@@ -98,14 +105,15 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
 .sub {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 3px;
+  padding: 5px 6px 5px 5px;
   border-radius: 6px;
   transition: background-color 0.15s ease;
 
   &:hover {
     background: $accent-soft;
 
+    .sub__drag-handle,
     .sub__del {
       opacity: 1;
     }
@@ -136,13 +144,62 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
   &--busy {
     opacity: 0.82;
   }
+
+  &--dragging {
+    opacity: 0.95;
+    transform: rotate(1deg) scale(1.01);
+    box-shadow:
+      0 6px 18px rgba(37, 99, 235, 0.12),
+      0 0 0 1px rgba($accent-color, 0.18);
+    background: $bg-elevated;
+    z-index: 5;
+
+    .sub__drag-handle {
+      opacity: 1 !important;
+      color: $accent-color;
+      cursor: grabbing;
+    }
+  }
+
+  &--ghost {
+    opacity: 0.3;
+    background: rgba($accent-color, 0.04);
+  }
+}
+
+.sub__drag-handle {
+  flex-shrink: 0;
+  width: 10px;
+  height: 18px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $text-muted;
+  opacity: 0;
+  cursor: grab;
+  transition: all 0.15s ease;
+  border-radius: 4px;
+
+  &:hover {
+    color: $accent-color;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &--hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 
 .sub__check {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  margin-top: 2px;
+  margin-top: 1px;
   border: 1.5px solid $border-light;
   border-radius: 4px;
   cursor: pointer;

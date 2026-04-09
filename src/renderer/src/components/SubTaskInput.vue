@@ -39,7 +39,8 @@ watch(content, (value) => {
 
 <template>
   <div class="sub-add">
-    <span class="sub-add__icon">+</span>
+    <div class="sub-add__drag-spacer" aria-hidden="true"></div>
+    <span class="sub-add__check-placeholder" aria-hidden="true">+</span>
     <textarea
       ref="textareaRef"
       v-model="content"
@@ -60,23 +61,35 @@ watch(content, (value) => {
 
 .sub-add {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 5px 6px 5px 5px;
 }
 
-.sub-add__icon {
+.sub-add__drag-spacer {
   flex-shrink: 0;
-  font-size: $font-lg;
+  width: 10px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.sub-add__check-placeholder {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: $text-muted;
+  font-size: 15px;
   line-height: 1;
   user-select: none;
-  width: 16px;
-  text-align: center;
 }
 
 .sub-add__input {
   flex: 1;
+  display: block;
   background: transparent;
   border: none;
   outline: none;
@@ -86,6 +99,8 @@ watch(content, (value) => {
   font-size: $font-sm;
   font-family: inherit;
   padding: 0;
+  position: relative;
+  top: 2px;
   line-height: 1.55;
   transition: color 0.15s ease;
 

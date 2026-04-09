@@ -37,6 +37,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async reorderTasks(orderedIds) {
       await api.db.reorderTasks(orderedIds)
     },
+    async reorderSubTasks(orderedIds) {
+      await api.db.reorderSubTasks(orderedIds)
+    },
     async getSubTasks(parentId) {
       return parseTasks(await api.db.getSubTasks(parentId), 'db:get-subtasks.response')
     },
