@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { TaskCreateInput, TaskUpdate } from '../shared/types/models'
 import {
   parseAppInfo,
   parseAutoCleanupConfig,
@@ -129,14 +130,9 @@ const api = {
           expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 })
         )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
-    createTask: (content: string, categoryId: number) =>
-      invokeWithPayload(
-        'db:create-task',
-        { content, categoryId },
-        parseCreateTaskRequest,
-        parseTask
-      ),
-    updateTask: (id: number, updates: unknown) =>
+    createTask: (input: TaskCreateInput) =>
+      invokeWithPayload('db:create-task', input, parseCreateTaskRequest, parseTask),
+    updateTask: (id: number, updates: TaskUpdate) =>
       invokeVoidWithPayload('db:update-task', { id, updates }, parseUpdateTaskRequest),
     deleteTask: (id: number) =>
       ipcRenderer

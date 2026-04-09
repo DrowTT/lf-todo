@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
 import * as db from './db/database'
-import type { Task } from './db/database'
 import {
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
@@ -33,14 +32,11 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle('db:create-task', (_event, payload: unknown) => {
     const request = parseCreateTaskRequest(payload, 'db:create-task.request')
-    return db.createTask(request.content, request.categoryId)
+    return db.createTask(request)
   })
   ipcMain.handle('db:update-task', (_event, payload: unknown) => {
     const request = parseUpdateTaskRequest(payload, 'db:update-task.request')
-    return db.updateTask(
-      request.id,
-      request.updates as Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
-    )
+    return db.updateTask(request.id, request.updates)
   })
   ipcMain.handle('db:delete-task', (_event, id: unknown) =>
     db.deleteTask(expectInteger(id, 'db:delete-task.request.id', { min: 1 }))

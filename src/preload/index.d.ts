@@ -7,6 +7,8 @@ import type {
   PomodoroSessionState,
   SettingsData,
   Task,
+  TaskCreateInput,
+  TaskUpdate,
   UpdateStatusData
 } from '../shared/types/models'
 
@@ -28,11 +30,8 @@ interface API {
     updateCategory: (id: number, name: string) => Promise<void>
     deleteCategory: (id: number) => Promise<void>
     getTasks: (categoryId: number) => Promise<Task[]>
-    createTask: (content: string, categoryId: number) => Promise<Task>
-    updateTask: (
-      id: number,
-      updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
-    ) => Promise<void>
+    createTask: (input: TaskCreateInput) => Promise<Task>
+    updateTask: (id: number, updates: TaskUpdate) => Promise<void>
     deleteTask: (id: number) => Promise<void>
     deleteTasks: (ids: number[]) => Promise<void>
     toggleTaskComplete: (id: number) => Promise<void>

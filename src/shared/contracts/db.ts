@@ -1,4 +1,4 @@
-import type { TaskUpdate } from '../types/models'
+import type { TaskCreateInput, TaskDuePrecision, TaskDueState, TaskUpdate } from '../types/models'
 import {
   assertAllowedKeys,
   expectArray,
@@ -8,10 +8,7 @@ import {
   expectString
 } from './utils'
 
-export interface CreateTaskRequest {
-  content: string
-  categoryId: number
-}
+export type CreateTaskRequest = TaskCreateInput
 
 export interface CreateSubTaskRequest {
   content: string
@@ -50,7 +47,11 @@ function parseOrderedIds(value: unknown, label: string): number[] {
 
 export function parseCreateTaskRequest(value: unknown, label = 'payload'): CreateTaskRequest {
   const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['content', 'categoryId'], label)
+  assertAllowedKeys(record, ['content', 'categoryId', 'due_at', 'due_precision'], label)
+  const dueState = parseTaskDueStateRecord(record, label, {
+    dueAtKey: 'due_at',
+    duePrecisionKey: 'due_precision'
+  }) ?? { due_at: null, due_precision: null }
 
   return {
     content: expectString(record.content, `${label}.content`, {
@@ -58,7 +59,8 @@ export function parseCreateTaskRequest(value: unknown, label = 'payload'): Creat
       minLength: 1,
       maxLength: 100
     }),
-    categoryId: expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 })
+    categoryId: expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 }),
+    ...dueState
   }
 }
 
@@ -78,7 +80,7 @@ export function parseCreateSubTaskRequest(value: unknown, label = 'payload'): Cr
 
 export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
   const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['content', 'is_completed', 'order_index'], label)
+  assertAllowedKeys(record, ['content', 'is_completed', 'order_index', 'due_at', 'due_precision'], label)
 
   const updates: TaskUpdate = {}
 
@@ -96,6 +98,17 @@ export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
 
   if ('order_index' in record) {
     updates.order_index = expectInteger(record.order_index, `${label}.order_index`, { min: 0 })
+  }
+
+  const dueState = parseTaskDueStateRecord(record, label, {
+    dueAtKey: 'due_at',
+    duePrecisionKey: 'due_precision',
+    optional: true
+  })
+
+  if (dueState) {
+    updates.due_at = dueState.due_at
+    updates.due_precision = dueState.due_precision
   }
 
   if (Object.keys(updates).length === 0) {
@@ -144,4 +157,64 @@ export function parseReorderTasksRequest(value: unknown, label = 'payload'): Reo
   return {
     orderedIds: parseOrderedIds(record.orderedIds, `${label}.orderedIds`)
   }
+}
+
+function parseTaskDueStateRecord(
+  record: Record<string, unknown>,
+  label: string,
+  options: {
+    dueAtKey: string
+    duePrecisionKey: string
+    optional?: boolean
+  }
+): TaskDueState | null {
+  const hasDueAt = options.dueAtKey in record
+  const hasDuePrecision = options.duePrecisionKey in record
+
+  if (hasDueAt !== hasDuePrecision) {
+    throw new Error(`${label} must include ${options.dueAtKey} and ${options.duePrecisionKey} together`)
+  }
+
+  if (!hasDueAt) {
+    if (options.optional) {
+      return null
+    }
+
+    return {
+      due_at: null,
+      due_precision: null
+    }
+  }
+
+  const rawDueAt = record[options.dueAtKey]
+  const rawDuePrecision = record[options.duePrecisionKey]
+
+  if (rawDueAt === null || rawDuePrecision === null) {
+    if (rawDueAt !== null || rawDuePrecision !== null) {
+      throw new Error(`${label} must clear ${options.dueAtKey} and ${options.duePrecisionKey} together`)
+    }
+
+    return {
+      due_at: null,
+      due_precision: null
+    }
+  }
+
+  return {
+    due_at: expectInteger(rawDueAt, `${label}.${options.dueAtKey}`, { min: 0 }),
+    due_precision: parseTaskDuePrecision(
+      rawDuePrecision,
+      `${label}.${options.duePrecisionKey}`
+    )
+  }
+}
+
+function parseTaskDuePrecision(value: unknown, label: string): TaskDuePrecision {
+  const precision = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
+
+  if (precision === 'date' || precision === 'datetime') {
+    return precision
+  }
+
+  throw new Error(`${label} must be "date" or "datetime"`)
 }

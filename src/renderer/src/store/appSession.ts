@@ -1,11 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import type { TaskDueState } from '../../../shared/types/models'
 import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 
 interface SessionSnapshot {
   settingsPanelOpen: boolean
   currentMainView: 'tasks' | 'pomodoro' | 'settings'
   taskDrafts: Record<string, string>
+  taskDueDrafts: Record<string, TaskDueState>
   subTaskDrafts: Record<string, string>
 }
 
@@ -23,7 +25,47 @@ function loadSnapshot(): SessionSnapshot {
           ? 'settings'
           : 'tasks',
     taskDrafts: parsed.taskDrafts ?? {},
+    taskDueDrafts: normalizeTaskDueDrafts(parsed.taskDueDrafts),
     subTaskDrafts: parsed.subTaskDrafts ?? {}
+  }
+}
+
+function normalizeTaskDueDrafts(value: unknown): Record<string, TaskDueState> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const next: Record<string, TaskDueState> = {}
+
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') {
+      continue
+    }
+
+    const record = raw as Record<string, unknown>
+    const dueAt = typeof record.due_at === 'number' ? record.due_at : null
+    const duePrecision =
+      record.due_precision === 'date' || record.due_precision === 'datetime'
+        ? record.due_precision
+        : null
+
+    if ((dueAt === null) !== (duePrecision === null)) {
+      continue
+    }
+
+    next[key] = {
+      due_at: dueAt,
+      due_precision: duePrecision
+    }
+  }
+
+  return next
+}
+
+function cloneTaskDueState(value: TaskDueState): TaskDueState {
+  return {
+    due_at: value.due_at,
+    due_precision: value.due_precision
   }
 }
 
@@ -32,11 +74,15 @@ export const useAppSessionStore = defineStore('appSession', () => {
   const settingsPanelOpen = ref(false)
   const currentMainView = ref<'tasks' | 'pomodoro' | 'settings'>('tasks')
   const taskDrafts = ref<Record<string, string>>({})
+  const taskDueDrafts = ref<Record<string, TaskDueState>>({})
   const subTaskDrafts = ref<Record<string, string>>({})
 
   const hasDrafts = computed(
     () =>
       Object.values(taskDrafts.value).some(Boolean) ||
+      Object.values(taskDueDrafts.value).some(
+        (draft) => draft.due_at !== null && draft.due_precision !== null
+      ) ||
       Object.values(subTaskDrafts.value).some(Boolean)
   )
 
@@ -45,6 +91,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
       settingsPanelOpen: settingsPanelOpen.value,
       currentMainView: currentMainView.value,
       taskDrafts: taskDrafts.value,
+      taskDueDrafts: taskDueDrafts.value,
       subTaskDrafts: subTaskDrafts.value
     }
     writeStoredJson(STORAGE_KEY, snapshot)
@@ -57,6 +104,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     settingsPanelOpen.value = snapshot.settingsPanelOpen
     currentMainView.value = snapshot.currentMainView
     taskDrafts.value = snapshot.taskDrafts
+    taskDueDrafts.value = snapshot.taskDueDrafts
     subTaskDrafts.value = snapshot.subTaskDrafts
     hydrated.value = true
   }
@@ -95,6 +143,40 @@ export const useAppSessionStore = defineStore('appSession', () => {
     setTaskDraft(categoryId, '')
   }
 
+  function getTaskDueDraft(categoryId: number | null): TaskDueState {
+    if (!categoryId) {
+      return { due_at: null, due_precision: null }
+    }
+
+    return cloneTaskDueState(
+      taskDueDrafts.value[String(categoryId)] ?? { due_at: null, due_precision: null }
+    )
+  }
+
+  function setTaskDueDraft(categoryId: number | null, dueState: TaskDueState) {
+    if (!categoryId) return
+
+    const key = String(categoryId)
+    const hasDueDate = dueState.due_at !== null && dueState.due_precision !== null
+
+    if (hasDueDate) {
+      taskDueDrafts.value = {
+        ...taskDueDrafts.value,
+        [key]: cloneTaskDueState(dueState)
+      }
+    } else if (key in taskDueDrafts.value) {
+      const next = { ...taskDueDrafts.value }
+      delete next[key]
+      taskDueDrafts.value = next
+    }
+
+    persist()
+  }
+
+  function clearTaskDueDraft(categoryId: number | null) {
+    setTaskDueDraft(categoryId, { due_at: null, due_precision: null })
+  }
+
   function getSubTaskDraft(parentId: number) {
     return subTaskDrafts.value[String(parentId)] ?? ''
   }
@@ -121,6 +203,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     settingsPanelOpen,
     currentMainView,
     taskDrafts,
+    taskDueDrafts,
     subTaskDrafts,
     hasDrafts,
     hydrate,
@@ -129,6 +212,9 @@ export const useAppSessionStore = defineStore('appSession', () => {
     getTaskDraft,
     setTaskDraft,
     clearTaskDraft,
+    getTaskDueDraft,
+    setTaskDueDraft,
+    clearTaskDueDraft,
     getSubTaskDraft,
     setSubTaskDraft,
     clearSubTaskDraft

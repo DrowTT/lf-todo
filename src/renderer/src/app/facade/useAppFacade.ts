@@ -1,4 +1,5 @@
 import { storeToRefs } from 'pinia'
+import type { TaskDueState } from '../../../../shared/types/models'
 import { useCategoryStore } from '../../store/category'
 import { useSubTaskStore } from '../../store/subtask'
 import { useTaskStore } from '../../store/task'
@@ -92,11 +93,11 @@ export function useAppFacade() {
     await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
   }
 
-  async function addTask(content: string) {
+  async function addTask(content: string, dueState?: TaskDueState) {
     const categoryId = categoryStore.currentCategoryId
     if (!categoryId) return false
 
-    return await taskStore.addTask(content, categoryId)
+    return await taskStore.addTask(content, categoryId, dueState)
   }
 
   async function toggleTask(id: number) {

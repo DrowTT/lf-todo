@@ -7,6 +7,7 @@ import type {
   PomodoroSessionState,
   SettingsData,
   Task,
+  TaskDuePrecision,
   UpdateStatusData
 } from '../types/models'
 import {
@@ -46,11 +47,23 @@ export function parseTask(value: unknown, label = 'task'): Task {
       'order_index',
       'created_at',
       'parent_id',
+      'due_at',
+      'due_precision',
       'subtask_total',
       'subtask_done'
     ],
     label
   )
+
+  const dueAt =
+    record.due_at === null || record.due_at === undefined
+      ? null
+      : expectInteger(record.due_at, `${label}.due_at`, { min: 0 })
+  const duePrecision = parseTaskDuePrecision(record.due_precision, `${label}.due_precision`)
+
+  if ((dueAt === null) !== (duePrecision === null)) {
+    throw new Error(`${label} must include due_at and due_precision together`)
+  }
 
   return {
     id: expectInteger(record.id, `${label}.id`, { min: 1 }),
@@ -67,9 +80,25 @@ export function parseTask(value: unknown, label = 'task'): Task {
       record.parent_id === null
         ? null
         : expectInteger(record.parent_id, `${label}.parent_id`, { min: 1 }),
+    due_at: dueAt,
+    due_precision: duePrecision,
     subtask_total: expectInteger(record.subtask_total, `${label}.subtask_total`, { min: 0 }),
     subtask_done: expectInteger(record.subtask_done, `${label}.subtask_done`, { min: 0 })
   }
+}
+
+function parseTaskDuePrecision(value: unknown, label: string): TaskDuePrecision | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const precision = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
+
+  if (precision === 'date' || precision === 'datetime') {
+    return precision
+  }
+
+  throw new Error(`${label} must be "date" or "datetime"`)
 }
 
 export function parseTasks(value: unknown, label = 'tasks'): Task[] {

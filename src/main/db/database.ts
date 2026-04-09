@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import path from 'path'
+import type {
+  TaskCreateInput,
+  TaskDuePrecision,
+  TaskDueState,
+  TaskUpdate
+} from '../../shared/types/models'
 
 let db: Database.Database | null = null
 
@@ -54,6 +60,8 @@ const migrations: Migration[] = [
         order_index INTEGER DEFAULT 0,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        due_at INTEGER,
+        due_precision TEXT,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
       )
     `
@@ -70,6 +78,16 @@ const migrations: Migration[] = [
       'CREATE INDEX IF NOT EXISTS idx_tasks_category_parent ON tasks(category_id, parent_id)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_parent_completed ON tasks(parent_id, is_completed)'
     ].join(';')
+  },
+  {
+    version: 5,
+    description: 'add due_at column to tasks',
+    up: `ALTER TABLE tasks ADD COLUMN due_at INTEGER`
+  },
+  {
+    version: 6,
+    description: 'add due_precision column to tasks',
+    up: `ALTER TABLE tasks ADD COLUMN due_precision TEXT`
   }
 ]
 
@@ -141,9 +159,29 @@ export function initDatabase(): void {
     getSubTasks: db.prepare(
       'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
     ),
+    getDueReminderTasks: db.prepare(`
+      SELECT
+        t.id,
+        t.content,
+        t.category_id,
+        c.name AS category_name,
+        t.due_at,
+        t.due_precision
+      FROM tasks t
+      INNER JOIN categories c ON c.id = t.category_id
+      WHERE
+        t.parent_id IS NULL
+        AND t.is_completed = 0
+        AND t.due_at IS NOT NULL
+        AND t.due_precision IS NOT NULL
+      ORDER BY t.due_at ASC, t.id ASC
+    `),
     getTaskById: db.prepare('SELECT * FROM tasks WHERE id = ?'),
     // Task 写入
-    createTask: db.prepare('INSERT INTO tasks (content, category_id) VALUES (?, ?)'),
+    createTask: db.prepare(`
+      INSERT INTO tasks (content, category_id, due_at, due_precision)
+      VALUES (?, ?, ?, ?)
+    `),
     createSubTask: db.prepare(`
       INSERT INTO tasks (content, category_id, parent_id, order_index)
       VALUES (
@@ -156,6 +194,8 @@ export function initDatabase(): void {
     updateContent: db.prepare('UPDATE tasks SET content = ? WHERE id = ?'),
     updateCompleted: db.prepare('UPDATE tasks SET is_completed = ? WHERE id = ?'),
     updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?'),
+    updateDueAt: db.prepare('UPDATE tasks SET due_at = ? WHERE id = ?'),
+    updateDuePrecision: db.prepare('UPDATE tasks SET due_precision = ? WHERE id = ?'),
     deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
     toggleTaskComplete: db.prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?'),
     batchCompleteSubTasks: db.prepare(
@@ -212,7 +252,7 @@ export function deleteCategory(id: number): void {
 
 // ==================== Task CRUD ====================
 
-export interface Task {
+export interface Task extends TaskDueState {
   id: number
   content: string
   /** SQLite 存 0/1，查询出口统一映射为 boolean（优化 #1） */
@@ -224,6 +264,15 @@ export interface Task {
   // 子任务统计（仅顶级任务具备）
   subtask_total: number
   subtask_done: number
+}
+
+export interface DueReminderTask {
+  id: number
+  content: string
+  category_id: number
+  category_name: string
+  due_at: number
+  due_precision: TaskDuePrecision
 }
 
 /**
@@ -239,6 +288,8 @@ function mapTask(raw: Record<string, unknown>): Task {
     order_index: raw.order_index as number,
     created_at: raw.created_at as number,
     parent_id: (raw.parent_id as number | null | undefined) ?? null,
+    due_at: (raw.due_at as number | null | undefined) ?? null,
+    due_precision: (raw.due_precision as Task['due_precision'] | null | undefined) ?? null,
     subtask_total: typeof raw.subtask_total === 'number' ? raw.subtask_total : 0,
     subtask_done: typeof raw.subtask_done === 'number' ? raw.subtask_done : 0
   }
@@ -252,6 +303,17 @@ export function getSubTasks(parentId: number): Task[] {
   return (getStmts().getSubTasks.all(parentId) as Record<string, unknown>[]).map(mapTask)
 }
 
+export function getDueReminderTasks(): DueReminderTask[] {
+  return (getStmts().getDueReminderTasks.all() as Record<string, unknown>[]).map((raw) => ({
+    id: raw.id as number,
+    content: raw.content as string,
+    category_id: raw.category_id as number,
+    category_name: raw.category_name as string,
+    due_at: raw.due_at as number,
+    due_precision: raw.due_precision as TaskDuePrecision
+  }))
+}
+
 /**
  * 创建子任务 — 用子查询继承父任务的 category_id，避免额外 SELECT
  */
@@ -260,8 +322,13 @@ export function createSubTask(content: string, parentId: number): Task {
   return getTaskById(info.lastInsertRowid as number)!
 }
 
-export function createTask(content: string, categoryId: number): Task {
-  const info = getStmts().createTask.run(content, categoryId)
+export function createTask(input: TaskCreateInput): Task {
+  const info = getStmts().createTask.run(
+    input.content,
+    input.categoryId,
+    input.due_at,
+    input.due_precision
+  )
   return getTaskById(info.lastInsertRowid as number)!
 }
 
@@ -282,10 +349,7 @@ function getStmts() {
 /**
  * 更新任务（按字段拆分为独立 prepared statement）
  */
-export function updateTask(
-  id: number,
-  updates: Partial<Pick<Task, 'content' | 'is_completed' | 'order_index'>>
-): void {
+export function updateTask(id: number, updates: TaskUpdate): void {
   const s = getStmts()
   if (updates.content !== undefined) {
     s.updateContent.run(updates.content, id)
@@ -296,6 +360,12 @@ export function updateTask(
   }
   if (updates.order_index !== undefined) {
     s.updateOrderIndex.run(updates.order_index, id)
+  }
+  if (updates.due_at !== undefined) {
+    s.updateDueAt.run(updates.due_at, id)
+  }
+  if (updates.due_precision !== undefined) {
+    s.updateDuePrecision.run(updates.due_precision, id)
   }
 }
 

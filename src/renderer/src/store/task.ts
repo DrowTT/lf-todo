@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Task } from '../../../shared/types/models'
+import type { Task, TaskDueState } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
 import {
   buildPendingOperationKey,
@@ -18,6 +18,11 @@ const TASK_OPERATION_TYPES = {
   clearCompleted: 'task:clear-completed',
   reorder: 'task:reorder'
 } as const
+
+const EMPTY_TASK_DUE_STATE: TaskDueState = {
+  due_at: null,
+  due_precision: null
+}
 
 export interface DeletedTaskSnapshot {
   task: Task
@@ -155,12 +160,22 @@ export const useTaskStore = defineStore('task', () => {
     tasks.value = []
   }
 
-  async function addTask(content: string, categoryId: number) {
+  async function addTask(
+    content: string,
+    categoryId: number,
+    dueState: TaskDueState = EMPTY_TASK_DUE_STATE
+  ) {
     return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.create, categoryId),
       type: TASK_OPERATION_TYPES.create,
       entityId: categoryId,
-      execute: () => taskRepository.createTask(content, categoryId),
+      execute: () =>
+        taskRepository.createTask({
+          content,
+          categoryId,
+          due_at: dueState.due_at,
+          due_precision: dueState.due_precision
+        }),
       onSuccess: (newTask) => {
         tasks.value.unshift(newTask)
         _adjustPendingCount(categoryId, 1)
@@ -290,8 +305,12 @@ export const useTaskStore = defineStore('task', () => {
   ) {
     const subTaskStore = useSubTaskStore()
     const createdTask = await taskRepository.createTask(
-      snapshot.task.content,
-      snapshot.task.category_id
+      {
+        content: snapshot.task.content,
+        categoryId: snapshot.task.category_id,
+        due_at: snapshot.task.due_at,
+        due_precision: snapshot.task.due_precision
+      }
     )
 
     if (snapshot.task.is_completed) {
@@ -359,6 +378,39 @@ export const useTaskStore = defineStore('task', () => {
       },
       errorMessage: '保存任务失败，请重试',
       logPrefix: '[taskStore] updateTaskContent failed'
+    })
+  }
+
+  async function updateTaskDue(id: number, dueState: TaskDueState) {
+    const task = tasks.value.find((item) => item.id === id)
+    if (!task) return false
+
+    const previousDueAt = task.due_at
+    const previousDuePrecision = task.due_precision
+
+    if (previousDueAt === dueState.due_at && previousDuePrecision === dueState.due_precision) {
+      return true
+    }
+
+    return runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.update, id),
+      type: TASK_OPERATION_TYPES.update,
+      entityId: id,
+      before: () => {
+        task.due_at = dueState.due_at
+        task.due_precision = dueState.due_precision
+      },
+      execute: () =>
+        taskRepository.updateTask(id, {
+          due_at: dueState.due_at,
+          due_precision: dueState.due_precision
+        }),
+      rollback: () => {
+        task.due_at = previousDueAt
+        task.due_precision = previousDuePrecision
+      },
+      errorMessage: '保存截止日期失败，请重试',
+      logPrefix: '[taskStore] updateTaskDue failed'
     })
   }
 
@@ -461,6 +513,7 @@ export const useTaskStore = defineStore('task', () => {
     deleteTask,
     restoreDeletedTask,
     updateTaskContent,
+    updateTaskDue,
     clearCompletedTasks,
     restoreClearedCompleted,
     removePendingCount,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
-import type { Task } from '../../../shared/types/models'
+import type { Task, TaskDueState } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 // lucide-vue-next 中无专用番茄图标，改用 Timer 代替 Clock3 以区分
 import { useAppRuntime } from '../app/runtime'
@@ -13,6 +13,7 @@ import { useSubTaskStore } from '../store/subtask'
 import { useTaskStore } from '../store/task'
 import SubTaskInput from './SubTaskInput.vue'
 import SubTaskItem from './SubTaskItem.vue'
+import TaskDueDatePicker from './TaskDueDatePicker.vue'
 import { Check, ChevronRight, GripVertical, Play, Timer, Trash2 } from 'lucide-vue-next'
 
 const app = useAppFacade()
@@ -40,6 +41,8 @@ const isDeleting = computed(() => taskStore.isTaskDeleting(props.task.id))
 const isSaving = computed(() => taskStore.isTaskSaving(props.task.id))
 const isBusy = computed(() => taskStore.isTaskBusy(props.task.id))
 const isSubTaskReordering = ref(false)
+const isHovered = ref(false)
+const isDuePickerOpen = ref(false)
 const hasBusySubTasks = computed(() =>
   subTasks.value.some((subTask) => subTaskStore.isSubTaskBusy(subTask.id))
 )
@@ -109,8 +112,46 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     }
   )
 
-const onCardMouseEnter = () => setHoverTask(props.task.id)
-const onCardMouseLeave = () => clearHover()
+const onCardMouseEnter = () => {
+  isHovered.value = true
+  setHoverTask(props.task.id)
+}
+
+const onCardMouseLeave = () => {
+  isHovered.value = false
+  clearHover()
+}
+const hasDueDate = computed(
+  () => props.task.due_at !== null && props.task.due_precision !== null
+)
+const shouldShowDuePicker = computed(
+  () => isEditing.value || hasDueDate.value || isHovered.value || isDuePickerOpen.value
+)
+const shouldAlwaysShowEmptyDuePicker = computed(
+  () =>
+    !subTaskProgress.value &&
+    !hasDueDate.value &&
+    !isSaving.value &&
+    !isDeleting.value
+)
+const shouldRenderDuePicker = computed(
+  () => shouldShowDuePicker.value || shouldAlwaysShowEmptyDuePicker.value
+)
+const hasMetaContent = computed(
+  () =>
+    shouldShowDuePicker.value ||
+    Boolean(subTaskProgress.value) ||
+    isSaving.value ||
+    isDeleting.value
+)
+
+const handleDueApply = (value: TaskDueState) => {
+  void taskStore.updateTaskDue(props.task.id, value)
+}
+
+const handleDueOpenChange = (value: boolean) => {
+  isDuePickerOpen.value = value
+}
 
 const restoreSubTaskOrder = (orderedIds: number[]) => {
   const subTasksById = new Map(subTasks.value.map((subTask) => [subTask.id, subTask]))
@@ -195,25 +236,39 @@ const onSubTaskDragEnd = async () => {
         <Check v-if="task.is_completed" class="card__check-svg" :size="12" />
       </button>
 
-      <textarea
-        v-if="isEditing"
-        ref="editInputRef"
-        v-model="editContent"
-        class="card__edit-area"
-        maxlength="100"
-        rows="1"
-        @keydown.enter.exact.prevent="saveEdit"
-        @keyup.escape="cancelEdit"
-        @blur="onBlur"
-        @input="adjustHeight"
-      />
-      <div v-else class="card__text" @dblclick="handleDblClick">
-        {{ task.content }}
-        <span v-if="subTaskProgress" class="card__progress">
-          {{ subTaskProgress.done }}/{{ subTaskProgress.total }}
-        </span>
-        <span v-if="isSaving" class="card__status">保存中</span>
-        <span v-else-if="isDeleting" class="card__status card__status--danger">删除中</span>
+      <div class="card__content">
+        <textarea
+          v-if="isEditing"
+          ref="editInputRef"
+          v-model="editContent"
+          class="card__edit-area"
+          maxlength="100"
+          rows="1"
+          @keydown.enter.exact.prevent="saveEdit"
+          @keyup.escape="cancelEdit"
+          @blur="onBlur"
+          @input="adjustHeight"
+        />
+        <div v-else class="card__text" @dblclick="handleDblClick">
+          {{ task.content }}
+        </div>
+        <div v-if="hasMetaContent || shouldAlwaysShowEmptyDuePicker" class="card__meta">
+          <span v-if="subTaskProgress" class="card__progress">
+            {{ subTaskProgress.done }}/{{ subTaskProgress.total }}
+          </span>
+          <TaskDueDatePicker
+            v-if="shouldRenderDuePicker"
+            :due-state="{ due_at: task.due_at, due_precision: task.due_precision }"
+            :completed="task.is_completed"
+            variant="meta"
+            empty-label="+ 截止日期"
+            :disabled="isBusy"
+            @apply="handleDueApply"
+            @open-change="handleDueOpenChange"
+          />
+          <span v-if="isSaving" class="card__status">保存中</span>
+          <span v-else-if="isDeleting" class="card__status card__status--danger">删除中</span>
+        </div>
       </div>
 
       <span
@@ -414,10 +469,15 @@ const onSubTaskDragEnd = async () => {
   align-items: center;
   justify-content: center;
   background: $bg-elevated;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.18s ease;
   padding: 0;
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.card__check--on) {
     border-color: $accent-color;
     background: $accent-soft;
     box-shadow: 0 0 0 4px rgba($accent-color, 0.08);
@@ -457,8 +517,12 @@ const onSubTaskDragEnd = async () => {
   color: #fff;
 }
 
-.card__text {
+.card__content {
   flex: 1;
+  min-width: 0;
+}
+
+.card__text {
   font-size: $font-lg;
   font-weight: 450;
   color: $text-primary;
@@ -476,19 +540,31 @@ const onSubTaskDragEnd = async () => {
   }
 }
 
+.card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 20px;
+  margin-top: 8px;
+  margin-left: -34px;
+  width: calc(100% + 34px);
+}
+
 .card__progress {
   display: inline-flex;
   align-items: center;
+  height: 20px;
+  box-sizing: border-box;
   font-size: $font-xs;
   font-weight: 600;
   color: $accent-color;
   background: $accent-soft;
   border-radius: 100px;
-  padding: 2px 10px;
+  padding: 0 10px;
   letter-spacing: 0.4px;
-  line-height: 1.4;
+  line-height: 1;
   flex-shrink: 0;
-  margin-left: 6px;
 }
 
 /* 番茄计数徽章 — 使用橙红色，与子任务进度的蓝色 pill 明确区分 */
@@ -532,7 +608,6 @@ const onSubTaskDragEnd = async () => {
 .card__status {
   display: inline-flex;
   align-items: center;
-  margin-left: 8px;
   font-size: $font-xs;
   color: $text-muted;
 
@@ -543,6 +618,8 @@ const onSubTaskDragEnd = async () => {
 
 .card__edit-area {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   background: transparent;
   color: $text-primary;
   font-size: $font-lg;

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
+import type { TaskDueState } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
 import { useCategoryStore } from '../store/category'
 import { useAppSessionStore } from '../store/appSession'
 import { useTaskStore } from '../store/task'
+import TaskDueDatePicker from './TaskDueDatePicker.vue'
+import { cloneTaskDueState, EMPTY_TASK_DUE_STATE } from '../utils/taskDue'
 
 const app = useAppFacade()
 const taskStore = useTaskStore()
@@ -13,6 +16,7 @@ const categoryStore = useCategoryStore()
 const appSessionStore = useAppSessionStore()
 
 const content = ref(appSessionStore.getTaskDraft(categoryStore.currentCategoryId))
+const dueState = ref(appSessionStore.getTaskDueDraft(categoryStore.currentCategoryId))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
@@ -22,18 +26,25 @@ const isSubmitting = computed(() => app.isLoading.value || taskStore.isCreatingT
 const handleSubmit = async () => {
   if (!hasContent.value || isSubmitting.value) return
 
-  const created = await app.addTask(content.value.trim())
+  const created = await app.addTask(content.value.trim(), dueState.value)
   if (!created) return
 
   content.value = ''
+  dueState.value = cloneTaskDueState(EMPTY_TASK_DUE_STATE)
   appSessionStore.clearTaskDraft(categoryStore.currentCategoryId)
+  appSessionStore.clearTaskDueDraft(categoryStore.currentCategoryId)
   nextTick(resetHeight)
+}
+
+const handleDueApply = (value: TaskDueState) => {
+  dueState.value = cloneTaskDueState(value)
 }
 
 watch(
   () => categoryStore.currentCategoryId,
   (categoryId) => {
     content.value = appSessionStore.getTaskDraft(categoryId)
+    dueState.value = appSessionStore.getTaskDueDraft(categoryId)
     nextTick(adjustHeight)
   },
   { immediate: true }
@@ -42,6 +53,14 @@ watch(
 watch(content, (value) => {
   appSessionStore.setTaskDraft(categoryStore.currentCategoryId, value)
 })
+
+watch(
+  dueState,
+  (value) => {
+    appSessionStore.setTaskDueDraft(categoryStore.currentCategoryId, value)
+  },
+  { deep: true }
+)
 </script>
 
 <template>
@@ -58,6 +77,14 @@ watch(content, (value) => {
         @input="adjustHeight"
         @keydown.enter.exact.prevent="handleSubmit"
         @keyup.escape="($event.target as HTMLTextAreaElement).blur()"
+      />
+      <TaskDueDatePicker
+        :due-state="dueState"
+        variant="input"
+        align="right"
+        empty-label="截止日期"
+        :disabled="isSubmitting"
+        @apply="handleDueApply"
       />
       <button
         class="todo-input__btn"
@@ -126,6 +153,7 @@ watch(content, (value) => {
     width: 52px;
     flex-shrink: 0;
     border: none;
+    border-left: 1px solid $border-color;
     background: transparent;
     color: $text-muted;
     cursor: not-allowed;

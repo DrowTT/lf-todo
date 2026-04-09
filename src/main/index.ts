@@ -61,6 +61,10 @@ interface PomodoroData {
   history: PomodoroRecord[]
 }
 
+interface DueReminderState {
+  notifiedTaskKeys: string[]
+}
+
 interface HotkeyBinding {
   key: string
   label: string
@@ -82,6 +86,7 @@ interface StoreType {
   closeToTray: boolean
   autoCleanup: AutoCleanupConfig
   pomodoro: PomodoroData
+  dueReminder: DueReminderState
   globalHotkeys: GlobalHotkeyConfig
 }
 
@@ -98,11 +103,17 @@ const DEFAULT_POMODORO_DATA: PomodoroData = {
   activeSession: null,
   history: []
 }
+const DEFAULT_DUE_REMINDER_STATE: DueReminderState = {
+  notifiedTaskKeys: []
+}
+const DUE_REMINDER_CHECK_INTERVAL_MS = 30 * 1000
+const SECOND = 1000
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
 let releaseTopMostTimer: NodeJS.Timeout | null = null
+let dueReminderTimer: NodeJS.Timeout | null = null
 
 function getStoredPomodoroData(): PomodoroData {
   const raw = store.get('pomodoro', DEFAULT_POMODORO_DATA) as Partial<PomodoroData> | undefined
@@ -115,6 +126,18 @@ function getStoredPomodoroData(): PomodoroData {
         : DEFAULT_POMODORO_DATA.totalCompletedCount,
     activeSession: raw?.activeSession ?? DEFAULT_POMODORO_DATA.activeSession,
     history: Array.isArray(raw?.history) ? raw.history : DEFAULT_POMODORO_DATA.history
+  }
+}
+
+function getStoredDueReminderState(): DueReminderState {
+  const raw = store.get('dueReminder', DEFAULT_DUE_REMINDER_STATE) as
+    | Partial<DueReminderState>
+    | undefined
+
+  return {
+    notifiedTaskKeys: Array.isArray(raw?.notifiedTaskKeys)
+      ? raw.notifiedTaskKeys.filter((value): value is string => typeof value === 'string')
+      : []
   }
 }
 
@@ -426,6 +449,120 @@ function writeStartupLog(scope: string, message: string, detail?: unknown): void
   } catch (error) {
     console.error('[startup-log] write failed:', error)
   }
+}
+
+function createDueReminderTaskKey(task: db.DueReminderTask): string {
+  return `${task.id}:${task.due_at}:${task.due_precision}`
+}
+
+function getDueReminderBoundaryMs(task: Pick<db.DueReminderTask, 'due_at' | 'due_precision'>): number {
+  const dueDate = new Date(task.due_at * SECOND)
+
+  if (task.due_precision === 'datetime') {
+    return dueDate.getTime()
+  }
+
+  dueDate.setHours(23, 59, 59, 999)
+  return dueDate.getTime()
+}
+
+function isTaskOverdueForReminder(
+  task: Pick<db.DueReminderTask, 'due_at' | 'due_precision'>,
+  nowMs = Date.now()
+): boolean {
+  return nowMs > getDueReminderBoundaryMs(task)
+}
+
+function formatDueReminderMoment(task: db.DueReminderTask): string {
+  const dueDate = new Date(task.due_at * SECOND)
+  const dateLabel = `${dueDate.getMonth() + 1}月${dueDate.getDate()}日`
+
+  if (task.due_precision === 'datetime') {
+    return `${dateLabel} ${dueDate.getHours().toString().padStart(2, '0')}:${dueDate
+      .getMinutes()
+      .toString()
+      .padStart(2, '0')}`
+  }
+
+  return `${dateLabel} 截止`
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`
+}
+
+function showDueReminderNotification(task: db.DueReminderTask): void {
+  if (!Notification.isSupported()) return
+
+  const notification = new Notification({
+    title: '待办已逾期',
+    body: `「${truncateText(task.content, 28)}」\n${task.category_name} · ${formatDueReminderMoment(task)}`,
+    silent: false
+  })
+
+  notification.on('click', () => {
+    if (!mainWindow) return
+    bringWindowToFront(mainWindow)
+  })
+
+  notification.show()
+}
+
+function syncDueReminderNotifications(): void {
+  if (!Notification.isSupported()) return
+
+  const candidates = db.getDueReminderTasks()
+  const nowMs = Date.now()
+  const previousState = getStoredDueReminderState()
+  const notifiedTaskKeys = new Set(previousState.notifiedTaskKeys)
+  const activeOverdueTaskKeys = new Set<string>()
+
+  for (const task of candidates) {
+    if (!isTaskOverdueForReminder(task, nowMs)) {
+      continue
+    }
+
+    const taskKey = createDueReminderTaskKey(task)
+    activeOverdueTaskKeys.add(taskKey)
+
+    if (notifiedTaskKeys.has(taskKey)) {
+      continue
+    }
+
+    showDueReminderNotification(task)
+    notifiedTaskKeys.add(taskKey)
+  }
+
+  const nextNotifiedTaskKeys = [...notifiedTaskKeys].filter((taskKey) =>
+    activeOverdueTaskKeys.has(taskKey)
+  )
+
+  if (
+    nextNotifiedTaskKeys.length !== previousState.notifiedTaskKeys.length ||
+    nextNotifiedTaskKeys.some((taskKey, index) => taskKey !== previousState.notifiedTaskKeys[index])
+  ) {
+    store.set('dueReminder', {
+      notifiedTaskKeys: nextNotifiedTaskKeys
+    })
+  }
+}
+
+function startDueReminderScheduler(): void {
+  stopDueReminderScheduler()
+  syncDueReminderNotifications()
+  dueReminderTimer = setInterval(() => {
+    syncDueReminderNotifications()
+  }, DUE_REMINDER_CHECK_INTERVAL_MS)
+}
+
+function stopDueReminderScheduler(): void {
+  if (!dueReminderTimer) return
+  clearInterval(dueReminderTimer)
+  dueReminderTimer = null
 }
 
 function resolveRuntimeAsset(fileName: string): string {
@@ -778,6 +915,7 @@ app.whenReady().then(() => {
 
   createWindow()
   registerGlobalHotkeys()
+  startDueReminderScheduler()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -795,6 +933,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   globalShortcut.unregisterAll()
+  stopDueReminderScheduler()
   db.closeDatabase()
 })
 

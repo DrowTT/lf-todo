@@ -207,10 +207,14 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
   align-items: center;
   justify-content: center;
   background: $bg-elevated;
-  transition: all 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
   padding: 0;
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.sub__check--on) {
     border-color: $accent-color;
   }
 
