@@ -245,7 +245,10 @@ watch(currentCategoryId, () => {
 }
 
 .todo-panel__title {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: $font-xl;
   font-weight: 700;
   color: $text-primary;

@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const query = defineModel<string>({ default: '' })
 const expanded = defineModel<boolean>('expanded', { default: false })
+const SEARCH_EXPAND_FOCUS_DELAY_MS = 240
 
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput')
 const hasQuery = computed(() => query.value.trim().length > 0)
@@ -41,7 +42,7 @@ function openSearch() {
     searchInput.value?.focus()
     searchInput.value?.select()
     focusTimer = null
-  }, 180)
+  }, SEARCH_EXPAND_FOCUS_DELAY_MS)
 }
 
 function clearQuery() {
@@ -118,12 +119,15 @@ function handleEscape() {
 
 .todo-search {
   --collapsed-size: 36px;
-  --expanded-size: 220px;
+  --expanded-max-size: 320px;
+  --expand-duration: 0.34s;
   position: relative;
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
-  width: var(--collapsed-size);
+  flex: 1 1 var(--collapsed-size);
+  width: 100%;
+  min-width: var(--collapsed-size);
+  max-width: var(--collapsed-size);
   height: var(--collapsed-size);
   padding: 0;
   box-sizing: border-box;
@@ -137,8 +141,8 @@ function handleEscape() {
     inset 0 1px 0 rgba(255, 255, 255, 0.96),
     0 8px 18px rgba(15, 23, 42, 0.04);
   transition:
-    width 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    max-width var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1),
+    padding var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1),
     border-color $transition-normal,
     box-shadow $transition-normal,
     background-color $transition-normal;
@@ -158,7 +162,7 @@ function handleEscape() {
   }
 
   &--expanded {
-    width: var(--expanded-size);
+    max-width: var(--expanded-max-size);
     padding-right: 10px;
   }
 
@@ -224,9 +228,9 @@ function handleEscape() {
   pointer-events: none;
   transform: translateX(6px);
   transition:
-    margin-left 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.16s ease,
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    margin-left var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease,
+    transform var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1);
 
   &::placeholder {
     color: $text-muted;
