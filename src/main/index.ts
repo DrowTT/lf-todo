@@ -106,6 +106,8 @@ const DEFAULT_POMODORO_DATA: PomodoroData = {
 const DEFAULT_DUE_REMINDER_STATE: DueReminderState = {
   notifiedTaskKeys: []
 }
+const APP_USER_MODEL_ID = 'com.lf.todo'
+const AUTO_LAUNCH_HIDDEN_ARG = '--hidden'
 const DUE_REMINDER_CHECK_INTERVAL_MS = 30 * 1000
 const SECOND = 1000
 
@@ -383,11 +385,29 @@ function persistWindowBounds(win: BrowserWindow): void {
 }
 
 function isHiddenLaunch(): boolean {
-  return process.argv.includes('--hidden')
+  return process.argv.includes(AUTO_LAUNCH_HIDDEN_ARG)
+}
+
+function canManageAutoLaunch(): boolean {
+  return !(process.platform === 'win32' && process.defaultApp)
+}
+
+function getWindowsAutoLaunchQuery() {
+  return {
+    path: process.execPath,
+    args: [AUTO_LAUNCH_HIDDEN_ARG]
+  }
 }
 
 function getAutoLaunchState(): boolean {
-  const loginItemSettings = app.getLoginItemSettings()
+  if (!canManageAutoLaunch()) {
+    return false
+  }
+
+  const loginItemSettings =
+    process.platform === 'win32'
+      ? app.getLoginItemSettings(getWindowsAutoLaunchQuery())
+      : app.getLoginItemSettings()
 
   if (process.platform === 'win32') {
     return loginItemSettings.openAtLogin || loginItemSettings.executableWillLaunchAtLogin
@@ -397,13 +417,24 @@ function getAutoLaunchState(): boolean {
 }
 
 function setAutoLaunchEnabled(enabled: boolean): boolean {
+  if (!canManageAutoLaunch()) {
+    writeStartupLog('settings', 'auto launch is unavailable in the current runtime', {
+      requested: enabled,
+      execPath: process.execPath,
+      defaultApp: process.defaultApp,
+      platform: process.platform
+    })
+    store.set('autoLaunch', false)
+    return false
+  }
+
   const loginItemSettings =
     process.platform === 'win32'
       ? {
           openAtLogin: enabled,
-          path: process.execPath,
-          args: enabled ? ['--hidden'] : [],
-          enabled
+          enabled,
+          name: APP_USER_MODEL_ID,
+          ...getWindowsAutoLaunchQuery()
         }
       : {
           openAtLogin: enabled,
@@ -420,7 +451,12 @@ function setAutoLaunchEnabled(enabled: boolean): boolean {
       actual: actualEnabled,
       execPath: process.execPath,
       argv: process.argv,
-      loginItemSettings: app.getLoginItemSettings(),
+      requestedSettings: loginItemSettings,
+      loginItemSettings:
+        process.platform === 'win32'
+          ? app.getLoginItemSettings(getWindowsAutoLaunchQuery())
+          : app.getLoginItemSettings(),
+      rawLoginItemSettings: app.getLoginItemSettings(),
       platform: process.platform
     })
   }
@@ -886,7 +922,7 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId(APP_USER_MODEL_ID)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

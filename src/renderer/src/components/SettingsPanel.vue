@@ -352,6 +352,7 @@ onUnmounted(() => {
 <template>
   <div class="settings-view" tabindex="-1" @keydown="handleKeydown">
     <div class="settings-view__header">
+      <div class="settings-view__shell settings-view__shell--header">
         <div class="settings-view__header-left">
           <Settings :size="18" class="settings-view__header-icon" />
           <h2 class="settings-view__title">设置</h2>
@@ -360,8 +361,10 @@ onUnmounted(() => {
           {{ settingsStatusText }}
         </span>
       </div>
+    </div>
 
-      <div class="settings-view__body">
+    <div class="settings-view__body">
+      <div class="settings-view__shell settings-view__shell--body">
         <section class="settings-group">
           <div class="settings-group__header">
             <Power :size="14" class="settings-group__icon" />
@@ -673,6 +676,7 @@ onUnmounted(() => {
           </div>
         </section>
       </div>
+    </div>
   </div>
 </template>
 
@@ -689,14 +693,29 @@ onUnmounted(() => {
   overflow: hidden;
 
   &__header {
+    border-bottom: 1px solid $border-subtle;
+    background: $bg-primary;
+    flex-shrink: 0;
+    padding: $spacing-md clamp($spacing-lg, 3vw, $spacing-2xl);
+  }
+
+  &__shell {
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  &__shell--header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: $spacing-md;
-    padding: $spacing-md $spacing-xl;
-    border-bottom: 1px solid $border-subtle;
-    background: $bg-primary;
-    flex-shrink: 0;
+  }
+
+  &__shell--body {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-md;
   }
 
   &__header-left {
@@ -719,7 +738,7 @@ onUnmounted(() => {
   &__meta {
     font-size: $font-xs;
     color: $text-muted;
-    max-width: 160px;
+    max-width: 240px;
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
@@ -730,13 +749,10 @@ onUnmounted(() => {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: $spacing-xl;
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-md;
+    width: 100%;
+    padding: $spacing-xl clamp($spacing-lg, 3vw, $spacing-2xl) $spacing-2xl;
     overscroll-behavior: contain;
     /* 限制内容最大宽度，大屏时不会拉伸过宽 */
-    max-width: 600px;
 
     &::-webkit-scrollbar {
       width: 8px;
@@ -759,6 +775,7 @@ onUnmounted(() => {
   border-radius: $radius-lg;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 
   &__header {
     display: flex;
@@ -1317,6 +1334,29 @@ onUnmounted(() => {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-view {
+    &__header {
+      padding-inline: $spacing-lg;
+    }
+
+    &__body {
+      padding: $spacing-lg;
+    }
+
+    &__shell--header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    &__meta {
+      max-width: none;
+      text-align: left;
+      white-space: normal;
+    }
   }
 }
 

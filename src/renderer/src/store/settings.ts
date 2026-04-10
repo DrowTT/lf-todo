@@ -100,9 +100,19 @@ export const useSettingsStore = defineStore('settings', () => {
     isSavingAutoLaunch.value = true
 
     try {
-      await repository.setAutoLaunch(enabled)
+      const actualEnabled = await repository.setAutoLaunch(enabled)
+      settings.value = { ...settings.value, autoLaunch: actualEnabled }
       markSynced()
-      return true
+
+      if (actualEnabled !== enabled) {
+        runtime.toast.show(
+          enabled
+            ? '当前运行环境未成功启用开机自启，请使用打包后的应用或检查系统启动项'
+            : '系统未成功关闭开机自启，请检查系统启动项设置'
+        )
+      }
+
+      return actualEnabled
     } catch (err) {
       settings.value = { ...settings.value, autoLaunch: previous }
       error.value = '保存开机自启失败，请重试'
