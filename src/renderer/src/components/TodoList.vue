@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
+import { FOCUS_SEARCH_EVENT } from '../composables/useHotkeys'
 import { useAppRuntime } from '../app/runtime'
 import { useSidebarResize } from '../composables/useSidebarResize'
 import { useTaskStore } from '../store/task'
@@ -20,6 +21,7 @@ const { sidebarWidth, startResize } = useSidebarResize()
 const dragStartOrder = ref<number[]>([])
 const searchQuery = ref('')
 const isSearchExpanded = ref(false)
+const searchBar = useTemplateRef<{ focusSearch: () => void }>('searchBar')
 
 const currentCategoryName = computed(() => {
   const category = categories.value.find((item) => item.id === currentCategoryId.value)
@@ -66,9 +68,21 @@ const onDragEnd = async () => {
   dragStartOrder.value = []
 }
 
+function handleFocusSearchRequested() {
+  searchBar.value?.focusSearch()
+}
+
 watch(currentCategoryId, () => {
   searchQuery.value = ''
   isSearchExpanded.value = false
+})
+
+onMounted(() => {
+  window.addEventListener(FOCUS_SEARCH_EVENT, handleFocusSearchRequested)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(FOCUS_SEARCH_EVENT, handleFocusSearchRequested)
 })
 </script>
 
@@ -91,6 +105,7 @@ watch(currentCategoryId, () => {
           </h1>
           <TodoSearchBar
             v-if="currentCategoryId"
+            ref="searchBar"
             v-model="searchQuery"
             v-model:expanded="isSearchExpanded"
           />

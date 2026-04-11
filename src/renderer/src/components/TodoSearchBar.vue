@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, useTemplateRef } from 'vue'
+import { computed, onUnmounted, ref, useTemplateRef } from 'vue'
 import { Search, X } from 'lucide-vue-next'
 
 interface Props {
@@ -18,9 +18,9 @@ const SEARCH_EXPAND_FOCUS_DELAY_MS = 240
 
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput')
 const hasQuery = computed(() => query.value.trim().length > 0)
-const inputActive = computed(() => expanded.value && isInputInteractive)
+const isInputInteractive = ref(false)
+const inputActive = computed(() => expanded.value && isInputInteractive.value)
 let focusTimer: ReturnType<typeof setTimeout> | null = null
-let isInputInteractive = false
 
 function clearFocusTimer() {
   if (!focusTimer) return
@@ -32,17 +32,39 @@ onUnmounted(() => {
   clearFocusTimer()
 })
 
-function openSearch() {
-  if (props.disabled || expanded.value) return
-  expanded.value = true
-  isInputInteractive = false
+function focusSearchInput(selectText = true) {
+  isInputInteractive.value = true
+  searchInput.value?.focus()
+
+  if (selectText) {
+    searchInput.value?.select()
+  }
+}
+
+function scheduleSearchFocus() {
   clearFocusTimer()
   focusTimer = setTimeout(() => {
-    isInputInteractive = true
-    searchInput.value?.focus()
-    searchInput.value?.select()
+    focusSearchInput()
     focusTimer = null
   }, SEARCH_EXPAND_FOCUS_DELAY_MS)
+}
+
+function focusSearch() {
+  if (props.disabled) return
+
+  if (expanded.value) {
+    clearFocusTimer()
+    focusSearchInput()
+    return
+  }
+
+  expanded.value = true
+  isInputInteractive.value = false
+  scheduleSearchFocus()
+}
+
+function openSearch() {
+  focusSearch()
 }
 
 function clearQuery() {
@@ -53,7 +75,7 @@ function clearQuery() {
 function collapseIfEmpty() {
   if (hasQuery.value) return
   clearFocusTimer()
-  isInputInteractive = false
+  isInputInteractive.value = false
   expanded.value = false
 }
 
@@ -64,10 +86,14 @@ function handleEscape() {
   }
 
   clearFocusTimer()
-  isInputInteractive = false
+  isInputInteractive.value = false
   expanded.value = false
   searchInput.value?.blur()
 }
+
+defineExpose({
+  focusSearch
+})
 </script>
 
 <template>

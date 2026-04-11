@@ -4,7 +4,12 @@ import { useAppRuntime } from '../app/runtime'
 import { useAppSessionStore } from '../store/appSession'
 import { useHoverTarget } from './useHoverTarget'
 
-export type LocalHotkeyAction = 'toggleComplete' | 'quickDelete' | 'toggleExpand' | 'focusInput'
+export type LocalHotkeyAction =
+  | 'toggleComplete'
+  | 'quickDelete'
+  | 'toggleExpand'
+  | 'focusInput'
+  | 'focusSearch'
 export type GlobalHotkeyAction = 'showWindow' | 'showWindowAndFocusInput'
 export type HotkeyAction = LocalHotkeyAction | GlobalHotkeyAction
 
@@ -16,16 +21,14 @@ export interface HotkeyBinding {
 export type HotkeyConfig = Record<HotkeyAction, HotkeyBinding>
 export type GlobalHotkeyConfig = Record<GlobalHotkeyAction, HotkeyBinding>
 
-export const GLOBAL_HOTKEY_ACTIONS: GlobalHotkeyAction[] = [
-  'showWindow',
-  'showWindowAndFocusInput'
-]
+export const GLOBAL_HOTKEY_ACTIONS: GlobalHotkeyAction[] = ['showWindow', 'showWindowAndFocusInput']
 
 export const DEFAULT_HOTKEYS: HotkeyConfig = {
   toggleComplete: { key: 'Space', label: '空格' },
   quickDelete: { key: 'Delete', label: 'Delete' },
   toggleExpand: { key: 'e', label: 'E' },
   focusInput: { key: 'Control+n', label: 'Ctrl+N' },
+  focusSearch: { key: 'Control+f', label: 'Ctrl+F' },
   showWindow: { key: 'Control+Alt+l', label: 'Ctrl+Alt+L' },
   showWindowAndFocusInput: { key: 'Control+Alt+n', label: 'Ctrl+Alt+N' }
 }
@@ -35,12 +38,15 @@ export const HOTKEY_LABELS: Record<HotkeyAction, { name: string; desc: string }>
   quickDelete: { name: '快捷删除', desc: '删除鼠标悬停的待办，需要二次确认' },
   toggleExpand: { name: '展开/收起', desc: '展开或收起鼠标指向的一级待办' },
   focusInput: { name: '聚焦输入框', desc: '聚焦到新增待办或子待办输入框' },
+  focusSearch: { name: '聚焦搜索框', desc: '展开并聚焦当前分类的搜索框' },
   showWindow: { name: '唤起窗口', desc: '全局唤起窗口，并临时显示到最上层' },
   showWindowAndFocusInput: {
     name: '唤起并聚焦主输入框',
     desc: '全局唤起窗口，并聚焦到主代办创建输入框'
   }
 }
+
+export const FOCUS_SEARCH_EVENT = 'lf-todo:focus-search'
 
 const STORAGE_KEY = 'lf-todo-hotkeys'
 const MODIFIER_KEYS = ['Alt', 'Control', 'Shift', 'Meta']
@@ -87,10 +93,12 @@ function saveConfig(config: HotkeyConfig) {
 }
 
 function hasAtLeastTwoKeys(key: string): boolean {
-  return key
-    .split('+')
-    .map((part) => part.trim())
-    .filter(Boolean).length >= 2
+  return (
+    key
+      .split('+')
+      .map((part) => part.trim())
+      .filter(Boolean).length >= 2
+  )
 }
 
 function extractGlobalHotkeyConfig(config: HotkeyConfig): GlobalHotkeyConfig {
@@ -166,6 +174,10 @@ function focusMainInputField(): void {
   mainInput?.focus()
 }
 
+function requestSearchFocus(): void {
+  window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT))
+}
+
 function matchAction(normalizedKey: string): HotkeyAction | null {
   for (const [action, binding] of Object.entries(hotkeyConfig) as [HotkeyAction, HotkeyBinding][]) {
     if (binding.key === normalizedKey) return action
@@ -237,6 +249,12 @@ export function useHotkeys() {
         focusMainInputField()
         break
       }
+      case 'focusSearch': {
+        appSessionStore.setCurrentMainView('tasks')
+        await nextTick()
+        requestSearchFocus()
+        break
+      }
       case 'showWindow':
       case 'showWindowAndFocusInput':
         break
@@ -266,13 +284,20 @@ export function useHotkeys() {
   function handleKeydown(event: KeyboardEvent) {
     if (!isEnabled.value) return
     if (isConfirmDialogVisible()) return
-    if (handleCategorySwitch(event)) return
-    if (isInputElement(event.target)) return
 
     const normalizedKey = normalizeKeyEvent(event)
     if (!normalizedKey) return
 
     const action = matchAction(normalizedKey)
+    if (action === 'focusSearch') {
+      event.preventDefault()
+      event.stopPropagation()
+      void executeAction(action)
+      return
+    }
+
+    if (handleCategorySwitch(event)) return
+    if (isInputElement(event.target)) return
     if (!action || isGlobalHotkeyAction(action)) return
 
     event.preventDefault()

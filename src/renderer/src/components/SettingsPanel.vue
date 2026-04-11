@@ -13,12 +13,7 @@ import {
   Trash2
 } from 'lucide-vue-next'
 import { useAppRuntime } from '../app/runtime'
-import {
-  HOTKEY_LABELS,
-  keyToLabel,
-  useHotkeys,
-  type HotkeyAction
-} from '../composables/useHotkeys'
+import { HOTKEY_LABELS, keyToLabel, useHotkeys, type HotkeyAction } from '../composables/useHotkeys'
 import { useSettingsStore } from '../store/settings'
 import { useUpdaterStore } from '../store/updater'
 import { useAppSessionStore } from '../store/appSession'
@@ -61,6 +56,7 @@ const hotkeyActions: HotkeyAction[] = [
   'quickDelete',
   'toggleExpand',
   'focusInput',
+  'focusSearch',
   'showWindow',
   'showWindowAndFocusInput'
 ]
@@ -105,7 +101,6 @@ interface DropdownOption {
   label: string
 }
 
-
 const cleanupDaysOptions: DropdownOption[] = [
   { value: 3, label: '3 天' },
   { value: 7, label: '7 天' },
@@ -125,12 +120,10 @@ interface DropdownPosition {
 
 const cleanupDropdownPosition = ref<DropdownPosition | null>(null)
 
-
 const cleanupDisplayLabel = computed(() => {
-  const opt = cleanupDaysOptions.find(o => o.value === autoCleanupDays.value)
+  const opt = cleanupDaysOptions.find((o) => o.value === autoCleanupDays.value)
   return opt?.label ?? `${autoCleanupDays.value} 天`
 })
-
 
 function selectCleanupDays(value: number) {
   autoCleanupDays.value = value
@@ -151,7 +144,6 @@ function getDropdownPosition(container: HTMLElement | null): DropdownPosition | 
   }
 }
 
-
 function updateCleanupDropdownPosition() {
   cleanupDropdownPosition.value = getDropdownPosition(cleanupDropdownRef.value)
 }
@@ -159,7 +151,6 @@ function updateCleanupDropdownPosition() {
 function syncOpenDropdownPositions() {
   if (cleanupDropdownOpen.value) updateCleanupDropdownPosition()
 }
-
 
 async function toggleCleanupDropdown() {
   cleanupDropdownOpen.value = !cleanupDropdownOpen.value
@@ -294,7 +285,6 @@ async function handleExportData() {
   await settingsStore.exportData()
 }
 
-
 async function handleCheckUpdate() {
   if (!isElectron) return
   await updaterStore.checkForUpdates()
@@ -322,14 +312,11 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-
-
 watch(autoCleanupDays, () => {
   if (autoCleanupEnabled.value) {
     void handleAutoCleanupChange()
   }
 })
-
 
 onMounted(() => {
   void settingsStore.hydrate()
@@ -1065,7 +1052,9 @@ onUnmounted(() => {
 
   &__chevron {
     color: $text-muted;
-    transition: transform $transition-fast, color $transition-fast;
+    transition:
+      transform $transition-fast,
+      color $transition-fast;
     flex-shrink: 0;
 
     &--open {
@@ -1359,5 +1348,4 @@ onUnmounted(() => {
     }
   }
 }
-
 </style>
