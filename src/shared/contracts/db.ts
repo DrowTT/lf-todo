@@ -1,4 +1,11 @@
-import type { TaskCreateInput, TaskDuePrecision, TaskDueState, TaskUpdate } from '../types/models'
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../constants/task'
+import type {
+  TaskCreateInput,
+  TaskDuePrecision,
+  TaskDueState,
+  TaskPriority,
+  TaskUpdate
+} from '../types/models'
 import {
   assertAllowedKeys,
   expectArray,
@@ -47,7 +54,7 @@ function parseOrderedIds(value: unknown, label: string): number[] {
 
 export function parseCreateTaskRequest(value: unknown, label = 'payload'): CreateTaskRequest {
   const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['content', 'categoryId', 'due_at', 'due_precision'], label)
+  assertAllowedKeys(record, ['content', 'categoryId', 'due_at', 'due_precision', 'priority'], label)
   const dueState = parseTaskDueStateRecord(record, label, {
     dueAtKey: 'due_at',
     duePrecisionKey: 'due_precision'
@@ -60,6 +67,7 @@ export function parseCreateTaskRequest(value: unknown, label = 'payload'): Creat
       maxLength: 100
     }),
     categoryId: expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 }),
+    priority: parseTaskPriority(record.priority, `${label}.priority`),
     ...dueState
   }
 }
@@ -80,7 +88,11 @@ export function parseCreateSubTaskRequest(value: unknown, label = 'payload'): Cr
 
 export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
   const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['content', 'is_completed', 'order_index', 'due_at', 'due_precision'], label)
+  assertAllowedKeys(
+    record,
+    ['content', 'is_completed', 'order_index', 'due_at', 'due_precision', 'priority'],
+    label
+  )
 
   const updates: TaskUpdate = {}
 
@@ -98,6 +110,10 @@ export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
 
   if ('order_index' in record) {
     updates.order_index = expectInteger(record.order_index, `${label}.order_index`, { min: 0 })
+  }
+
+  if ('priority' in record) {
+    updates.priority = parseTaskPriority(record.priority, `${label}.priority`)
   }
 
   const dueState = parseTaskDueStateRecord(record, label, {
@@ -172,7 +188,9 @@ function parseTaskDueStateRecord(
   const hasDuePrecision = options.duePrecisionKey in record
 
   if (hasDueAt !== hasDuePrecision) {
-    throw new Error(`${label} must include ${options.dueAtKey} and ${options.duePrecisionKey} together`)
+    throw new Error(
+      `${label} must include ${options.dueAtKey} and ${options.duePrecisionKey} together`
+    )
   }
 
   if (!hasDueAt) {
@@ -191,7 +209,9 @@ function parseTaskDueStateRecord(
 
   if (rawDueAt === null || rawDuePrecision === null) {
     if (rawDueAt !== null || rawDuePrecision !== null) {
-      throw new Error(`${label} must clear ${options.dueAtKey} and ${options.duePrecisionKey} together`)
+      throw new Error(
+        `${label} must clear ${options.dueAtKey} and ${options.duePrecisionKey} together`
+      )
     }
 
     return {
@@ -202,10 +222,7 @@ function parseTaskDueStateRecord(
 
   return {
     due_at: expectInteger(rawDueAt, `${label}.${options.dueAtKey}`, { min: 0 }),
-    due_precision: parseTaskDuePrecision(
-      rawDuePrecision,
-      `${label}.${options.duePrecisionKey}`
-    )
+    due_precision: parseTaskDuePrecision(rawDuePrecision, `${label}.${options.duePrecisionKey}`)
   }
 }
 
@@ -217,4 +234,18 @@ function parseTaskDuePrecision(value: unknown, label: string): TaskDuePrecision 
   }
 
   throw new Error(`${label} must be "date" or "datetime"`)
+}
+
+function parseTaskPriority(value: unknown, label: string): TaskPriority {
+  if (value === null || value === undefined) {
+    return DEFAULT_TASK_PRIORITY
+  }
+
+  const priority = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
+
+  if (TASK_PRIORITY_VALUES.includes(priority as TaskPriority)) {
+    return priority as TaskPriority
+  }
+
+  throw new Error(`${label} must be one of ${TASK_PRIORITY_VALUES.join(', ')}`)
 }

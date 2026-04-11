@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
-import type { TaskDueState } from '../../../shared/types/models'
+import { DEFAULT_TASK_PRIORITY } from '../../../shared/constants/task'
+import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
 import { useCategoryStore } from '../store/category'
 import { useAppSessionStore } from '../store/appSession'
 import { useTaskStore } from '../store/task'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
+import TaskPriorityPicker from './TaskPriorityPicker.vue'
 import { cloneTaskDueState, EMPTY_TASK_DUE_STATE } from '../utils/taskDue'
 
 const app = useAppFacade()
@@ -17,6 +19,9 @@ const appSessionStore = useAppSessionStore()
 
 const content = ref(appSessionStore.getTaskDraft(categoryStore.currentCategoryId))
 const dueState = ref(appSessionStore.getTaskDueDraft(categoryStore.currentCategoryId))
+const priority = ref<TaskPriority>(
+  appSessionStore.getTaskPriorityDraft(categoryStore.currentCategoryId)
+)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
@@ -26,13 +31,18 @@ const isSubmitting = computed(() => app.isLoading.value || taskStore.isCreatingT
 const handleSubmit = async () => {
   if (!hasContent.value || isSubmitting.value) return
 
-  const created = await app.addTask(content.value.trim(), dueState.value)
+  const created = await app.addTask(content.value.trim(), {
+    dueState: dueState.value,
+    priority: priority.value
+  })
   if (!created) return
 
   content.value = ''
   dueState.value = cloneTaskDueState(EMPTY_TASK_DUE_STATE)
+  priority.value = DEFAULT_TASK_PRIORITY
   appSessionStore.clearTaskDraft(categoryStore.currentCategoryId)
   appSessionStore.clearTaskDueDraft(categoryStore.currentCategoryId)
+  appSessionStore.clearTaskPriorityDraft(categoryStore.currentCategoryId)
   nextTick(resetHeight)
 }
 
@@ -40,11 +50,16 @@ const handleDueApply = (value: TaskDueState) => {
   dueState.value = cloneTaskDueState(value)
 }
 
+const handlePriorityApply = (value: TaskPriority) => {
+  priority.value = value
+}
+
 watch(
   () => categoryStore.currentCategoryId,
   (categoryId) => {
     content.value = appSessionStore.getTaskDraft(categoryId)
     dueState.value = appSessionStore.getTaskDueDraft(categoryId)
+    priority.value = appSessionStore.getTaskPriorityDraft(categoryId)
     nextTick(adjustHeight)
   },
   { immediate: true }
@@ -61,6 +76,10 @@ watch(
   },
   { deep: true }
 )
+
+watch(priority, (value) => {
+  appSessionStore.setTaskPriorityDraft(categoryStore.currentCategoryId, value)
+})
 </script>
 
 <template>
@@ -78,22 +97,31 @@ watch(
         @keydown.enter.exact.prevent="handleSubmit"
         @keyup.escape="($event.target as HTMLTextAreaElement).blur()"
       />
-      <TaskDueDatePicker
-        :due-state="dueState"
-        variant="input"
-        align="right"
-        empty-label="截止日期"
-        :disabled="isSubmitting"
-        @apply="handleDueApply"
-      />
-      <button
-        class="todo-input__btn"
-        :class="{ 'todo-input__btn--active': hasContent && !isSubmitting }"
-        :disabled="!hasContent || isSubmitting"
-        @click="handleSubmit"
-      >
-        <SendHorizonal :size="18" />
-      </button>
+      <div class="todo-input__controls">
+        <div class="todo-input__priority-slot">
+          <TaskPriorityPicker
+            :priority="priority"
+            :disabled="isSubmitting"
+            @apply="handlePriorityApply"
+          />
+        </div>
+        <TaskDueDatePicker
+          :due-state="dueState"
+          variant="input"
+          align="right"
+          empty-label="截止日期"
+          :disabled="isSubmitting"
+          @apply="handleDueApply"
+        />
+        <button
+          class="todo-input__btn"
+          :class="{ 'todo-input__btn--active': hasContent && !isSubmitting }"
+          :disabled="!hasContent || isSubmitting"
+          @click="handleSubmit"
+        >
+          <SendHorizonal :size="18" />
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -144,6 +172,20 @@ watch(
     &:disabled {
       opacity: 0.5;
     }
+  }
+
+  &__controls {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+
+  &__priority-slot {
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 12px;
+    border-left: 1px solid $border-color;
+    flex-shrink: 0;
   }
 
   &__btn {

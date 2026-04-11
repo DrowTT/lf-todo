@@ -6,6 +6,7 @@ export interface Category {
 }
 
 export type TaskDuePrecision = 'date' | 'datetime'
+export type TaskPriority = 'low' | 'medium' | 'high'
 
 export interface TaskDueState {
   due_at: number | null
@@ -22,6 +23,7 @@ export interface Task {
   parent_id: number | null
   due_at: number | null
   due_precision: TaskDuePrecision | null
+  priority: TaskPriority
   subtask_total: number
   subtask_done: number
 }
@@ -29,10 +31,11 @@ export interface Task {
 export interface TaskCreateInput extends TaskDueState {
   content: string
   categoryId: number
+  priority: TaskPriority
 }
 
 export type TaskUpdate = Partial<
-  Pick<Task, 'content' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision'>
+  Pick<Task, 'content' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision' | 'priority'>
 >
 
 export interface AutoCleanupConfig {

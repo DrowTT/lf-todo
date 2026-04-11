@@ -8,8 +8,10 @@ import type {
   SettingsData,
   Task,
   TaskDuePrecision,
+  TaskPriority,
   UpdateStatusData
 } from '../types/models'
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../constants/task'
 import {
   assertAllowedKeys,
   expectArray,
@@ -49,6 +51,7 @@ export function parseTask(value: unknown, label = 'task'): Task {
       'parent_id',
       'due_at',
       'due_precision',
+      'priority',
       'subtask_total',
       'subtask_done'
     ],
@@ -82,6 +85,7 @@ export function parseTask(value: unknown, label = 'task'): Task {
         : expectInteger(record.parent_id, `${label}.parent_id`, { min: 1 }),
     due_at: dueAt,
     due_precision: duePrecision,
+    priority: parseTaskPriority(record.priority, `${label}.priority`),
     subtask_total: expectInteger(record.subtask_total, `${label}.subtask_total`, { min: 0 }),
     subtask_done: expectInteger(record.subtask_done, `${label}.subtask_done`, { min: 0 })
   }
@@ -99,6 +103,20 @@ function parseTaskDuePrecision(value: unknown, label: string): TaskDuePrecision 
   }
 
   throw new Error(`${label} must be "date" or "datetime"`)
+}
+
+function parseTaskPriority(value: unknown, label: string): TaskPriority {
+  if (value === null || value === undefined) {
+    return DEFAULT_TASK_PRIORITY
+  }
+
+  const priority = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
+
+  if (TASK_PRIORITY_VALUES.includes(priority as TaskPriority)) {
+    return priority as TaskPriority
+  }
+
+  throw new Error(`${label} must be one of ${TASK_PRIORITY_VALUES.join(', ')}`)
 }
 
 export function parseTasks(value: unknown, label = 'tasks'): Task[] {

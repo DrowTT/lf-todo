@@ -1,5 +1,6 @@
 import { storeToRefs } from 'pinia'
-import type { TaskDueState } from '../../../../shared/types/models'
+import { DEFAULT_TASK_PRIORITY } from '../../../../shared/constants/task'
+import type { TaskDueState, TaskPriority } from '../../../../shared/types/models'
 import { useCategoryStore } from '../../store/category'
 import { useSubTaskStore } from '../../store/subtask'
 import { useTaskStore } from '../../store/task'
@@ -93,11 +94,22 @@ export function useAppFacade() {
     await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
   }
 
-  async function addTask(content: string, dueState?: TaskDueState) {
+  async function addTask(
+    content: string,
+    options?: {
+      dueState?: TaskDueState
+      priority?: TaskPriority
+    }
+  ) {
     const categoryId = categoryStore.currentCategoryId
     if (!categoryId) return false
 
-    return await taskStore.addTask(content, categoryId, dueState)
+    return await taskStore.addTask(
+      content,
+      categoryId,
+      options?.dueState,
+      options?.priority ?? DEFAULT_TASK_PRIORITY
+    )
   }
 
   async function toggleTask(id: number) {

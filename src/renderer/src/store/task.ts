@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Task, TaskDueState } from '../../../shared/types/models'
+import { DEFAULT_TASK_PRIORITY } from '../../../shared/constants/task'
+import type { Task, TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
 import {
   buildPendingOperationKey,
@@ -163,7 +164,8 @@ export const useTaskStore = defineStore('task', () => {
   async function addTask(
     content: string,
     categoryId: number,
-    dueState: TaskDueState = EMPTY_TASK_DUE_STATE
+    dueState: TaskDueState = EMPTY_TASK_DUE_STATE,
+    priority: TaskPriority = DEFAULT_TASK_PRIORITY
   ) {
     return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.create, categoryId),
@@ -174,7 +176,8 @@ export const useTaskStore = defineStore('task', () => {
           content,
           categoryId,
           due_at: dueState.due_at,
-          due_precision: dueState.due_precision
+          due_precision: dueState.due_precision,
+          priority
         }),
       onSuccess: (newTask) => {
         tasks.value.unshift(newTask)
@@ -304,14 +307,13 @@ export const useTaskStore = defineStore('task', () => {
     options: { reorderToPrevious?: boolean } = {}
   ) {
     const subTaskStore = useSubTaskStore()
-    const createdTask = await taskRepository.createTask(
-      {
-        content: snapshot.task.content,
-        categoryId: snapshot.task.category_id,
-        due_at: snapshot.task.due_at,
-        due_precision: snapshot.task.due_precision
-      }
-    )
+    const createdTask = await taskRepository.createTask({
+      content: snapshot.task.content,
+      categoryId: snapshot.task.category_id,
+      due_at: snapshot.task.due_at,
+      due_precision: snapshot.task.due_precision,
+      priority: snapshot.task.priority
+    })
 
     if (snapshot.task.is_completed) {
       await taskRepository.setTaskCompleted(createdTask.id, true)
@@ -411,6 +413,32 @@ export const useTaskStore = defineStore('task', () => {
       },
       errorMessage: '保存截止日期失败，请重试',
       logPrefix: '[taskStore] updateTaskDue failed'
+    })
+  }
+
+  async function updateTaskPriority(id: number, priority: TaskPriority) {
+    const task = tasks.value.find((item) => item.id === id)
+    if (!task) return false
+
+    const previousPriority = task.priority
+
+    if (previousPriority === priority) {
+      return true
+    }
+
+    return runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.update, id),
+      type: TASK_OPERATION_TYPES.update,
+      entityId: id,
+      before: () => {
+        task.priority = priority
+      },
+      execute: () => taskRepository.updateTask(id, { priority }),
+      rollback: () => {
+        task.priority = previousPriority
+      },
+      errorMessage: '保存优先级失败，请重试',
+      logPrefix: '[taskStore] updateTaskPriority failed'
     })
   }
 
@@ -514,6 +542,7 @@ export const useTaskStore = defineStore('task', () => {
     restoreDeletedTask,
     updateTaskContent,
     updateTaskDue,
+    updateTaskPriority,
     clearCompletedTasks,
     restoreClearedCompleted,
     removePendingCount,

@@ -15,6 +15,11 @@ import SubTaskInput from './SubTaskInput.vue'
 import SubTaskItem from './SubTaskItem.vue'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
 import { Check, ChevronRight, GripVertical, Play, Timer, Trash2 } from 'lucide-vue-next'
+import {
+  getNextTaskPriority,
+  getTaskPriorityCode,
+  getTaskPriorityTitle
+} from '../utils/taskPriority'
 
 const app = useAppFacade()
 const runtime = useAppRuntime()
@@ -121,18 +126,12 @@ const onCardMouseLeave = () => {
   isHovered.value = false
   clearHover()
 }
-const hasDueDate = computed(
-  () => props.task.due_at !== null && props.task.due_precision !== null
-)
+const hasDueDate = computed(() => props.task.due_at !== null && props.task.due_precision !== null)
 const shouldShowDuePicker = computed(
   () => isEditing.value || hasDueDate.value || isHovered.value || isDuePickerOpen.value
 )
 const shouldAlwaysShowEmptyDuePicker = computed(
-  () =>
-    !subTaskProgress.value &&
-    !hasDueDate.value &&
-    !isSaving.value &&
-    !isDeleting.value
+  () => !subTaskProgress.value && !hasDueDate.value && !isSaving.value && !isDeleting.value
 )
 const shouldRenderDuePicker = computed(
   () => shouldShowDuePicker.value || shouldAlwaysShowEmptyDuePicker.value
@@ -144,6 +143,23 @@ const hasMetaContent = computed(
     isSaving.value ||
     isDeleting.value
 )
+const cardClasses = computed(() => ({
+  'card--open': isExpanded.value,
+  'card--done': props.task.is_completed,
+  'card--busy': isBusy.value,
+  'card--priority-high': props.task.priority === 'high',
+  'card--priority-medium': props.task.priority === 'medium',
+  'card--priority-low': props.task.priority === 'low'
+}))
+const nextPriority = computed(() => getNextTaskPriority(props.task.priority))
+const prioritySwitchTitle = computed(() => {
+  const currentCode = getTaskPriorityCode(props.task.priority)
+  const currentTitle = getTaskPriorityTitle(props.task.priority)
+  const nextCode = getTaskPriorityCode(nextPriority.value)
+  const nextTitle = getTaskPriorityTitle(nextPriority.value)
+
+  return `${currentCode} ${currentTitle}，点击切换为 ${nextCode} ${nextTitle}`
+})
 
 const handleDueApply = (value: TaskDueState) => {
   void taskStore.updateTaskDue(props.task.id, value)
@@ -151,6 +167,14 @@ const handleDueApply = (value: TaskDueState) => {
 
 const handleDueOpenChange = (value: boolean) => {
   isDuePickerOpen.value = value
+}
+
+const handlePriorityCycle = () => {
+  if (isBusy.value) {
+    return
+  }
+
+  void taskStore.updateTaskPriority(props.task.id, nextPriority.value)
 }
 
 const restoreSubTaskOrder = (orderedIds: number[]) => {
@@ -217,11 +241,19 @@ const onSubTaskDragEnd = async () => {
 <template>
   <div
     class="card"
-    :class="{ 'card--open': isExpanded, 'card--done': task.is_completed, 'card--busy': isBusy }"
+    :class="cardClasses"
     :data-task-id="task.id"
     @mouseenter="onCardMouseEnter"
     @mouseleave="onCardMouseLeave"
   >
+    <button
+      class="card__priority-switch"
+      :disabled="isBusy"
+      :title="prioritySwitchTitle"
+      :aria-label="prioritySwitchTitle"
+      @click.stop="handlePriorityCycle"
+    ></button>
+
     <div class="card__row">
       <div class="card__drag-handle">
         <GripVertical :size="14" />
@@ -237,20 +269,22 @@ const onSubTaskDragEnd = async () => {
       </button>
 
       <div class="card__content">
-        <textarea
-          v-if="isEditing"
-          ref="editInputRef"
-          v-model="editContent"
-          class="card__edit-area"
-          maxlength="100"
-          rows="1"
-          @keydown.enter.exact.prevent="saveEdit"
-          @keyup.escape="cancelEdit"
-          @blur="onBlur"
-          @input="adjustHeight"
-        />
-        <div v-else class="card__text" @dblclick="handleDblClick">
-          {{ task.content }}
+        <div class="card__headline">
+          <textarea
+            v-if="isEditing"
+            ref="editInputRef"
+            v-model="editContent"
+            class="card__edit-area"
+            maxlength="100"
+            rows="1"
+            @keydown.enter.exact.prevent="saveEdit"
+            @keyup.escape="cancelEdit"
+            @blur="onBlur"
+            @input="adjustHeight"
+          />
+          <div v-else class="card__text" @dblclick="handleDblClick">
+            {{ task.content }}
+          </div>
         </div>
         <div v-if="hasMetaContent || shouldAlwaysShowEmptyDuePicker" class="card__meta">
           <span v-if="subTaskProgress" class="card__progress">
@@ -341,8 +375,13 @@ const onSubTaskDragEnd = async () => {
 @use '../styles/variables' as *;
 
 .card {
+  --card-priority-accent: rgba(240, 145, 56, 0.62);
+  --card-priority-glow: rgba(240, 145, 56, 0.03);
+
   background: $bg-elevated;
   border: 1px solid $border-color;
+  border-left-width: 4px;
+  border-left-color: var(--card-priority-accent);
   border-radius: 14px;
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.06),
@@ -358,19 +397,24 @@ const onSubTaskDragEnd = async () => {
 
   &:hover {
     border-color: $border-light;
+    border-left-color: var(--card-priority-accent);
     box-shadow:
       0 2px 6px rgba(15, 23, 42, 0.08),
-      0 8px 20px rgba(15, 23, 42, 0.06);
+      0 8px 20px rgba(15, 23, 42, 0.06),
+      0 0 0 1px var(--card-priority-glow);
   }
 
   &--open {
     border-color: rgba($accent-color, 0.3);
+    border-left-color: var(--card-priority-accent);
     box-shadow:
       0 2px 8px rgba($accent-color, 0.08),
-      0 0 0 1px rgba($accent-color, 0.06);
+      0 0 0 1px rgba($accent-color, 0.06),
+      0 10px 24px var(--card-priority-glow);
 
     &:hover {
       border-color: rgba($accent-color, 0.35);
+      border-left-color: var(--card-priority-accent);
       transform: none;
     }
   }
@@ -387,6 +431,44 @@ const onSubTaskDragEnd = async () => {
   &--busy {
     opacity: 0.82;
   }
+
+  &--priority-high {
+    --card-priority-accent: rgba(215, 104, 104, 0.7);
+    --card-priority-glow: rgba(215, 104, 104, 0.04);
+  }
+
+  &--priority-medium {
+    --card-priority-accent: rgba(240, 145, 56, 0.62);
+    --card-priority-glow: rgba(240, 145, 56, 0.03);
+  }
+
+  &--priority-low {
+    --card-priority-accent: rgba(111, 146, 211, 0.7);
+    --card-priority-glow: rgba(111, 146, 211, 0.04);
+  }
+}
+
+.card__priority-switch {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 14px 0 0 14px;
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.92),
+      0 0 0 4px rgba(15, 23, 42, 0.08);
+  }
 }
 
 .card__drag-handle {
@@ -402,7 +484,7 @@ const onSubTaskDragEnd = async () => {
   cursor: grab;
   transition: all $transition-normal;
   border-radius: $radius-sm;
-  margin-left: -4px;
+  margin-left: 0;
 
   &:hover {
     color: $accent-color;
@@ -522,7 +604,13 @@ const onSubTaskDragEnd = async () => {
   min-width: 0;
 }
 
+.card__headline {
+  min-width: 0;
+}
+
 .card__text {
+  flex: 1;
+  min-width: 0;
   font-size: $font-lg;
   font-weight: 450;
   color: $text-primary;
@@ -547,8 +635,6 @@ const onSubTaskDragEnd = async () => {
   gap: 8px;
   min-height: 20px;
   margin-top: 8px;
-  margin-left: -34px;
-  width: calc(100% + 34px);
 }
 
 .card__progress {
@@ -735,7 +821,6 @@ const onSubTaskDragEnd = async () => {
   padding: 8px 4px 4px 4px;
   background: $bg-deep;
   border-radius: 10px;
-  border-left: 3px solid rgba($accent-color, 0.25);
   overflow: hidden;
 }
 

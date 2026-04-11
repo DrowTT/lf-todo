@@ -1,10 +1,12 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import path from 'path'
+import { DEFAULT_TASK_PRIORITY } from '../../shared/constants/task'
 import type {
   TaskCreateInput,
   TaskDuePrecision,
   TaskDueState,
+  TaskPriority,
   TaskUpdate
 } from '../../shared/types/models'
 
@@ -62,6 +64,7 @@ const migrations: Migration[] = [
         parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
         due_at INTEGER,
         due_precision TEXT,
+        priority TEXT NOT NULL DEFAULT '${DEFAULT_TASK_PRIORITY}',
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
       )
     `
@@ -88,6 +91,11 @@ const migrations: Migration[] = [
     version: 6,
     description: 'add due_precision column to tasks',
     up: `ALTER TABLE tasks ADD COLUMN due_precision TEXT`
+  },
+  {
+    version: 7,
+    description: 'add priority column to tasks',
+    up: `ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT '${DEFAULT_TASK_PRIORITY}'`
   }
 ]
 
@@ -179,8 +187,8 @@ export function initDatabase(): void {
     getTaskById: db.prepare('SELECT * FROM tasks WHERE id = ?'),
     // Task 写入
     createTask: db.prepare(`
-      INSERT INTO tasks (content, category_id, due_at, due_precision)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO tasks (content, category_id, due_at, due_precision, priority)
+      VALUES (?, ?, ?, ?, ?)
     `),
     createSubTask: db.prepare(`
       INSERT INTO tasks (content, category_id, parent_id, order_index)
@@ -196,6 +204,7 @@ export function initDatabase(): void {
     updateOrderIndex: db.prepare('UPDATE tasks SET order_index = ? WHERE id = ?'),
     updateDueAt: db.prepare('UPDATE tasks SET due_at = ? WHERE id = ?'),
     updateDuePrecision: db.prepare('UPDATE tasks SET due_precision = ? WHERE id = ?'),
+    updatePriority: db.prepare('UPDATE tasks SET priority = ? WHERE id = ?'),
     deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
     toggleTaskComplete: db.prepare('UPDATE tasks SET is_completed = NOT is_completed WHERE id = ?'),
     batchCompleteSubTasks: db.prepare(
@@ -261,6 +270,7 @@ export interface Task extends TaskDueState {
   order_index: number
   created_at: number
   parent_id: number | null
+  priority: TaskPriority
   // 子任务统计（仅顶级任务具备）
   subtask_total: number
   subtask_done: number
@@ -290,6 +300,7 @@ function mapTask(raw: Record<string, unknown>): Task {
     parent_id: (raw.parent_id as number | null | undefined) ?? null,
     due_at: (raw.due_at as number | null | undefined) ?? null,
     due_precision: (raw.due_precision as Task['due_precision'] | null | undefined) ?? null,
+    priority: (raw.priority as TaskPriority | null | undefined) ?? DEFAULT_TASK_PRIORITY,
     subtask_total: typeof raw.subtask_total === 'number' ? raw.subtask_total : 0,
     subtask_done: typeof raw.subtask_done === 'number' ? raw.subtask_done : 0
   }
@@ -327,7 +338,8 @@ export function createTask(input: TaskCreateInput): Task {
     input.content,
     input.categoryId,
     input.due_at,
-    input.due_precision
+    input.due_precision,
+    input.priority
   )
   return getTaskById(info.lastInsertRowid as number)!
 }
@@ -366,6 +378,9 @@ export function updateTask(id: number, updates: TaskUpdate): void {
   }
   if (updates.due_precision !== undefined) {
     s.updateDuePrecision.run(updates.due_precision, id)
+  }
+  if (updates.priority !== undefined) {
+    s.updatePriority.run(updates.priority, id)
   }
 }
 

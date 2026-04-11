@@ -13,9 +13,11 @@ const appSessionStore = useAppSessionStore()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const content = ref(appSessionStore.getSubTaskDraft(props.parentId))
+const isFocused = ref(false)
 
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 const isSubmitting = computed(() => subTaskStore.isCreatingSubTask(props.parentId))
+const isPromptActive = computed(() => isFocused.value || content.value.trim().length > 0)
 
 const handleSubmit = async () => {
   const trimmed = content.value.trim()
@@ -40,7 +42,13 @@ watch(content, (value) => {
 <template>
   <div class="sub-add">
     <div class="sub-add__drag-spacer" aria-hidden="true"></div>
-    <span class="sub-add__check-placeholder" aria-hidden="true">+</span>
+    <span
+      class="sub-add__prompt"
+      :class="{ 'sub-add__prompt--active': isPromptActive }"
+      aria-hidden="true"
+    >
+      &gt;
+    </span>
     <textarea
       ref="textareaRef"
       v-model="content"
@@ -52,6 +60,8 @@ watch(content, (value) => {
       @input="adjustHeight"
       @keydown.enter.exact.prevent="handleSubmit"
       @keyup.escape="($event.target as HTMLTextAreaElement).blur()"
+      @focus="isFocused = true"
+      @blur="isFocused = false"
     />
   </div>
 </template>
@@ -73,18 +83,31 @@ watch(content, (value) => {
   margin-top: 1px;
 }
 
-.sub-add__check-placeholder {
+.sub-add__prompt {
   flex-shrink: 0;
   width: 16px;
-  height: 16px;
+  height: 17px;
   margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: $text-muted;
-  font-size: 15px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1;
   user-select: none;
+  opacity: 0.72;
+  transition:
+    color $transition-fast,
+    opacity $transition-fast,
+    transform $transition-fast;
+}
+
+.sub-add__prompt--active {
+  color: rgba($accent-color, 0.78);
+  opacity: 1;
+  transform: translateX(1px);
 }
 
 .sub-add__input {
