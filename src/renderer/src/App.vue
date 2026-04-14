@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
+import { useAppFacade } from './app/facade/useAppFacade'
 import { useAppBootstrap } from './app/useAppBootstrap'
 import { useAppRuntime } from './app/runtime'
 import ConfirmDialog from './components/ConfirmDialog.vue'
@@ -15,15 +16,63 @@ import { usePomodoroStore } from './store/pomodoro'
 import { useSettingsStore } from './store/settings'
 
 const runtime = useAppRuntime()
+const app = useAppFacade()
 const { current, handleConfirm, handleCancel, confirm } = runtime.confirm
 const pomodoroStore = usePomodoroStore()
 const settingsStore = useSettingsStore()
 const appSessionStore = useAppSessionStore()
+const INTERACTIVE_FOCUS_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  'button',
+  'a[href]',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="checkbox"]',
+  '[role="combobox"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[role="tab"]',
+  '[role="textbox"]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ')
 
 useAppBootstrap()
 useHotkeys()
 
 const currentMainView = computed(() => appSessionStore.currentMainView)
+
+function isInteractiveElement(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+
+  return target.matches(INTERACTIVE_FOCUS_SELECTOR) || !!target.closest(INTERACTIVE_FOCUS_SELECTOR)
+}
+
+function shouldHideWindowOnEscape(event: KeyboardEvent): boolean {
+  if (!runtime.window.isAvailable) return false
+  if (event.defaultPrevented) return false
+  if (event.key !== 'Escape') return false
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  if (current.value !== null) return false
+  if (currentMainView.value === 'settings') return false
+  if (isInteractiveElement(event.target)) return false
+  if (isInteractiveElement(document.activeElement)) return false
+
+  return true
+}
+
+function handleWindowKeydown(event: KeyboardEvent): void {
+  if (!shouldHideWindowOnEscape(event)) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  runtime.window.hideToTray()
+}
 
 async function confirmQuitIfNeeded(): Promise<boolean> {
   if (!pomodoroStore.activeSession) return true
@@ -59,17 +108,25 @@ async function handleQuitRequested() {
 }
 
 let stopQuitRequestedListener: (() => void) | null = null
+let stopQuickAddCommittedListener: (() => void) | null = null
 
 onMounted(() => {
+  window.addEventListener('keydown', handleWindowKeydown)
+
   if (runtime.window.isAvailable) {
     stopQuitRequestedListener = runtime.window.onQuitRequested(() => {
       void handleQuitRequested()
+    })
+    stopQuickAddCommittedListener = runtime.window.onQuickAddCommitted(() => {
+      void app.fetchCategories()
     })
   }
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleWindowKeydown)
   stopQuitRequestedListener?.()
+  stopQuickAddCommittedListener?.()
 })
 </script>
 

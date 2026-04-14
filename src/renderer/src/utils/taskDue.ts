@@ -23,9 +23,7 @@ export function cloneTaskDueState(value?: Partial<TaskDueState> | null): TaskDue
   }
 }
 
-export function hasTaskDue(
-  value?: Partial<TaskDueState> | null
-): value is ResolvedTaskDueState {
+export function hasTaskDue(value?: Partial<TaskDueState> | null): value is ResolvedTaskDueState {
   return (
     typeof value?.due_at === 'number' &&
     (value.due_precision === 'date' || value.due_precision === 'datetime')

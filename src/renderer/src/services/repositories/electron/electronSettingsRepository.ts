@@ -3,6 +3,7 @@ import {
   parseAutoCleanupConfig,
   parsePomodoroData,
   parsePomodoroSessionState,
+  parseQuickAddCommittedEvent,
   parseSettingsData,
   parseUpdateStatusData
 } from '../../../../../shared/contracts/entities'
@@ -81,7 +82,7 @@ export function createElectronSettingsRepository(
           'settings:get-app-info.fallback'
         )
       },
-      async notifyPomodoroCompleted(_durationSeconds) {
+      async notifyPomodoroCompleted() {
         return undefined
       }
     }
@@ -173,10 +174,14 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
       isAvailable: false,
       minimize: noop,
       close: noop,
+      hideToTray: noop,
       quit: noop,
       toggleAlwaysOnTop: noop,
       toggleMaximize: noop,
       onQuitRequested() {
+        return noop
+      },
+      onQuickAddCommitted() {
         return noop
       },
       onAlwaysOnTopChanged() {
@@ -196,6 +201,9 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
     close() {
       api.window.close()
     },
+    hideToTray() {
+      api.window.hideToTray()
+    },
     quit() {
       api.window.quit()
     },
@@ -207,6 +215,11 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
     },
     onQuitRequested(callback) {
       return api.window.onQuitRequested(callback)
+    },
+    onQuickAddCommitted(callback) {
+      return api.window.onQuickAddCommitted((payload) => {
+        callback(parseQuickAddCommittedEvent(payload, 'window:quick-add-committed.event'))
+      })
     },
     onAlwaysOnTopChanged(callback) {
       return api.window.onAlwaysOnTopChanged(callback)

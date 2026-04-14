@@ -5,6 +5,8 @@ import type {
   PomodoroData,
   PomodoroRecord,
   PomodoroSessionState,
+  QuickAddCommittedEvent,
+  QuickAddSubmitResult,
   SettingsData,
   Task,
   TaskDuePrecision,
@@ -121,6 +123,33 @@ function parseTaskPriority(value: unknown, label: string): TaskPriority {
 
 export function parseTasks(value: unknown, label = 'tasks'): Task[] {
   return expectArray(value, label, parseTask)
+}
+
+export function parseQuickAddSubmitResult(
+  value: unknown,
+  label = 'quickAddSubmitResult'
+): QuickAddSubmitResult {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['task', 'category', 'categoryCreated'], label)
+
+  return {
+    task: parseTask(record.task, `${label}.task`),
+    category: parseCategory(record.category, `${label}.category`),
+    categoryCreated: expectBoolean(record.categoryCreated, `${label}.categoryCreated`)
+  }
+}
+
+export function parseQuickAddCommittedEvent(
+  value: unknown,
+  label = 'quickAddCommittedEvent'
+): QuickAddCommittedEvent {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['categoryId', 'categoryCreated'], label)
+
+  return {
+    categoryId: expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 }),
+    categoryCreated: expectBoolean(record.categoryCreated, `${label}.categoryCreated`)
+  }
 }
 
 export function parsePendingTaskCounts(

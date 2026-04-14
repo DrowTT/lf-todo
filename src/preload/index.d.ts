@@ -5,6 +5,9 @@ import type {
   Category,
   PomodoroData,
   PomodoroSessionState,
+  QuickAddCommittedEvent,
+  QuickAddSubmitInput,
+  QuickAddSubmitResult,
   SettingsData,
   Task,
   TaskCreateInput,
@@ -16,11 +19,16 @@ interface API {
   window: {
     minimize: () => void
     close: () => void
+    hideToTray: () => void
     quit: () => void
     toggleAlwaysOnTop: () => void
     toggleMaximize: () => void
+    resizeQuickAddWindow: (height: number) => void
     onQuitRequested: (callback: () => void) => () => void
     onFocusMainInputRequested: (callback: () => void) => () => void
+    onFocusQuickAddInputRequested: (callback: () => void) => () => void
+    onQuickAddSessionRequested: (callback: () => void) => () => void
+    onQuickAddCommitted: (callback: (payload: QuickAddCommittedEvent) => void) => () => void
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => () => void
     onMaximizedChanged: (callback: (flag: boolean) => void) => () => void
   }
@@ -60,6 +68,9 @@ interface API {
     notifyPomodoroCompleted: (durationSeconds: number) => Promise<void>
     exportData: () => Promise<boolean>
     getAppInfo: () => Promise<AppInfo>
+  }
+  quickAdd: {
+    submit: (input: QuickAddSubmitInput) => Promise<QuickAddSubmitResult>
   }
   updater: {
     checkForUpdates: () => Promise<void>

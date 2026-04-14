@@ -213,6 +213,8 @@ function handleRecordKeydown(event: KeyboardEvent) {
   if (!recordingAction.value) return
 
   if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
     cancelRecording()
     return
   }
@@ -308,7 +310,9 @@ function handleKeydown(event: KeyboardEvent) {
 
   // ESC 切回待办视图
   if (event.key === 'Escape') {
-    appSessionStore.currentMainView = 'tasks'
+    event.preventDefault()
+    event.stopPropagation()
+    appSessionStore.setCurrentMainView('tasks')
   }
 }
 
@@ -319,9 +323,6 @@ watch(autoCleanupDays, () => {
 })
 
 onMounted(() => {
-  void settingsStore.hydrate()
-  void settingsStore.load()
-  updaterStore.initialize()
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('click', handleDropdownOutsideClick, true)
   window.addEventListener('resize', syncOpenDropdownPositions)
@@ -668,6 +669,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use 'sass:color';
 @use '../styles/variables' as *;
 
 /* 内联主视图设置页 */
@@ -1309,7 +1311,7 @@ onUnmounted(() => {
 
   &__progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, $accent-color, lighten($accent-color, 8%));
+    background: linear-gradient(90deg, $accent-color, color.adjust($accent-color, $lightness: 8%));
   }
 
   &__spin {

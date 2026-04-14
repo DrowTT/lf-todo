@@ -42,10 +42,8 @@ const startAdding = async () => {
   inputRef.value?.focus()
 }
 
-
-
 const handleSelectCategory = (categoryId: number) => {
-  appSessionStore.currentMainView = 'tasks'
+  appSessionStore.setCurrentMainView('tasks')
   void app.selectCategory(categoryId)
 }
 
@@ -380,5 +378,4 @@ const cancelRename = () => {
     margin: $spacing-xs 0;
   }
 }
-
 </style>

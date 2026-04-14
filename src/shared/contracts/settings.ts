@@ -19,16 +19,10 @@ export function parseSetPomodoroActiveSessionRequest(
   return parsePomodoroSessionState(value, label)
 }
 
-export function parseNotifyPomodoroCompletedRequest(
-  value: unknown,
-  _label = 'payload'
-): number {
-  return normalizePomodoroDurationSeconds(value)
+export function parseNotifyPomodoroCompletedRequest(value: unknown, label = 'payload'): number {
+  return normalizePomodoroDurationSeconds(expectInteger(value, label, { min: 1, max: 86400 }))
 }
 
-export function parseSetPomodoroFocusDurationRequest(
-  value: unknown,
-  label = 'payload'
-): number {
+export function parseSetPomodoroFocusDurationRequest(value: unknown, label = 'payload'): number {
   return normalizePomodoroDurationSeconds(expectInteger(value, label, { min: 1, max: 86400 }))
 }

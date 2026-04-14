@@ -1,5 +1,6 @@
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../constants/task'
 import type {
+  QuickAddSubmitInput,
   TaskCreateInput,
   TaskDuePrecision,
   TaskDueState,
@@ -16,6 +17,7 @@ import {
 } from './utils'
 
 export type CreateTaskRequest = TaskCreateInput
+export type QuickAddSubmitRequest = QuickAddSubmitInput
 
 export interface CreateSubTaskRequest {
   content: string
@@ -83,6 +85,41 @@ export function parseCreateSubTaskRequest(value: unknown, label = 'payload'): Cr
       maxLength: 200
     }),
     parentId: expectInteger(record.parentId, `${label}.parentId`, { min: 1 })
+  }
+}
+
+export function parseQuickAddSubmitRequest(
+  value: unknown,
+  label = 'payload'
+): QuickAddSubmitRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['content', 'categoryId', 'categoryName'], label)
+
+  const categoryId =
+    record.categoryId === null
+      ? null
+      : expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 })
+  const categoryName =
+    record.categoryName === null
+      ? null
+      : expectString(record.categoryName, `${label}.categoryName`, {
+          trim: true,
+          minLength: 1,
+          maxLength: 64
+        })
+
+  if (categoryId === null && categoryName === null) {
+    throw new Error(`${label} must include categoryId or categoryName`)
+  }
+
+  return {
+    content: expectString(record.content, `${label}.content`, {
+      trim: true,
+      minLength: 1,
+      maxLength: 100
+    }),
+    categoryId,
+    categoryName
   }
 }
 

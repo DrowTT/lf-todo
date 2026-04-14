@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TaskCreateInput, TaskUpdate } from '../shared/types/models'
+import type {
+  QuickAddCommittedEvent,
+  QuickAddSubmitInput,
+  TaskCreateInput,
+  TaskUpdate
+} from '../shared/types/models'
 import {
   parseAppInfo,
   parseAutoCleanupConfig,
@@ -8,6 +13,8 @@ import {
   parsePendingTaskCounts,
   parsePomodoroData,
   parsePomodoroSessionState,
+  parseQuickAddCommittedEvent,
+  parseQuickAddSubmitResult,
   parseSettingsData,
   parseTask,
   parseTasks,
@@ -17,6 +24,7 @@ import {
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
   parseDeleteTasksRequest,
+  parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
@@ -79,13 +87,28 @@ const api = {
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     close: () => ipcRenderer.send('window:close'),
+    hideToTray: () => ipcRenderer.send('window:hide-to-tray'),
     quit: () => ipcRenderer.send('window:quit'),
     toggleAlwaysOnTop: () => ipcRenderer.send('window:toggle-always-on-top'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    resizeQuickAddWindow: (height: number) =>
+      ipcRenderer.send(
+        'window:resize-quick-add',
+        expectInteger(height, 'window:resize-quick-add.request.height', {
+          min: 140,
+          max: 420
+        })
+      ),
     onQuitRequested: (callback: () => void) =>
       subscribe('window:quit-requested', callback, parseVoid),
     onFocusMainInputRequested: (callback: () => void) =>
       subscribe('window:focus-main-input', callback, parseVoid),
+    onFocusQuickAddInputRequested: (callback: () => void) =>
+      subscribe('window:focus-quick-add-input', callback, parseVoid),
+    onQuickAddSessionRequested: (callback: () => void) =>
+      subscribe('window:quick-add-session-requested', callback, parseVoid),
+    onQuickAddCommitted: (callback: (payload: QuickAddCommittedEvent) => void) =>
+      subscribe('window:quick-add-committed', callback, parseQuickAddCommittedEvent),
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) =>
       subscribe('window:always-on-top-changed', callback, expectBoolean),
     onMaximizedChanged: (callback: (flag: boolean) => void) =>
@@ -262,6 +285,15 @@ const api = {
         .invoke('settings:export-data')
         .then((value) => expectBoolean(value, 'settings:export-data.response')),
     getAppInfo: () => invokeWithResponse('settings:get-app-info', parseAppInfo)
+  },
+  quickAdd: {
+    submit: (input: QuickAddSubmitInput) =>
+      invokeWithPayload(
+        'quick-add:submit',
+        input,
+        parseQuickAddSubmitRequest,
+        parseQuickAddSubmitResult
+      )
   },
   updater: {
     checkForUpdates: () =>

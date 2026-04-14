@@ -45,7 +45,7 @@ const draggableSubTasks = computed({
 const isDeleting = computed(() => taskStore.isTaskDeleting(props.task.id))
 const isSaving = computed(() => taskStore.isTaskSaving(props.task.id))
 const isBusy = computed(() => taskStore.isTaskBusy(props.task.id))
-const isSubTaskReordering = ref(false)
+const isSubTaskReordering = computed(() => subTaskStore.isSubTaskReordering(props.task.id))
 const isHovered = ref(false)
 const isDuePickerOpen = ref(false)
 const hasBusySubTasks = computed(() =>
@@ -177,17 +177,6 @@ const handlePriorityCycle = () => {
   void taskStore.updateTaskPriority(props.task.id, nextPriority.value)
 }
 
-const restoreSubTaskOrder = (orderedIds: number[]) => {
-  const subTasksById = new Map(subTasks.value.map((subTask) => [subTask.id, subTask]))
-  const restoredSubTasks = orderedIds
-    .map((id) => subTasksById.get(id))
-    .filter((task): task is Task => Boolean(task))
-
-  if (restoredSubTasks.length === subTasks.value.length) {
-    subTaskStore.subTasksMap[props.task.id] = restoredSubTasks
-  }
-}
-
 const onSubTaskDragStart = () => {
   dragStartSubTaskOrder.value = subTasks.value.map((subTask) => subTask.id)
 }
@@ -205,36 +194,7 @@ const onSubTaskDragEnd = async () => {
     return
   }
 
-  isSubTaskReordering.value = true
-
-  try {
-    await Promise.all(
-      orderedIds.map((id, index) =>
-        runtime.repositories.task.updateTask(id, {
-          order_index: index
-        })
-      )
-    )
-  } catch (error) {
-    console.error('[TodoItem] reorderSubTasks failed', error)
-    restoreSubTaskOrder(previousOrderedIds)
-
-    try {
-      await Promise.all(
-        previousOrderedIds.map((id, index) =>
-          runtime.repositories.task.updateTask(id, {
-            order_index: index
-          })
-        )
-      )
-    } catch (rollbackError) {
-      console.error('[TodoItem] reorderSubTasks compensation failed', rollbackError)
-    }
-
-    runtime.toast.show('保存子任务排序失败，请重试')
-  } finally {
-    isSubTaskReordering.value = false
-  }
+  await subTaskStore.reorderSubTasks(props.task.id, previousOrderedIds)
 }
 </script>
 
@@ -818,7 +778,7 @@ const onSubTaskDragEnd = async () => {
 
 .card__subs {
   margin: 0 12px 12px;
-  padding: 8px 4px 4px 4px;
+  padding: 8px 4px 8px 4px;
   background: $bg-deep;
   border-radius: 10px;
   overflow: hidden;

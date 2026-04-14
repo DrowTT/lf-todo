@@ -1,12 +1,13 @@
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../../../shared/constants/task'
 import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 
+export type MainView = 'tasks' | 'pomodoro' | 'settings'
+
 interface SessionSnapshot {
-  settingsPanelOpen: boolean
-  currentMainView: 'tasks' | 'pomodoro' | 'settings'
+  currentMainView: MainView
   taskDrafts: Record<string, string>
   taskDueDrafts: Record<string, TaskDueState>
   taskPriorityDrafts: Record<string, TaskPriority>
@@ -19,7 +20,6 @@ function loadSnapshot(): SessionSnapshot {
   const parsed = readStoredJson<Partial<SessionSnapshot>>(STORAGE_KEY, {})
 
   return {
-    settingsPanelOpen: parsed.settingsPanelOpen ?? false,
     currentMainView:
       parsed.currentMainView === 'pomodoro'
         ? 'pomodoro'
@@ -94,28 +94,14 @@ function normalizeTaskPriorityDrafts(value: unknown): Record<string, TaskPriorit
 
 export const useAppSessionStore = defineStore('appSession', () => {
   const hydrated = ref(false)
-  const settingsPanelOpen = ref(false)
-  const currentMainView = ref<'tasks' | 'pomodoro' | 'settings'>('tasks')
+  const currentMainView = ref<MainView>('tasks')
   const taskDrafts = ref<Record<string, string>>({})
   const taskDueDrafts = ref<Record<string, TaskDueState>>({})
   const taskPriorityDrafts = ref<Record<string, TaskPriority>>({})
   const subTaskDrafts = ref<Record<string, string>>({})
 
-  const hasDrafts = computed(
-    () =>
-      Object.values(taskDrafts.value).some(Boolean) ||
-      Object.values(taskDueDrafts.value).some(
-        (draft) => draft.due_at !== null && draft.due_precision !== null
-      ) ||
-      Object.values(taskPriorityDrafts.value).some(
-        (priority) => priority !== DEFAULT_TASK_PRIORITY
-      ) ||
-      Object.values(subTaskDrafts.value).some(Boolean)
-  )
-
   function persist() {
     const snapshot: SessionSnapshot = {
-      settingsPanelOpen: settingsPanelOpen.value,
       currentMainView: currentMainView.value,
       taskDrafts: taskDrafts.value,
       taskDueDrafts: taskDueDrafts.value,
@@ -129,7 +115,6 @@ export const useAppSessionStore = defineStore('appSession', () => {
     if (hydrated.value) return
 
     const snapshot = loadSnapshot()
-    settingsPanelOpen.value = snapshot.settingsPanelOpen
     currentMainView.value = snapshot.currentMainView
     taskDrafts.value = snapshot.taskDrafts
     taskDueDrafts.value = snapshot.taskDueDrafts
@@ -138,12 +123,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     hydrated.value = true
   }
 
-  function setSettingsPanelOpen(open: boolean) {
-    settingsPanelOpen.value = open
-    persist()
-  }
-
-  function setCurrentMainView(view: 'tasks' | 'pomodoro') {
+  function setCurrentMainView(view: MainView) {
     currentMainView.value = view
     persist()
   }
@@ -260,15 +240,12 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
   return {
     hydrated,
-    settingsPanelOpen,
     currentMainView,
     taskDrafts,
     taskDueDrafts,
     taskPriorityDrafts,
     subTaskDrafts,
-    hasDrafts,
     hydrate,
-    setSettingsPanelOpen,
     setCurrentMainView,
     getTaskDraft,
     setTaskDraft,

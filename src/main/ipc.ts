@@ -4,13 +4,20 @@ import {
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
   parseDeleteTasksRequest,
+  parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
 } from '../shared/contracts/db'
+import { DEFAULT_TASK_PRIORITY } from '../shared/constants/task'
 import { expectInteger, expectString } from '../shared/contracts/utils'
+import type { QuickAddCommittedEvent } from '../shared/types/models'
 
-export function registerIpcHandlers(): void {
+interface RegisterIpcHandlersOptions {
+  onQuickAddCommitted?: (payload: QuickAddCommittedEvent) => void
+}
+
+export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): void {
   ipcMain.handle('db:get-categories', () => db.getAllCategories())
   ipcMain.handle('db:create-category', (_event, name: unknown) =>
     db.createCategory(
@@ -33,6 +40,49 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('db:create-task', (_event, payload: unknown) => {
     const request = parseCreateTaskRequest(payload, 'db:create-task.request')
     return db.createTask(request)
+  })
+  ipcMain.handle('quick-add:submit', (_event, payload: unknown) => {
+    const request = parseQuickAddSubmitRequest(payload, 'quick-add:submit.request')
+    const normalizedCategoryName = request.categoryName?.trim().toLocaleLowerCase() ?? null
+
+    const category =
+      request.categoryId !== null
+        ? db.getCategoryById(request.categoryId)
+        : db
+            .getAllCategories()
+            .find((item) => item.name.trim().toLocaleLowerCase() === normalizedCategoryName)
+    if (request.categoryId !== null && !category) {
+      throw new Error('quick-add:submit.request.categoryId does not exist')
+    }
+
+    const resolvedCategory =
+      category ??
+      db.createCategory(
+        expectString(request.categoryName, 'quick-add:submit.request.categoryName', {
+          trim: true,
+          minLength: 1,
+          maxLength: 64
+        })
+      )
+    const task = db.createTask({
+      content: request.content,
+      categoryId: resolvedCategory.id,
+      due_at: null,
+      due_precision: null,
+      priority: DEFAULT_TASK_PRIORITY
+    })
+    const categoryCreated = request.categoryId === null && category === undefined
+
+    options.onQuickAddCommitted?.({
+      categoryId: resolvedCategory.id,
+      categoryCreated
+    })
+
+    return {
+      task,
+      category: resolvedCategory,
+      categoryCreated
+    }
   })
   ipcMain.handle('db:update-task', (_event, payload: unknown) => {
     const request = parseUpdateTaskRequest(payload, 'db:update-task.request')

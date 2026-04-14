@@ -42,7 +42,9 @@ const pomodoroDurationMinutes = computed(() =>
   Math.round(settings.value.pomodoro.focusDurationSeconds / 60)
 )
 const pomodoroDurationLabel = computed(() => {
-  const option = pomodoroDurationOptions.find((item) => item.value === pomodoroDurationMinutes.value)
+  const option = pomodoroDurationOptions.find(
+    (item) => item.value === pomodoroDurationMinutes.value
+  )
   return option?.label ?? `${pomodoroDurationMinutes.value} 分钟`
 })
 const durationMenuOpen = ref(false)
@@ -111,10 +113,7 @@ onUnmounted(() => {
     <header class="pomo__header">
       <h1 class="pomo__title">专注计时</h1>
       <div class="pomo__header-actions">
-        <span
-          class="pomo__status-pill"
-          :class="{ 'pomo__status-pill--active': isRunning }"
-        >
+        <span class="pomo__status-pill" :class="{ 'pomo__status-pill--active': isRunning }">
           <span v-if="isRunning" class="pomo__status-dot" />
           {{ activeSessionLabel }}
         </span>
@@ -370,7 +369,8 @@ onUnmounted(() => {
 }
 
 @keyframes ambient-breathe {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
     transform: translate(-50%, -50%) scale(1);
   }
@@ -535,7 +535,8 @@ onUnmounted(() => {
 }
 
 @keyframes status-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.4;
     box-shadow: 0 0 0 0 rgba($accent-color, 0.3);
   }
@@ -598,7 +599,8 @@ onUnmounted(() => {
 }
 
 @keyframes ring-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.2;
   }
   50% {

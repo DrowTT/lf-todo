@@ -65,9 +65,7 @@ const previewDueState = computed(
   () => createTaskDueStateFromInputs(dateValue.value, withTime.value, timeValue.value) ?? null
 )
 const canSave = computed(() => previewDueState.value !== null)
-const triggerTone = computed(() =>
-  getTaskDueTone(props.dueState, props.completed, now.value)
-)
+const triggerTone = computed(() => getTaskDueTone(props.dueState, props.completed, now.value))
 const triggerLabel = computed(() =>
   hasDueDate.value ? formatTaskDueLabel(props.dueState, now.value) : props.emptyLabel
 )
@@ -125,9 +123,7 @@ function updatePanelPosition() {
   const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - PANEL_WIDTH - VIEWPORT_PADDING)
   const preferredLeft = props.align === 'right' ? rect.right - PANEL_WIDTH : rect.left
   const preferredTop =
-    placement === 'top'
-      ? rect.top - PANEL_GAP - effectiveHeight
-      : rect.bottom + PANEL_GAP
+    placement === 'top' ? rect.top - PANEL_GAP - effectiveHeight : rect.bottom + PANEL_GAP
   const constrainedTop = Math.min(
     Math.max(VIEWPORT_PADDING, preferredTop),
     window.innerHeight - VIEWPORT_PADDING - effectiveHeight
@@ -195,10 +191,7 @@ function handleDocumentPointerDown(event: MouseEvent) {
 
   const target = event.target as Node
 
-  if (
-    triggerRef.value?.contains(target) ||
-    panelRef.value?.contains(target)
-  ) {
+  if (triggerRef.value?.contains(target) || panelRef.value?.contains(target)) {
     return
   }
 
@@ -308,7 +301,11 @@ function unbindGlobalListeners() {
   >
     <CalendarDays class="due-trigger__icon" :size="variant === 'input' ? 15 : 13" />
     <span class="due-trigger__label">{{ triggerLabel }}</span>
-    <Clock3 v-if="hasDueDate && dueState.due_precision === 'datetime'" class="due-trigger__clock" :size="12" />
+    <Clock3
+      v-if="hasDueDate && dueState.due_precision === 'datetime'"
+      class="due-trigger__clock"
+      :size="12"
+    />
   </button>
 
   <Transition name="due-pop">
@@ -331,8 +328,12 @@ function unbindGlobalListeners() {
         </div>
 
         <div class="due-panel__quick-actions">
-          <button type="button" class="due-panel__quick-btn" @click="applyQuickDate(0)">今天</button>
-          <button type="button" class="due-panel__quick-btn" @click="applyQuickDate(1)">明天</button>
+          <button type="button" class="due-panel__quick-btn" @click="applyQuickDate(0)">
+            今天
+          </button>
+          <button type="button" class="due-panel__quick-btn" @click="applyQuickDate(1)">
+            明天
+          </button>
         </div>
 
         <label class="due-panel__field">
@@ -363,7 +364,11 @@ function unbindGlobalListeners() {
           >
             清除
           </button>
-          <button type="button" class="due-panel__action due-panel__action--ghost" @click="closePopover">
+          <button
+            type="button"
+            class="due-panel__action due-panel__action--ghost"
+            @click="closePopover"
+          >
             取消
           </button>
           <button

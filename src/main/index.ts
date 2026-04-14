@@ -24,11 +24,13 @@ import {
   parseSetAutoCleanupRequest,
   parseSetPomodoroFocusDurationRequest
 } from '../shared/contracts/settings'
+import { expectInteger } from '../shared/contracts/utils'
 import {
   createPomodoroCompletionMessage,
   DEFAULT_FOCUS_DURATION_SECONDS,
   normalizePomodoroDurationSeconds
 } from '../shared/constants/pomodoro'
+import type { QuickAddCommittedEvent } from '../shared/types/models'
 
 interface AutoCleanupConfig {
   enabled: boolean
@@ -93,6 +95,9 @@ interface StoreType {
 const store = new Store<StoreType>()
 const DEFAULT_WINDOW_SIZE = { width: 900, height: 670 }
 const MIN_WINDOW_SIZE = { width: 400, height: 500 }
+const QUICK_ADD_WINDOW_SIZE = { width: 460, height: 168 }
+const QUICK_ADD_WINDOW_HEIGHT_RANGE = { min: 140, max: 420 }
+const QUICK_ADD_WINDOW_EDGE_MARGIN = 18
 const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyConfig = {
   showWindow: { key: 'Control+Alt+L', label: 'Ctrl+Alt+L' },
   showWindowAndFocusInput: { key: 'Control+Alt+N', label: 'Ctrl+Alt+N' }
@@ -112,10 +117,15 @@ const DUE_REMINDER_CHECK_INTERVAL_MS = 30 * 1000
 const SECOND = 1000
 
 let mainWindow: BrowserWindow | null = null
+let quickAddWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
+let windowIpcHandlersRegistered = false
 let releaseTopMostTimer: NodeJS.Timeout | null = null
 let dueReminderTimer: NodeJS.Timeout | null = null
+let quickAddWindowReady = false
+let shouldShowQuickAddWhenReady = false
+let isAppQuitting = false
 
 function getStoredPomodoroData(): PomodoroData {
   const raw = store.get('pomodoro', DEFAULT_POMODORO_DATA) as Partial<PomodoroData> | undefined
@@ -187,7 +197,10 @@ function toElectronAccelerator(key: string): string {
     .join('+')
 }
 
-function bringWindowToFront(win: BrowserWindow, options?: { focusMainInput?: boolean }): void {
+function bringWindowToFront(
+  win: BrowserWindow,
+  options?: { focusEventChannel?: 'window:focus-main-input' | 'window:focus-quick-add-input' }
+): void {
   if (win.isDestroyed()) return
 
   if (releaseTopMostTimer) {
@@ -210,8 +223,8 @@ function bringWindowToFront(win: BrowserWindow, options?: { focusMainInput?: boo
   win.focus()
   win.moveTop()
 
-  if (options?.focusMainInput) {
-    win.webContents.send('window:focus-main-input')
+  if (options?.focusEventChannel) {
+    win.webContents.send(options.focusEventChannel)
   }
 
   if (shouldUseTemporaryTopMost) {
@@ -222,6 +235,182 @@ function bringWindowToFront(win: BrowserWindow, options?: { focusMainInput?: boo
       releaseTopMostTimer = null
     }, 500)
   }
+}
+
+function hideQuickAddWindow(): void {
+  if (!quickAddWindow || quickAddWindow.isDestroyed()) {
+    quickAddWindow = null
+    quickAddWindowReady = false
+    shouldShowQuickAddWhenReady = false
+    return
+  }
+
+  shouldShowQuickAddWhenReady = false
+
+  if (quickAddWindow.isVisible()) {
+    quickAddWindow.hide()
+  }
+}
+
+function loadRendererEntry(win: BrowserWindow, mode: 'main' | 'quick-add'): void {
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+
+    if (mode !== 'main') {
+      url.searchParams.set('mode', mode)
+    }
+
+    win.loadURL(url.toString())
+    return
+  }
+
+  const rendererIndexPath = join(__dirname, '../renderer/index.html')
+
+  if (mode === 'main') {
+    win.loadFile(rendererIndexPath)
+    return
+  }
+
+  win.loadFile(rendererIndexPath, {
+    query: { mode }
+  })
+}
+
+function resolveQuickAddWindowBounds(): Rectangle {
+  const referenceWindow =
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getFocusedWindow()
+  const display = referenceWindow
+    ? screen.getDisplayMatching(referenceWindow.getBounds())
+    : screen.getPrimaryDisplay()
+  const size = {
+    width: Math.min(QUICK_ADD_WINDOW_SIZE.width, display.workArea.width),
+    height: Math.min(QUICK_ADD_WINDOW_SIZE.height, display.workArea.height)
+  }
+
+  return {
+    ...size,
+    ...clampWindowPosition(
+      {
+        width: size.width,
+        height: size.height,
+        x: display.workArea.x + display.workArea.width - size.width - QUICK_ADD_WINDOW_EDGE_MARGIN,
+        y:
+          display.workArea.y +
+          display.workArea.height -
+          size.height -
+          QUICK_ADD_WINDOW_EDGE_MARGIN
+      },
+      display.workArea
+    )
+  }
+}
+
+function createQuickAddWindow(): BrowserWindow {
+  if (quickAddWindow && !quickAddWindow.isDestroyed()) {
+    return quickAddWindow
+  }
+
+  const bounds = resolveQuickAddWindowBounds()
+  const win = new BrowserWindow({
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    show: false,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    autoHideMenuBar: true,
+    backgroundColor: '#f8fafc',
+    icon: resolveRuntimeAsset('icon.png'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true
+    }
+  })
+
+  quickAddWindow = win
+  quickAddWindowReady = false
+  shouldShowQuickAddWhenReady = false
+  attachWindowDiagnostics(win)
+
+  win.on('close', (event) => {
+    if (isAppQuitting) {
+      return
+    }
+
+    event.preventDefault()
+    hideQuickAddWindow()
+  })
+
+  win.on('ready-to-show', () => {
+    quickAddWindowReady = true
+
+    if (!shouldShowQuickAddWhenReady) {
+      return
+    }
+
+    showQuickAddWindow()
+  })
+
+  win.on('closed', () => {
+    if (quickAddWindow === win) {
+      quickAddWindow = null
+      quickAddWindowReady = false
+      shouldShowQuickAddWhenReady = false
+    }
+  })
+
+  win.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  loadRendererEntry(win, 'quick-add')
+  return win
+}
+
+function showQuickAddWindow(): void {
+  if (!quickAddWindow || quickAddWindow.isDestroyed()) {
+    createQuickAddWindow()
+  }
+
+  if (!quickAddWindow || quickAddWindow.isDestroyed()) {
+    quickAddWindow = null
+    quickAddWindowReady = false
+    shouldShowQuickAddWhenReady = false
+    return
+  }
+
+  if (quickAddWindow.isVisible()) {
+    bringWindowToFront(quickAddWindow, {
+      focusEventChannel: 'window:focus-quick-add-input'
+    })
+    return
+  }
+
+  quickAddWindow.setBounds(resolveQuickAddWindowBounds(), false)
+
+  if (!quickAddWindowReady) {
+    shouldShowQuickAddWhenReady = true
+    return
+  }
+
+  shouldShowQuickAddWhenReady = false
+  bringWindowToFront(quickAddWindow, {
+    focusEventChannel: 'window:focus-quick-add-input'
+  })
+  quickAddWindow.webContents.send('window:quick-add-session-requested')
+}
+
+function notifyQuickAddCommitted(payload: QuickAddCommittedEvent): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+
+  mainWindow.webContents.send('window:quick-add-committed', payload)
 }
 
 function registerGlobalHotkeys(): void {
@@ -235,9 +424,23 @@ function registerGlobalHotkeys(): void {
     const success = globalShortcut.register(accelerator, () => {
       if (!mainWindow) return
 
-      bringWindowToFront(mainWindow, {
-        focusMainInput: action === 'showWindowAndFocusInput'
-      })
+      if (action === 'showWindow') {
+        hideQuickAddWindow()
+        bringWindowToFront(mainWindow)
+        return
+      }
+
+      const mainWindowVisible = mainWindow.isVisible() && !mainWindow.isMinimized()
+
+      if (mainWindowVisible) {
+        hideQuickAddWindow()
+        bringWindowToFront(mainWindow, {
+          focusEventChannel: 'window:focus-main-input'
+        })
+        return
+      }
+
+      showQuickAddWindow()
     })
 
     if (!success) {
@@ -491,7 +694,9 @@ function createDueReminderTaskKey(task: db.DueReminderTask): string {
   return `${task.id}:${task.due_at}:${task.due_precision}`
 }
 
-function getDueReminderBoundaryMs(task: Pick<db.DueReminderTask, 'due_at' | 'due_precision'>): number {
+function getDueReminderBoundaryMs(
+  task: Pick<db.DueReminderTask, 'due_at' | 'due_precision'>
+): number {
   const dueDate = new Date(task.due_at * SECOND)
 
   if (task.due_precision === 'datetime') {
@@ -736,6 +941,44 @@ function registerSettingsHandlers(): void {
   })
 }
 
+function registerWindowIpcHandlers(): void {
+  if (windowIpcHandlersRegistered) return
+  windowIpcHandlersRegistered = true
+
+  ipcMain.on('window:resize-quick-add', (event, heightRaw: unknown) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!quickAddWindow || quickAddWindow.isDestroyed() || senderWindow !== quickAddWindow) {
+      return
+    }
+
+    const requestedHeight = expectInteger(heightRaw, 'window:resize-quick-add.request.height', {
+      min: QUICK_ADD_WINDOW_HEIGHT_RANGE.min,
+      max: QUICK_ADD_WINDOW_HEIGHT_RANGE.max
+    })
+    const currentBounds = quickAddWindow.getBounds()
+    const display = screen.getDisplayMatching(currentBounds)
+    const nextHeight = Math.min(requestedHeight, display.workArea.height)
+    const nextPosition = clampWindowPosition(
+      {
+        x: currentBounds.x,
+        y: currentBounds.y,
+        width: currentBounds.width,
+        height: nextHeight
+      },
+      display.workArea
+    )
+
+    quickAddWindow.setBounds(
+      {
+        ...currentBounds,
+        ...nextPosition,
+        height: nextHeight
+      },
+      true
+    )
+  })
+}
+
 function attachWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on(
     'did-fail-load',
@@ -770,6 +1013,7 @@ function createTray(win: BrowserWindow): void {
       {
         label: '显示',
         click: () => {
+          hideQuickAddWindow()
           bringWindowToFront(win)
         }
       },
@@ -785,12 +1029,27 @@ function createTray(win: BrowserWindow): void {
     tray.setToolTip('极简待办')
     tray.setContextMenu(contextMenu)
     tray.on('click', () => {
+      hideQuickAddWindow()
       bringWindowToFront(win)
     })
   } catch (error) {
     tray = null
     writeStartupLog('main', 'tray initialization failed', error)
   }
+}
+
+function hideMainWindowToTray(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+
+  persistWindowBounds(win)
+  hideQuickAddWindow()
+
+  if (tray) {
+    win.hide()
+    return
+  }
+
+  win.minimize()
 }
 
 function createWindow(): void {
@@ -847,21 +1106,34 @@ function createWindow(): void {
   createTray(win)
 
   win.on('close', (event) => {
-    persistWindowBounds(win)
-
     const closeToTray = store.get('closeToTray', true)
     if (!isQuitting && closeToTray && tray) {
       event.preventDefault()
-      win.hide()
+      hideMainWindowToTray(win)
+      return
     }
-  })
 
-  ipcMain.on('window:minimize', () => {
-    win.minimize()
-  })
-
-  ipcMain.on('window:close', () => {
     persistWindowBounds(win)
+  })
+
+  ipcMain.on('window:minimize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    senderWindow?.minimize()
+  })
+
+  ipcMain.on('window:close', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!senderWindow) return
+
+    if (senderWindow === quickAddWindow) {
+      hideQuickAddWindow()
+      return
+    }
+
+    if (senderWindow !== win) return
+
+    persistWindowBounds(win)
+    hideQuickAddWindow()
 
     const closeToTray = store.get('closeToTray', true)
     if (closeToTray && tray) {
@@ -873,20 +1145,35 @@ function createWindow(): void {
     app.quit()
   })
 
+  ipcMain.on('window:hide-to-tray', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (senderWindow !== win) return
+
+    hideMainWindowToTray(win)
+  })
+
   ipcMain.on('window:quit', () => {
+    isAppQuitting = true
     persistWindowBounds(win)
+    hideQuickAddWindow()
     isQuitting = true
     app.quit()
   })
 
-  ipcMain.on('window:toggle-always-on-top', () => {
+  ipcMain.on('window:toggle-always-on-top', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (senderWindow !== win) return
+
     const flag = !win.isAlwaysOnTop()
     win.setAlwaysOnTop(flag)
     store.set('alwaysOnTop', flag)
     win.webContents.send('window:always-on-top-changed', flag)
   })
 
-  ipcMain.on('window:toggle-maximize', () => {
+  ipcMain.on('window:toggle-maximize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (senderWindow !== win) return
+
     if (win.isMaximized()) {
       win.unmaximize()
     } else {
@@ -902,11 +1189,7 @@ function createWindow(): void {
     win.webContents.send('window:maximized-changed', false)
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadRendererEntry(win, 'main')
 }
 
 const gotTheLock = app.requestSingleInstanceLock()
@@ -918,6 +1201,7 @@ if (!gotTheLock) {
 app.on('second-instance', () => {
   if (!mainWindow) return
 
+  hideQuickAddWindow()
   bringWindowToFront(mainWindow)
 })
 
@@ -946,10 +1230,14 @@ app.whenReady().then(() => {
     db.deleteCompletedTasksBefore(cutoffTimestamp)
   }
 
-  registerIpcHandlers()
+  registerIpcHandlers({
+    onQuickAddCommitted: notifyQuickAddCommitted
+  })
   registerSettingsHandlers()
+  registerWindowIpcHandlers()
 
   createWindow()
+  createQuickAddWindow()
   registerGlobalHotkeys()
   startDueReminderScheduler()
 
@@ -968,6 +1256,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  isAppQuitting = true
   globalShortcut.unregisterAll()
   stopDueReminderScheduler()
   db.closeDatabase()

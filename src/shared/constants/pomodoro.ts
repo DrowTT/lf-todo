@@ -6,10 +6,7 @@
 export const DEFAULT_FOCUS_DURATION_SECONDS = 25 * 60
 
 export function normalizePomodoroDurationSeconds(value: unknown): number {
-  return typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= 86400
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 86400
     ? value
     : DEFAULT_FOCUS_DURATION_SECONDS
 }

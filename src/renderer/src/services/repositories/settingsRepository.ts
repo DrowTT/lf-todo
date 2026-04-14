@@ -3,6 +3,7 @@ import type {
   AutoCleanupConfig,
   PomodoroData,
   PomodoroSessionState,
+  QuickAddCommittedEvent,
   SettingsData,
   UpdateStatusData
 } from '../../../../shared/types/models'
@@ -35,10 +36,12 @@ export interface WindowService {
   isAvailable: boolean
   minimize(): void
   close(): void
+  hideToTray(): void
   quit(): void
   toggleAlwaysOnTop(): void
   toggleMaximize(): void
   onQuitRequested(callback: () => void): () => void
+  onQuickAddCommitted(callback: (payload: QuickAddCommittedEvent) => void): () => void
   onAlwaysOnTopChanged(callback: (flag: boolean) => void): () => void
   onMaximizedChanged(callback: (flag: boolean) => void): () => void
 }

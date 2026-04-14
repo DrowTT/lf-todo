@@ -13,17 +13,17 @@ const currentView = computed(() => appSessionStore.currentMainView)
 
 /** 切换到待办视图 */
 const switchToTasks = () => {
-  appSessionStore.currentMainView = 'tasks'
+  appSessionStore.setCurrentMainView('tasks')
 }
 
 /** 切换到番茄钟视图 */
 const switchToPomodoro = () => {
-  appSessionStore.currentMainView = 'pomodoro'
+  appSessionStore.setCurrentMainView('pomodoro')
 }
 
 /** 切换到设置视图 */
 const switchToSettings = () => {
-  appSessionStore.currentMainView = 'settings'
+  appSessionStore.setCurrentMainView('settings')
 }
 </script>
 
@@ -165,7 +165,8 @@ const switchToSettings = () => {
 }
 
 @keyframes ab-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.5;
     box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
   }

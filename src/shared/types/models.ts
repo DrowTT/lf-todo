@@ -34,6 +34,23 @@ export interface TaskCreateInput extends TaskDueState {
   priority: TaskPriority
 }
 
+export interface QuickAddSubmitInput {
+  content: string
+  categoryId: number | null
+  categoryName: string | null
+}
+
+export interface QuickAddSubmitResult {
+  task: Task
+  category: Category
+  categoryCreated: boolean
+}
+
+export interface QuickAddCommittedEvent {
+  categoryId: number
+  categoryCreated: boolean
+}
+
 export type TaskUpdate = Partial<
   Pick<Task, 'content' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision' | 'priority'>
 >
