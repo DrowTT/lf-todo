@@ -47,10 +47,6 @@ export function getTaskPriorityTitle(priority: TaskPriority): string {
   return getTaskPriorityOption(priority).title
 }
 
-export function isDefaultTaskPriority(priority: TaskPriority): boolean {
-  return priority === DEFAULT_TASK_PRIORITY
-}
-
 export function getNextTaskPriority(priority: TaskPriority): TaskPriority {
   const currentIndex =
     priorityCycleIndexMap.get(priority) ?? priorityCycleIndexMap.get(DEFAULT_TASK_PRIORITY) ?? 0

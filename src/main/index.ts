@@ -122,6 +122,7 @@ let quickAddWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsHandlersRegistered = false
 let windowIpcHandlersRegistered = false
+let mainWindowIpcHandlersRegistered = false
 let releaseTopMostTimer: NodeJS.Timeout | null = null
 let dueReminderTimer: NodeJS.Timeout | null = null
 let quickAddWindowReady = false
@@ -408,10 +409,43 @@ function showQuickAddWindow(): void {
   quickAddWindow.webContents.send('window:quick-add-session-requested')
 }
 
-function notifyQuickAddCommitted(payload: QuickAddCommittedEvent): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return
+function getActiveMainWindow(): BrowserWindow | null {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = null
+    return null
+  }
 
-  mainWindow.webContents.send('window:quick-add-committed', payload)
+  return mainWindow
+}
+
+function ensureMainWindow(): BrowserWindow | null {
+  const win = getActiveMainWindow()
+  if (win) {
+    return win
+  }
+
+  if (!app.isReady()) {
+    return null
+  }
+
+  return createWindow()
+}
+
+function showMainWindow(
+  options?: { focusEventChannel?: 'window:focus-main-input' | 'window:focus-quick-add-input' }
+): void {
+  const win = ensureMainWindow()
+  if (!win) return
+
+  hideQuickAddWindow()
+  bringWindowToFront(win, options)
+}
+
+function notifyQuickAddCommitted(payload: QuickAddCommittedEvent): void {
+  const win = getActiveMainWindow()
+  if (!win) return
+
+  win.webContents.send('window:quick-add-committed', payload)
 }
 
 function registerGlobalHotkeys(): void {
@@ -423,19 +457,18 @@ function registerGlobalHotkeys(): void {
   for (const action of Object.keys(config) as GlobalHotkeyAction[]) {
     const accelerator = toElectronAccelerator(config[action].key)
     const success = globalShortcut.register(accelerator, () => {
-      if (!mainWindow) return
-
       if (action === 'showWindow') {
-        hideQuickAddWindow()
-        bringWindowToFront(mainWindow)
+        showMainWindow()
         return
       }
 
-      const mainWindowVisible = mainWindow.isVisible() && !mainWindow.isMinimized()
+      const win = ensureMainWindow()
+      if (!win) return
+
+      const mainWindowVisible = win.isVisible() && !win.isMinimized()
 
       if (mainWindowVisible) {
-        hideQuickAddWindow()
-        bringWindowToFront(mainWindow, {
+        showMainWindow({
           focusEventChannel: 'window:focus-main-input'
         })
         return
@@ -980,6 +1013,85 @@ function registerWindowIpcHandlers(): void {
   })
 }
 
+function registerMainWindowIpcHandlers(): void {
+  if (mainWindowIpcHandlersRegistered) return
+  mainWindowIpcHandlersRegistered = true
+
+  ipcMain.on('window:minimize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    senderWindow?.minimize()
+  })
+
+  ipcMain.on('window:close', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!senderWindow) return
+
+    if (senderWindow === quickAddWindow) {
+      hideQuickAddWindow()
+      return
+    }
+
+    const win = getActiveMainWindow()
+    if (!win || senderWindow !== win) return
+
+    persistWindowBounds(win)
+    hideQuickAddWindow()
+
+    const closeToTray = store.get('closeToTray', true)
+    if (closeToTray && tray) {
+      win.hide()
+      return
+    }
+
+    isAppQuitting = true
+    app.quit()
+  })
+
+  ipcMain.on('window:hide-to-tray', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    const win = getActiveMainWindow()
+    if (!win || senderWindow !== win) return
+
+    hideMainWindowToTray(win)
+  })
+
+  ipcMain.on('window:quit', () => {
+    const win = getActiveMainWindow()
+
+    isAppQuitting = true
+
+    if (win) {
+      persistWindowBounds(win)
+    }
+
+    hideQuickAddWindow()
+    app.quit()
+  })
+
+  ipcMain.on('window:toggle-always-on-top', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    const win = getActiveMainWindow()
+    if (!win || senderWindow !== win) return
+
+    const flag = !win.isAlwaysOnTop()
+    win.setAlwaysOnTop(flag)
+    store.set('alwaysOnTop', flag)
+    win.webContents.send('window:always-on-top-changed', flag)
+  })
+
+  ipcMain.on('window:toggle-maximize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    const win = getActiveMainWindow()
+    if (!win || senderWindow !== win) return
+
+    if (win.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win.maximize()
+    }
+  })
+}
+
 function attachWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on(
     'did-fail-load',
@@ -1006,7 +1118,11 @@ function attachWindowDiagnostics(win: BrowserWindow): void {
   })
 }
 
-function createTray(win: BrowserWindow): void {
+function ensureTray(): void {
+  if (tray) {
+    return
+  }
+
   try {
     tray = new Tray(resolveRuntimeAsset('tray-icon.png'))
 
@@ -1014,14 +1130,20 @@ function createTray(win: BrowserWindow): void {
       {
         label: '显示',
         click: () => {
-          hideQuickAddWindow()
-          bringWindowToFront(win)
+          showMainWindow()
         }
       },
       {
         label: '退出',
         click: () => {
-          bringWindowToFront(win)
+          const win = ensureMainWindow()
+          if (!win) {
+            isAppQuitting = true
+            app.quit()
+            return
+          }
+
+          showMainWindow()
           win.webContents.send('window:quit-requested')
         }
       }
@@ -1030,8 +1152,7 @@ function createTray(win: BrowserWindow): void {
     tray.setToolTip('极简待办')
     tray.setContextMenu(contextMenu)
     tray.on('click', () => {
-      hideQuickAddWindow()
-      bringWindowToFront(win)
+      showMainWindow()
     })
   } catch (error) {
     tray = null
@@ -1053,7 +1174,66 @@ function hideMainWindowToTray(win: BrowserWindow): void {
   win.minimize()
 }
 
-function createWindow(): void {
+function bindMainWindow(win: BrowserWindow, options: { launchedHidden: boolean }): void {
+  attachWindowDiagnostics(win)
+
+  win.on('ready-to-show', () => {
+    const savedOnTop = store.get('alwaysOnTop', false)
+    if (savedOnTop) {
+      win.setAlwaysOnTop(true)
+      win.webContents.send('window:always-on-top-changed', true)
+    }
+
+    if (!options.launchedHidden) {
+      win.show()
+    }
+
+    initAutoUpdater(win)
+
+    if (is.dev) {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  win.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  win.on('close', (event) => {
+    const closeToTray = store.get('closeToTray', true)
+    if (!isAppQuitting && closeToTray && tray) {
+      event.preventDefault()
+      hideMainWindowToTray(win)
+      return
+    }
+
+    persistWindowBounds(win)
+  })
+
+  win.on('maximize', () => {
+    win.webContents.send('window:maximized-changed', true)
+  })
+
+  win.on('unmaximize', () => {
+    win.webContents.send('window:maximized-changed', false)
+  })
+
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null
+    }
+  })
+
+  loadRendererEntry(win, 'main')
+}
+
+function createWindow(): BrowserWindow {
+  const existingWindow = getActiveMainWindow()
+  if (existingWindow) {
+    return existingWindow
+  }
+
   const bounds = resolveInitialWindowBounds()
   const launchedHidden = isHiddenLaunch()
   const targetDisplay = screen.getDisplayMatching(bounds)
@@ -1077,120 +1257,10 @@ function createWindow(): void {
   })
 
   mainWindow = win
-  attachWindowDiagnostics(win)
-
-  win.on('ready-to-show', () => {
-    const savedOnTop = store.get('alwaysOnTop', false)
-    if (savedOnTop) {
-      win.setAlwaysOnTop(true)
-      win.webContents.send('window:always-on-top-changed', true)
-    }
-
-    if (!launchedHidden) {
-      win.show()
-    }
+  bindMainWindow(win, { launchedHidden })
+  return win
 
     // 初始化自动更新模块
-    initAutoUpdater(win)
-
-    if (is.dev) {
-      win.webContents.openDevTools({ mode: 'detach' })
-    }
-  })
-
-  win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  let isQuitting = false
-  createTray(win)
-
-  win.on('close', (event) => {
-    const closeToTray = store.get('closeToTray', true)
-    if (!isQuitting && closeToTray && tray) {
-      event.preventDefault()
-      hideMainWindowToTray(win)
-      return
-    }
-
-    persistWindowBounds(win)
-  })
-
-  ipcMain.on('window:minimize', (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    senderWindow?.minimize()
-  })
-
-  ipcMain.on('window:close', (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (!senderWindow) return
-
-    if (senderWindow === quickAddWindow) {
-      hideQuickAddWindow()
-      return
-    }
-
-    if (senderWindow !== win) return
-
-    persistWindowBounds(win)
-    hideQuickAddWindow()
-
-    const closeToTray = store.get('closeToTray', true)
-    if (closeToTray && tray) {
-      win.hide()
-      return
-    }
-
-    isQuitting = true
-    app.quit()
-  })
-
-  ipcMain.on('window:hide-to-tray', (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (senderWindow !== win) return
-
-    hideMainWindowToTray(win)
-  })
-
-  ipcMain.on('window:quit', () => {
-    isAppQuitting = true
-    persistWindowBounds(win)
-    hideQuickAddWindow()
-    isQuitting = true
-    app.quit()
-  })
-
-  ipcMain.on('window:toggle-always-on-top', (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (senderWindow !== win) return
-
-    const flag = !win.isAlwaysOnTop()
-    win.setAlwaysOnTop(flag)
-    store.set('alwaysOnTop', flag)
-    win.webContents.send('window:always-on-top-changed', flag)
-  })
-
-  ipcMain.on('window:toggle-maximize', (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    if (senderWindow !== win) return
-
-    if (win.isMaximized()) {
-      win.unmaximize()
-    } else {
-      win.maximize()
-    }
-  })
-
-  win.on('maximize', () => {
-    win.webContents.send('window:maximized-changed', true)
-  })
-
-  win.on('unmaximize', () => {
-    win.webContents.send('window:maximized-changed', false)
-  })
-
-  loadRendererEntry(win, 'main')
 }
 
 const gotTheLock = app.requestSingleInstanceLock()
@@ -1200,10 +1270,7 @@ if (!gotTheLock) {
 }
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-
-  hideQuickAddWindow()
-  bringWindowToFront(mainWindow)
+  showMainWindow()
 })
 
 app.whenReady().then(() => {
@@ -1236,16 +1303,21 @@ app.whenReady().then(() => {
   })
   registerSettingsHandlers()
   registerWindowIpcHandlers()
+  registerMainWindowIpcHandlers()
 
   createWindow()
+  ensureTray()
   createQuickAddWindow()
   registerGlobalHotkeys()
   startDueReminderScheduler()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!getActiveMainWindow()) {
       createWindow()
+      return
     }
+
+    showMainWindow()
   })
 })
 

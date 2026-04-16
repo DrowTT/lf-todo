@@ -3,7 +3,6 @@ import * as db from './db/database'
 import {
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
-  parseDeleteTasksRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseSearchTasksRequest,
@@ -102,10 +101,6 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
   ipcMain.handle('db:set-task-completed', (_event, payload: unknown) => {
     const request = parseSetTaskCompletedRequest(payload, 'db:set-task-completed.request')
     return db.setTaskCompleted(request.id, request.completed)
-  })
-  ipcMain.handle('db:delete-tasks', (_event, payload: unknown) => {
-    const request = parseDeleteTasksRequest(payload, 'db:delete-tasks.request')
-    return db.deleteTasks(request.ids)
   })
   ipcMain.handle('db:get-pending-counts', () => db.getPendingTaskCounts())
   ipcMain.handle('db:clear-completed-tasks', (_event, categoryId: unknown) =>

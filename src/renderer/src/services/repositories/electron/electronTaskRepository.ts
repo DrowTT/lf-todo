@@ -22,9 +22,6 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async deleteTask(id) {
       await api.db.deleteTask(id)
     },
-    async deleteTasks(ids) {
-      await api.db.deleteTasks(ids)
-    },
     async setTaskCompleted(id, completed) {
       await api.db.setTaskCompleted(id, completed)
     },

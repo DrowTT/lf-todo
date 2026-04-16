@@ -5,22 +5,50 @@ import { parseUpdateStatusData } from '../shared/contracts/entities'
 import { parseNoPayloadRequest } from '../shared/contracts/updater'
 
 let updaterHandlersRegistered = false
+let updaterEventsRegistered = false
+let initialUpdateCheckScheduled = false
+let targetWindow: BrowserWindow | null = null
 
 export function initAutoUpdater(win: BrowserWindow): void {
+  targetWindow = win
+  registerIpcHandlers()
+
   if (is.dev) {
-    registerIpcHandlers(win)
     return
   }
 
   autoUpdater.autoDownload = false
   autoUpdater.allowDowngrade = false
+  registerAutoUpdaterEvents()
+  scheduleInitialUpdateCheck()
+}
+
+function getTargetWindow(): BrowserWindow | null {
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    targetWindow = null
+    return null
+  }
+
+  return targetWindow
+}
+
+function sendStatus(data: Record<string, unknown>): void {
+  const win = getTargetWindow()
+  if (!win) return
+
+  win.webContents.send('updater:status', parseUpdateStatusData(data, 'updater:status.event'))
+}
+
+function registerAutoUpdaterEvents(): void {
+  if (updaterEventsRegistered) return
+  updaterEventsRegistered = true
 
   autoUpdater.on('checking-for-update', () => {
-    sendStatus(win, { status: 'checking' })
+    sendStatus({ status: 'checking' })
   })
 
   autoUpdater.on('update-available', (info) => {
-    sendStatus(win, {
+    sendStatus({
       status: 'available',
       version: info.version,
       releaseNotes: Array.isArray(info.releaseNotes)
@@ -32,11 +60,11 @@ export function initAutoUpdater(win: BrowserWindow): void {
   })
 
   autoUpdater.on('update-not-available', () => {
-    sendStatus(win, { status: 'not-available' })
+    sendStatus({ status: 'not-available' })
   })
 
   autoUpdater.on('download-progress', (progress) => {
-    sendStatus(win, {
+    sendStatus({
       status: 'downloading',
       percent: Math.round(progress.percent),
       bytesPerSecond: progress.bytesPerSecond,
@@ -46,20 +74,23 @@ export function initAutoUpdater(win: BrowserWindow): void {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    sendStatus(win, {
+    sendStatus({
       status: 'downloaded',
       version: info.version
     })
   })
 
   autoUpdater.on('error', (error) => {
-    sendStatus(win, {
+    sendStatus({
       status: 'error',
       message: error.message
     })
   })
+}
 
-  registerIpcHandlers(win)
+function scheduleInitialUpdateCheck(): void {
+  if (initialUpdateCheckScheduled) return
+  initialUpdateCheckScheduled = true
 
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {
@@ -68,13 +99,7 @@ export function initAutoUpdater(win: BrowserWindow): void {
   }, 3000)
 }
 
-function sendStatus(win: BrowserWindow, data: Record<string, unknown>): void {
-  if (!win.isDestroyed()) {
-    win.webContents.send('updater:status', parseUpdateStatusData(data, 'updater:status.event'))
-  }
-}
-
-function registerIpcHandlers(win: BrowserWindow): void {
+function registerIpcHandlers(): void {
   if (updaterHandlersRegistered) return
   updaterHandlersRegistered = true
 
@@ -82,14 +107,14 @@ function registerIpcHandlers(win: BrowserWindow): void {
     parseNoPayloadRequest(payload, 'updater:check.request')
 
     if (is.dev) {
-      sendStatus(win, { status: 'not-available' })
+      sendStatus({ status: 'not-available' })
       return
     }
 
     try {
       await autoUpdater.checkForUpdates()
     } catch (error) {
-      sendStatus(win, {
+      sendStatus({
         status: 'error',
         message: error instanceof Error ? error.message : 'Failed to check for updates'
       })
@@ -104,7 +129,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     try {
       await autoUpdater.downloadUpdate()
     } catch (error) {
-      sendStatus(win, {
+      sendStatus({
         status: 'error',
         message: error instanceof Error ? error.message : 'Failed to download update'
       })

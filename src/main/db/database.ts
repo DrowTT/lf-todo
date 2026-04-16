@@ -551,17 +551,6 @@ export function deleteTask(id: number): void {
   getStmts().deleteTask.run(id)
 }
 
-/**
- * 批量删除任务（IN 子句，动态参数无法预编译）
- */
-export function deleteTasks(ids: number[]): void {
-  if (ids.length === 0) return
-  const placeholders = ids.map(() => '?').join(',')
-  getDb()
-    .prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`)
-    .run(...ids)
-}
-
 export function clearCompletedTasks(categoryId: number): number {
   const isSystemCategory = getCategoryById(categoryId)?.is_system ?? false
   const statement = isSystemCategory

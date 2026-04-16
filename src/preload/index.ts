@@ -23,7 +23,6 @@ import {
 import {
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
-  parseDeleteTasksRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseSearchTasksRequest,
@@ -173,8 +172,6 @@ const api = {
       ipcRenderer
         .invoke('db:delete-task', expectInteger(id, 'db:delete-task.request.id', { min: 1 }))
         .then((value) => parseVoid(value, 'db:delete-task.response')),
-    deleteTasks: (ids: number[]) =>
-      invokeVoidWithPayload('db:delete-tasks', { ids }, parseDeleteTasksRequest),
     toggleTaskComplete: (id: number) =>
       ipcRenderer
         .invoke('db:toggle-task', expectInteger(id, 'db:toggle-task.request.id', { min: 1 }))

@@ -13,7 +13,8 @@ import {
   Trash2
 } from 'lucide-vue-next'
 import { useAppRuntime } from '../app/runtime'
-import { HOTKEY_LABELS, keyToLabel, useHotkeys, type HotkeyAction } from '../composables/useHotkeys'
+import { HOTKEY_LABELS, useHotkeys, type HotkeyAction } from '../composables/useHotkeys'
+import { useHotkeyRecorder } from '../composables/useHotkeyRecorder'
 import { useSettingsStore } from '../store/settings'
 import { useUpdaterStore } from '../store/updater'
 import { useAppSessionStore } from '../store/appSession'
@@ -192,79 +193,19 @@ const updaterStatusText = computed(() => {
   return '可检查新版本'
 })
 
-const recordingAction = ref<HotkeyAction | null>(null)
-const conflictMessage = ref('')
+const { recordingAction, conflictMessage, startRecording, cancelRecording, handleRecordKeydown } =
+  useHotkeyRecorder({
+    hotkeyConfig,
+    isEnabled,
+    updateBinding,
+    isGlobalHotkeyAction,
+    hasAtLeastTwoKeys,
+    reservedCategoryShortcutPattern
+  })
 
 async function handleResetAll() {
   const ok = await confirm('所有快捷键将恢复为初始设置，确认恢复默认吗？')
   if (ok) resetAllBindings()
-}
-
-function startRecording(action: HotkeyAction) {
-  recordingAction.value = action
-  conflictMessage.value = ''
-  isEnabled.value = false
-}
-
-function cancelRecording() {
-  recordingAction.value = null
-  conflictMessage.value = ''
-  isEnabled.value = true
-}
-
-function handleRecordKeydown(event: KeyboardEvent) {
-  if (!recordingAction.value) return
-
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    cancelRecording()
-    return
-  }
-
-  if (['Control', 'Shift', 'Meta', 'Alt'].includes(event.key)) return
-
-  event.preventDefault()
-  event.stopPropagation()
-
-  const parts: string[] = []
-  if (event.ctrlKey || event.metaKey) parts.push('Control')
-  if (event.shiftKey) parts.push('Shift')
-  if (event.altKey) parts.push('Alt')
-
-  let key = event.key
-  if (key === ' ') key = 'Space'
-  parts.push(key)
-
-  const newKey = parts.join('+')
-
-  if (reservedCategoryShortcutPattern.test(newKey)) {
-    conflictMessage.value = 'Ctrl+数字键为切换分类的系统快捷键，无法绑定'
-    return
-  }
-
-  if (
-    recordingAction.value &&
-    isGlobalHotkeyAction(recordingAction.value) &&
-    !hasAtLeastTwoKeys(newKey)
-  ) {
-    conflictMessage.value = '全局快捷键至少要包含两个键，请至少加一个修饰键'
-    return
-  }
-
-  for (const [action, binding] of Object.entries(hotkeyConfig) as [
-    HotkeyAction,
-    { key: string; label: string }
-  ][]) {
-    if (action !== recordingAction.value && binding.key === newKey) {
-      conflictMessage.value = `"${keyToLabel(newKey)}" 已被“${HOTKEY_LABELS[action].name}”占用`
-      return
-    }
-  }
-
-  conflictMessage.value = ''
-  updateBinding(recordingAction.value, newKey)
-  cancelRecording()
 }
 
 async function handleAutoLaunchChange() {

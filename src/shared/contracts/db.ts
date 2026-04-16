@@ -1,10 +1,7 @@
-import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../constants/task'
 import type {
   QuickAddSubmitInput,
   TaskCreateInput,
-  TaskDuePrecision,
   TaskDueState,
-  TaskPriority,
   TaskUpdate
 } from '../types/models'
 import {
@@ -15,6 +12,7 @@ import {
   expectRecord,
   expectString
 } from './utils'
+import { parseTaskDuePrecision, parseTaskPriority } from './taskFields'
 
 export type CreateTaskRequest = TaskCreateInput
 export type QuickAddSubmitRequest = QuickAddSubmitInput
@@ -27,10 +25,6 @@ export interface CreateSubTaskRequest {
 export interface UpdateTaskRequest {
   id: number
   updates: TaskUpdate
-}
-
-export interface DeleteTasksRequest {
-  ids: number[]
 }
 
 export interface SetTaskCompletedRequest {
@@ -187,15 +181,6 @@ export function parseUpdateTaskRequest(value: unknown, label = 'payload'): Updat
   }
 }
 
-export function parseDeleteTasksRequest(value: unknown, label = 'payload'): DeleteTasksRequest {
-  const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['ids'], label)
-
-  return {
-    ids: parseOrderedIds(record.ids, `${label}.ids`)
-  }
-}
-
 export function parseSetTaskCompletedRequest(
   value: unknown,
   label = 'payload'
@@ -288,28 +273,4 @@ function parseTaskDueStateRecord(
     due_at: expectInteger(rawDueAt, `${label}.${options.dueAtKey}`, { min: 0 }),
     due_precision: parseTaskDuePrecision(rawDuePrecision, `${label}.${options.duePrecisionKey}`)
   }
-}
-
-function parseTaskDuePrecision(value: unknown, label: string): TaskDuePrecision {
-  const precision = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
-
-  if (precision === 'date' || precision === 'datetime') {
-    return precision
-  }
-
-  throw new Error(`${label} must be "date" or "datetime"`)
-}
-
-function parseTaskPriority(value: unknown, label: string): TaskPriority {
-  if (value === null || value === undefined) {
-    return DEFAULT_TASK_PRIORITY
-  }
-
-  const priority = expectString(value, label, { trim: true, minLength: 1, maxLength: 16 })
-
-  if (TASK_PRIORITY_VALUES.includes(priority as TaskPriority)) {
-    return priority as TaskPriority
-  }
-
-  throw new Error(`${label} must be one of ${TASK_PRIORITY_VALUES.join(', ')}`)
 }

@@ -67,7 +67,6 @@ function createUnavailableTaskRepository(): TaskRepository {
     createTask: createUnavailableAction<[TaskCreateInput], Task>('taskRepository.createTask'),
     updateTask: createUnavailableAction<[number, TaskUpdate], void>('taskRepository.updateTask'),
     deleteTask: createUnavailableAction<[number], void>('taskRepository.deleteTask'),
-    deleteTasks: createUnavailableAction<[number[]], void>('taskRepository.deleteTasks'),
     setTaskCompleted: createUnavailableAction<[number, boolean], void>(
       'taskRepository.setTaskCompleted'
     ),
