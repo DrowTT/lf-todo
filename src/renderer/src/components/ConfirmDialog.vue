@@ -43,8 +43,8 @@ watch(
         v-if="visible"
         class="dialog-wrapper"
         @click.self="handleCancel"
-        @keydown.enter.prevent="handleConfirm"
-        @keydown.escape="handleCancel"
+        @keydown.enter.stop.prevent="handleConfirm"
+        @keydown.escape.stop.prevent="handleCancel"
       >
         <div ref="contentRef" class="dialog-content" tabindex="-1" @click.stop>
           <p class="dialog-message">{{ message }}</p>

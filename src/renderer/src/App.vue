@@ -14,6 +14,7 @@ import ActivityBar from './layout/ActivityBar.vue'
 import TitleBar from './layout/TitleBar.vue'
 import { MIN_MAIN_WINDOW_WIDTH } from '../../shared/constants/layout'
 import { useAppSessionStore } from './store/appSession'
+import { useGlobalSearchStore } from './store/globalSearch'
 import { usePomodoroStore } from './store/pomodoro'
 import { useSettingsStore } from './store/settings'
 
@@ -23,6 +24,7 @@ const { current, handleConfirm, handleCancel, confirm } = runtime.confirm
 const pomodoroStore = usePomodoroStore()
 const settingsStore = useSettingsStore()
 const appSessionStore = useAppSessionStore()
+const globalSearchStore = useGlobalSearchStore()
 const INTERACTIVE_FOCUS_SELECTOR = [
   'input',
   'textarea',
@@ -61,6 +63,7 @@ function shouldHideWindowOnEscape(event: KeyboardEvent): boolean {
   if (event.key !== 'Escape') return false
   if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
   if (current.value !== null) return false
+  if (globalSearchStore.isOpen) return false
   if (currentMainView.value === 'settings') return false
   if (isInteractiveElement(event.target)) return false
   if (isInteractiveElement(document.activeElement)) return false

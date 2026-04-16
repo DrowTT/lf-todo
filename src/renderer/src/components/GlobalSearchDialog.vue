@@ -95,6 +95,14 @@ function focusInput() {
   })
 }
 
+function focusPanel() {
+  panelRef.value?.focus()
+}
+
+function isFocusableTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest(FOCUSABLE_SELECTOR)
+}
+
 function getFocusableElements() {
   if (!panelRef.value) {
     return []
@@ -254,6 +262,14 @@ function handlePanelKeydown(event: KeyboardEvent) {
   }
 }
 
+function handlePanelMouseDown(event: MouseEvent) {
+  if (isFocusableTarget(event.target)) {
+    return
+  }
+
+  focusPanel()
+}
+
 function handleScopeChange(nextScope: GlobalSearchScope) {
   globalSearchStore.setScope(nextScope, {
     currentCategoryId: currentCategoryId.value,
@@ -295,10 +311,12 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <Transition name="global-search-fade">
-      <div v-if="isOpen" class="global-search" @click="closeDialog">
-        <div class="global-search__backdrop" aria-hidden="true"></div>
+    <Transition name="global-search-backdrop">
+      <div v-if="isOpen" class="global-search__backdrop" aria-hidden="true" @click="closeDialog"></div>
+    </Transition>
 
+    <Transition name="global-search-panel">
+      <div v-if="isOpen" class="global-search" @click.self="closeDialog">
         <div
           ref="panelRef"
           class="global-search__panel"
@@ -306,7 +324,9 @@ onBeforeUnmount(() => {
           aria-modal="true"
           aria-labelledby="global-search-title"
           :aria-describedby="descriptionId"
+          tabindex="-1"
           @click.stop
+          @mousedown.capture="handlePanelMouseDown"
           @keydown="handlePanelKeydown"
         >
           <div class="global-search__header">
@@ -437,7 +457,7 @@ onBeforeUnmount(() => {
 .global-search {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  z-index: 401;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -445,10 +465,12 @@ onBeforeUnmount(() => {
 }
 
 .global-search__backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 400;
   background: rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .global-search__panel {
@@ -667,27 +689,42 @@ onBeforeUnmount(() => {
   animation: global-search-spin 0.9s linear infinite;
 }
 
-.global-search-fade-enter-active,
-.global-search-fade-leave-active {
-  transition: opacity 0.16s ease;
+.global-search-backdrop-enter-active {
+  transition: background-color $transition-slow;
 }
 
-.global-search-fade-enter-active .global-search__panel,
-.global-search-fade-leave-active .global-search__panel {
+.global-search-backdrop-leave-active {
   transition:
-    transform 0.18s ease,
-    opacity 0.18s ease;
+    background-color 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.global-search-fade-enter-from,
-.global-search-fade-leave-to {
+.global-search-backdrop-enter-from {
+  background-color: transparent;
+}
+
+.global-search-backdrop-leave-to {
+  background-color: transparent;
   opacity: 0;
 }
 
-.global-search-fade-enter-from .global-search__panel,
-.global-search-fade-leave-to .global-search__panel {
+.global-search-panel-enter-active {
+  transition: transform $transition-spring;
+}
+
+.global-search-panel-leave-active {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.global-search-panel-enter-from {
+  transform: translateY(12px) scale(0.97);
+}
+
+.global-search-panel-leave-to {
+  transform: translateY(8px) scale(0.97);
   opacity: 0;
-  transform: translateY(-8px) scale(0.98);
 }
 
 @keyframes global-search-spin {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Plus } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
@@ -170,7 +169,6 @@ const handleCategoryContextMenu = (
 
     <div class="category-list__footer">
       <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">
-        <Plus class="category-list__add-icon" :size="12" />
         新建分类
       </button>
     </div>
@@ -222,13 +220,16 @@ const handleCategoryContextMenu = (
   }
 
   &__footer {
+    display: flex;
+    justify-content: center;
     padding: 10px 14px 10px;
   }
 
   &__add-btn {
     display: flex;
     align-items: center;
-    width: 100%;
+    justify-content: center;
+    width: min(100%, 188px);
     padding: $spacing-sm $spacing-md;
     background: transparent;
     border: 1px dashed $border-light;
@@ -243,12 +244,6 @@ const handleCategoryContextMenu = (
       border-color: $accent-color;
       background: $accent-soft;
     }
-  }
-
-  &__add-icon {
-    width: 12px;
-    height: 12px;
-    margin-right: $spacing-sm;
   }
 
   &__input-wrapper {

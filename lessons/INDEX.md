@@ -29,6 +29,7 @@
 - [2026-04-11_quick-add-category-selection-should-use-prefix-grammar-in-tiny-windows.md](./2026-04-11_quick-add-category-selection-should-use-prefix-grammar-in-tiny-windows.md)
 - [2026-04-11_tiny-quick-add-windows-should-grow-inline-with-the-textarea.md](./2026-04-11_tiny-quick-add-windows-should-grow-inline-with-the-textarea.md)
 - [2026-04-14_escape-to-tray-should-be-shell-owned-and-focus-gated.md](./2026-04-14_escape-to-tray-should-be-shell-owned-and-focus-gated.md)
+- [2026-04-16_modal-escape-should-stop-before-shell-shortcuts.md](./2026-04-16_modal-escape-should-stop-before-shell-shortcuts.md)
 
 ## Tooling
 
