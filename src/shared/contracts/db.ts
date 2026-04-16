@@ -42,6 +42,12 @@ export interface ReorderTasksRequest {
   orderedIds: number[]
 }
 
+export interface SearchTasksRequest {
+  query: string
+  categoryId: number | null
+  limit: number
+}
+
 function parseOrderedIds(value: unknown, label: string): number[] {
   const orderedIds = expectArray(value, label, (item, itemLabel) =>
     expectInteger(item, itemLabel, { min: 1 })
@@ -209,6 +215,27 @@ export function parseReorderTasksRequest(value: unknown, label = 'payload'): Reo
 
   return {
     orderedIds: parseOrderedIds(record.orderedIds, `${label}.orderedIds`)
+  }
+}
+
+export function parseSearchTasksRequest(value: unknown, label = 'payload'): SearchTasksRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['query', 'categoryId', 'limit'], label)
+
+  return {
+    query: expectString(record.query, `${label}.query`, {
+      trim: true,
+      minLength: 1,
+      maxLength: 100
+    }),
+    categoryId:
+      record.categoryId === null || record.categoryId === undefined
+        ? null
+        : expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 }),
+    limit:
+      record.limit === undefined
+        ? 24
+        : expectInteger(record.limit, `${label}.limit`, { min: 1, max: 50 })
   }
 }
 

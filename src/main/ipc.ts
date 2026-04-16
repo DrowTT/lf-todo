@@ -6,6 +6,7 @@ import {
   parseDeleteTasksRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
+  parseSearchTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
 } from '../shared/contracts/db'
@@ -37,6 +38,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
   ipcMain.handle('db:get-tasks', (_event, categoryId: unknown) =>
     db.getTasksByCategory(expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))
   )
+  ipcMain.handle('db:search-tasks', (_event, payload: unknown) => {
+    const request = parseSearchTasksRequest(payload, 'db:search-tasks.request')
+    return db.searchTasks(request)
+  })
   ipcMain.handle('db:create-task', (_event, payload: unknown) => {
     const request = parseCreateTaskRequest(payload, 'db:create-task.request')
     return db.createTask(request)

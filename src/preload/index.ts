@@ -26,6 +26,7 @@ import {
   parseDeleteTasksRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
+  parseSearchTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
 } from '../shared/contracts/db'
@@ -153,6 +154,17 @@ const api = {
           expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 })
         )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
+    searchTasks: (input: { query: string; categoryId?: number | null; limit?: number }) =>
+      invokeWithPayload(
+        'db:search-tasks',
+        {
+          query: input.query,
+          categoryId: input.categoryId ?? null,
+          limit: input.limit
+        },
+        parseSearchTasksRequest,
+        parseTasks
+      ),
     createTask: (input: TaskCreateInput) =>
       invokeWithPayload('db:create-task', input, parseCreateTaskRequest, parseTask),
     updateTask: (id: number, updates: TaskUpdate) =>

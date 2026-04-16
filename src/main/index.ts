@@ -30,6 +30,7 @@ import {
   DEFAULT_FOCUS_DURATION_SECONDS,
   normalizePomodoroDurationSeconds
 } from '../shared/constants/pomodoro'
+import { MIN_MAIN_WINDOW_WIDTH } from '../shared/constants/layout'
 import type { QuickAddCommittedEvent } from '../shared/types/models'
 
 interface AutoCleanupConfig {
@@ -94,7 +95,7 @@ interface StoreType {
 
 const store = new Store<StoreType>()
 const DEFAULT_WINDOW_SIZE = { width: 900, height: 670 }
-const MIN_WINDOW_SIZE = { width: 400, height: 500 }
+const MIN_WINDOW_SIZE = { width: MIN_MAIN_WINDOW_WIDTH, height: 500 }
 const QUICK_ADD_WINDOW_SIZE = { width: 460, height: 168 }
 const QUICK_ADD_WINDOW_HEIGHT_RANGE = { min: 140, max: 420 }
 const QUICK_ADD_WINDOW_EDGE_MARGIN = 18

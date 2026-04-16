@@ -2,6 +2,7 @@ import { nextTick, onMounted, reactive, ref } from 'vue'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useAppSessionStore } from '../store/appSession'
+import { useGlobalSearchStore } from '../store/globalSearch'
 import { useHoverTarget } from './useHoverTarget'
 
 export type LocalHotkeyAction =
@@ -10,6 +11,7 @@ export type LocalHotkeyAction =
   | 'toggleExpand'
   | 'focusInput'
   | 'focusSearch'
+  | 'openGlobalSearch'
 export type GlobalHotkeyAction = 'showWindow' | 'showWindowAndFocusInput'
 export type HotkeyAction = LocalHotkeyAction | GlobalHotkeyAction
 
@@ -29,20 +31,22 @@ export const DEFAULT_HOTKEYS: HotkeyConfig = {
   toggleExpand: { key: 'e', label: 'E' },
   focusInput: { key: 'Control+n', label: 'Ctrl+N' },
   focusSearch: { key: 'Control+f', label: 'Ctrl+F' },
+  openGlobalSearch: { key: 'Control+p', label: 'Ctrl+P' },
   showWindow: { key: 'Control+Alt+l', label: 'Ctrl+Alt+L' },
   showWindowAndFocusInput: { key: 'Control+Alt+n', label: 'Ctrl+Alt+N' }
 }
 
 export const HOTKEY_LABELS: Record<HotkeyAction, { name: string; desc: string }> = {
-  toggleComplete: { name: '切换完成状态', desc: '切换鼠标悬停待办的完成/未完成状态' },
+  toggleComplete: { name: '切换完成状态', desc: '切换鼠标悬停待办的完成 / 未完成状态' },
   quickDelete: { name: '快捷删除', desc: '删除鼠标悬停的待办，需要二次确认' },
-  toggleExpand: { name: '展开/收起', desc: '展开或收起鼠标指向的一级待办' },
+  toggleExpand: { name: '展开 / 收起', desc: '展开或收起鼠标指向的一级待办' },
   focusInput: { name: '聚焦输入框', desc: '聚焦到新增待办或子待办输入框' },
-  focusSearch: { name: '聚焦搜索框', desc: '展开并聚焦当前分类的搜索框' },
+  focusSearch: { name: '当前视图搜索', desc: '打开当前列表的内联搜索框' },
+  openGlobalSearch: { name: '全局搜索', desc: '打开全部任务范围的统一搜索面板' },
   showWindow: { name: '唤起窗口', desc: '全局唤起窗口，并临时显示到最上层' },
   showWindowAndFocusInput: {
     name: '唤起并聚焦主输入框',
-    desc: '全局唤起窗口，并聚焦到主代办创建输入框'
+    desc: '全局唤起窗口，并聚焦到主待办创建输入框'
   }
 }
 
@@ -51,6 +55,10 @@ export const FOCUS_SEARCH_EVENT = 'lf-todo:focus-search'
 const STORAGE_KEY = 'lf-todo-hotkeys'
 const MODIFIER_KEYS = ['Alt', 'Control', 'Shift', 'Meta']
 const RESERVED_CATEGORY_SHORTCUT = /^Control\+[1-9]$/
+const SEARCH_ACTIONS: LocalHotkeyAction[] = ['focusSearch', 'openGlobalSearch']
+const LEGACY_GLOBAL_SEARCH_KEY = 'Control+k'
+const CURRENT_FOCUS_SEARCH_KEY = DEFAULT_HOTKEYS.focusSearch.key
+const CURRENT_OPEN_GLOBAL_SEARCH_KEY = DEFAULT_HOTKEYS.openGlobalSearch.key
 
 const hotkeyConfig = reactive<HotkeyConfig>(loadConfig())
 const isEnabled = ref(true)
@@ -69,17 +77,35 @@ function loadConfig(): HotkeyConfig {
 
     const parsed = JSON.parse(raw) as Partial<HotkeyConfig>
     const config = { ...DEFAULT_HOTKEYS, ...parsed }
+    let shouldPersist = migrateSearchHotkeys(config, parsed)
 
     for (const action of Object.keys(config) as HotkeyAction[]) {
       const binding = config[action]
+      let nextBinding: HotkeyBinding
+
       if (!binding?.key || MODIFIER_KEYS.includes(binding.key)) {
-        config[action] = { ...DEFAULT_HOTKEYS[action] }
-        continue
+        nextBinding = { ...DEFAULT_HOTKEYS[action] }
+      } else if (isGlobalHotkeyAction(action) && !hasAtLeastTwoKeys(binding.key)) {
+        nextBinding = { ...DEFAULT_HOTKEYS[action] }
+      } else {
+        nextBinding = {
+          key: binding.key,
+          label: keyToLabel(binding.key)
+        }
       }
 
-      if (isGlobalHotkeyAction(action) && !hasAtLeastTwoKeys(binding.key)) {
-        config[action] = { ...DEFAULT_HOTKEYS[action] }
+      if (
+        nextBinding.key !== binding?.key ||
+        nextBinding.label !== binding?.label
+      ) {
+        shouldPersist = true
       }
+
+      config[action] = nextBinding
+    }
+
+    if (shouldPersist) {
+      saveConfig(config)
     }
 
     return config
@@ -88,8 +114,79 @@ function loadConfig(): HotkeyConfig {
   }
 }
 
+function migrateSearchHotkeys(
+  config: HotkeyConfig,
+  parsed: Partial<HotkeyConfig>
+): boolean {
+  const isUsingLegacyGlobalSearchKey =
+    parsed.openGlobalSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
+  const isUsingCtrlFForGlobalSearch =
+    parsed.openGlobalSearch?.key === CURRENT_FOCUS_SEARCH_KEY
+  const isUsingLegacyFocusSearchKey =
+    parsed.focusSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
+  const shouldNormalizeFocusSearch =
+    isUsingLegacyFocusSearchKey || isUsingCtrlFForGlobalSearch
+  const shouldNormalizeGlobalSearch =
+    !parsed.openGlobalSearch?.key ||
+    isUsingLegacyGlobalSearchKey ||
+    isUsingCtrlFForGlobalSearch
+
+  if (
+    !shouldNormalizeFocusSearch &&
+    !shouldNormalizeGlobalSearch
+  ) {
+    return false
+  }
+
+  let changed = false
+  const focusSearchKeyOccupiedByOtherAction = isKeyOccupiedByOtherAction(
+    config,
+    CURRENT_FOCUS_SEARCH_KEY,
+    SEARCH_ACTIONS
+  )
+  const globalSearchKeyOccupiedByOtherAction = isKeyOccupiedByOtherAction(
+    config,
+    CURRENT_OPEN_GLOBAL_SEARCH_KEY,
+    SEARCH_ACTIONS
+  )
+
+  if (
+    shouldNormalizeFocusSearch &&
+    !focusSearchKeyOccupiedByOtherAction &&
+    config.focusSearch.key !== CURRENT_FOCUS_SEARCH_KEY
+  ) {
+    config.focusSearch = { ...DEFAULT_HOTKEYS.focusSearch }
+    changed = true
+  }
+
+  if (
+    shouldNormalizeGlobalSearch &&
+    !globalSearchKeyOccupiedByOtherAction &&
+    config.openGlobalSearch.key !== CURRENT_OPEN_GLOBAL_SEARCH_KEY
+  ) {
+    config.openGlobalSearch = { ...DEFAULT_HOTKEYS.openGlobalSearch }
+    changed = true
+  }
+
+  return changed
+}
+
 function saveConfig(config: HotkeyConfig) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
+}
+
+function isKeyOccupiedByOtherAction(
+  config: HotkeyConfig,
+  key: string,
+  excludedActions: HotkeyAction[] = []
+): boolean {
+  return Object.entries(config).some(([action, binding]) => {
+    if (excludedActions.includes(action as HotkeyAction)) {
+      return false
+    }
+
+    return binding.key === key
+  })
 }
 
 function hasAtLeastTwoKeys(key: string): boolean {
@@ -116,8 +213,12 @@ function extractGlobalHotkeyConfig(config: HotkeyConfig): GlobalHotkeyConfig {
 
 function syncGlobalHotkeysToMain(): void {
   window.api?.settings
-    ?.setGlobalHotkeys(extractGlobalHotkeyConfig(hotkeyConfig))
+    ?.setGlobalHotkeys(extractGlobalHotkeysToMainConfig())
     .catch((error) => console.error('[hotkeys] sync global hotkeys failed', error))
+}
+
+function extractGlobalHotkeysToMainConfig(): GlobalHotkeyConfig {
+  return extractGlobalHotkeyConfig(hotkeyConfig)
 }
 
 function normalizeKeyEvent(event: KeyboardEvent): string {
@@ -179,6 +280,9 @@ function requestSearchFocus(): void {
 }
 
 function matchAction(normalizedKey: string): HotkeyAction | null {
+  if (hotkeyConfig.focusSearch.key === normalizedKey) return 'focusSearch'
+  if (hotkeyConfig.openGlobalSearch.key === normalizedKey) return 'openGlobalSearch'
+
   for (const [action, binding] of Object.entries(hotkeyConfig) as [HotkeyAction, HotkeyBinding][]) {
     if (binding.key === normalizedKey) return action
   }
@@ -188,6 +292,7 @@ function matchAction(normalizedKey: string): HotkeyAction | null {
 export function useHotkeys() {
   const app = useAppFacade()
   const appSessionStore = useAppSessionStore()
+  const globalSearchStore = useGlobalSearchStore()
   const { hoveredTarget, hoveredParentTaskId } = useHoverTarget()
   const { confirm } = useAppRuntime().confirm
 
@@ -255,6 +360,12 @@ export function useHotkeys() {
         requestSearchFocus()
         break
       }
+      case 'openGlobalSearch': {
+        globalSearchStore.open({
+          scope: 'all'
+        })
+        break
+      }
       case 'showWindow':
       case 'showWindowAndFocusInput':
         break
@@ -284,21 +395,16 @@ export function useHotkeys() {
   function handleKeydown(event: KeyboardEvent) {
     if (!isEnabled.value) return
     if (isConfirmDialogVisible()) return
+    if (globalSearchStore.isOpen) return
 
     const normalizedKey = normalizeKeyEvent(event)
     if (!normalizedKey) return
 
     const action = matchAction(normalizedKey)
-    if (action === 'focusSearch') {
-      event.preventDefault()
-      event.stopPropagation()
-      void executeAction(action)
-      return
-    }
-
+    const triggeredFromInput = isInputElement(event.target)
     if (handleCategorySwitch(event)) return
-    if (isInputElement(event.target)) return
     if (!action || isGlobalHotkeyAction(action)) return
+    if (triggeredFromInput && action !== 'focusSearch' && action !== 'openGlobalSearch') return
 
     event.preventDefault()
     event.stopPropagation()
@@ -314,16 +420,23 @@ export function useHotkeys() {
   function handleKeyup(event: KeyboardEvent) {
     if (!isEnabled.value) return
     if (isConfirmDialogVisible()) return
-    if (isInputElement(event.target)) return
+    if (globalSearchStore.isOpen) return
 
     const normalizedKey = normalizeKeyEvent(event)
     if (!normalizedKey) return
 
     const action = matchAction(normalizedKey)
-    if (action && !isGlobalHotkeyAction(action)) {
-      event.preventDefault()
-      event.stopPropagation()
+    if (!action || isGlobalHotkeyAction(action)) return
+    if (
+      isInputElement(event.target) &&
+      action !== 'focusSearch' &&
+      action !== 'openGlobalSearch'
+    ) {
+      return
     }
+
+    event.preventDefault()
+    event.stopPropagation()
   }
 
   if (!keyboardListenersRegistered) {

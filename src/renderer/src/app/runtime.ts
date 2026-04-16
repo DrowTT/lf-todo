@@ -15,7 +15,7 @@ import type {
   UpdaterService,
   WindowService
 } from '../services/repositories/settingsRepository'
-import type { TaskRepository } from '../services/repositories/taskRepository'
+import type { SearchTasksInput, TaskRepository } from '../services/repositories/taskRepository'
 import type { Category, Task, TaskCreateInput, TaskUpdate } from '../../../shared/types/models'
 
 export interface AppRuntime {
@@ -63,6 +63,7 @@ function createUnavailableCategoryRepository(): CategoryRepository {
 function createUnavailableTaskRepository(): TaskRepository {
   return {
     getTasks: createUnavailableAction<[number], Task[]>('taskRepository.getTasks'),
+    searchTasks: createUnavailableAction<[SearchTasksInput], Task[]>('taskRepository.searchTasks'),
     createTask: createUnavailableAction<[TaskCreateInput], Task>('taskRepository.createTask'),
     updateTask: createUnavailableAction<[number, TaskUpdate], void>('taskRepository.updateTask'),
     deleteTask: createUnavailableAction<[number], void>('taskRepository.deleteTask'),

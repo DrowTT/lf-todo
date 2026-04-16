@@ -24,6 +24,8 @@ const editingCategoryId = ref<number | null>(null)
 const editingName = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
 
+const isSystemCategory = (category: { is_system: boolean }) => category.is_system
+
 const handleAddCategory = async () => {
   const trimmed = newCategoryName.value.trim()
   if (!trimmed) {
@@ -50,6 +52,12 @@ const handleSelectCategory = (categoryId: number) => {
 const handleDeleteCategory = async () => {
   if (contextMenu.value.data === null) return
 
+  const category = categories.value.find((item) => item.id === contextMenu.value.data)
+  if (!category || isSystemCategory(category)) {
+    closeContextMenu()
+    return
+  }
+
   const confirmed = await confirm('确认删除该分类及其所有待办吗？')
   if (confirmed) {
     await app.deleteCategory(contextMenu.value.data)
@@ -62,7 +70,10 @@ const handleRenameClick = async () => {
   if (contextMenu.value.data === null) return
 
   const category = categories.value.find((item) => item.id === contextMenu.value.data)
-  if (!category) return
+  if (!category || isSystemCategory(category)) {
+    closeContextMenu()
+    return
+  }
 
   editingCategoryId.value = category.id
   editingName.value = category.name
@@ -83,6 +94,23 @@ const cancelRename = () => {
   editingCategoryId.value = null
   editingName.value = ''
 }
+
+const handleCategoryContextMenu = (
+  event: MouseEvent,
+  category: {
+    id: number
+    is_system: boolean
+  }
+) => {
+  event.preventDefault()
+
+  if (isSystemCategory(category)) {
+    closeContextMenu()
+    return
+  }
+
+  openContextMenu(event, category.id)
+}
 </script>
 
 <template>
@@ -100,10 +128,11 @@ const cancelRename = () => {
           :class="{
             'category-item--active':
               appSessionStore.currentMainView === 'tasks' && currentCategoryId === category.id,
-            'category-item--editing': editingCategoryId === category.id
+            'category-item--editing': editingCategoryId === category.id,
+            'category-item--system': category.is_system
           }"
           @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"
-          @contextmenu="openContextMenu($event, category.id)"
+          @contextmenu="handleCategoryContextMenu($event, category)"
         >
           <input
             v-if="editingCategoryId === category.id"
@@ -313,6 +342,12 @@ const cancelRename = () => {
   &--editing {
     padding: $spacing-xs $spacing-md;
     margin: 0;
+  }
+
+  &--system {
+    .category-item__name {
+      font-weight: 600;
+    }
   }
 
   &__edit-input {

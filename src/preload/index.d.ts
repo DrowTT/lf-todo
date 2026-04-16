@@ -38,6 +38,11 @@ interface API {
     updateCategory: (id: number, name: string) => Promise<void>
     deleteCategory: (id: number) => Promise<void>
     getTasks: (categoryId: number) => Promise<Task[]>
+    searchTasks: (input: {
+      query: string
+      categoryId?: number | null
+      limit?: number
+    }) => Promise<Task[]>
     createTask: (input: TaskCreateInput) => Promise<Task>
     updateTask: (id: number, updates: TaskUpdate) => Promise<void>
     deleteTask: (id: number) => Promise<void>

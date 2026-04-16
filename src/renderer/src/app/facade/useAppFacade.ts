@@ -27,6 +27,10 @@ export function useAppFacade() {
     })
   }
 
+  function isSystemCategory(categoryId: number) {
+    return categoryStore.categories.some((category) => category.id === categoryId && category.is_system)
+  }
+
   async function ensureCategoryReady(categoryId: number) {
     if (categoryStore.currentCategoryId === categoryId) return
     await selectCategory(categoryId)
@@ -56,6 +60,7 @@ export function useAppFacade() {
   async function deleteCategory(id: number) {
     taskStore.removePendingCount(id)
     await categoryStore.deleteCategory(id)
+    await taskStore.initPendingCounts()
 
     if (categoryStore.currentCategoryId) {
       await fetchTasks(categoryStore.currentCategoryId)
@@ -116,21 +121,25 @@ export function useAppFacade() {
     const categoryId = categoryStore.currentCategoryId
     if (!categoryId) return false
 
-    return await taskStore.toggleTask(id, categoryId)
+    return await taskStore.toggleTask(id)
   }
 
   async function deleteTask(id: number) {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId) return false
+    const viewCategoryId = categoryStore.currentCategoryId
+    if (!viewCategoryId) return false
 
-    const deleted = await taskStore.deleteTask(id, categoryId)
+    const deleted = await taskStore.deleteTask(id)
     if (!deleted) return false
 
-    subTaskStore.removeTask(id, categoryId)
+    subTaskStore.removeTask(id, viewCategoryId)
+    const persistReorder = !isSystemCategory(viewCategoryId)
 
     registerUndo('任务已删除', async () => {
-      await ensureCategoryReady(deleted.task.category_id)
-      await taskStore.restoreDeletedTask(deleted)
+      await ensureCategoryReady(viewCategoryId)
+      await taskStore.restoreDeletedTask(deleted, {
+        persistReorder,
+        viewCategoryId
+      })
       return true
     })
 
@@ -163,7 +172,12 @@ export function useAppFacade() {
   }
 
   async function reorderTasks(previousOrderedIds: number[]) {
-    return await taskStore.reorderTasks(previousOrderedIds)
+    const categoryId = categoryStore.currentCategoryId
+    if (!categoryId) return false
+
+    return await taskStore.reorderTasks(previousOrderedIds, {
+      persist: !isSystemCategory(categoryId)
+    })
   }
 
   async function toggleExpand(taskId: number) {
@@ -182,11 +196,13 @@ export function useAppFacade() {
   }
 
   async function deleteSubTask(id: number, parentId: number) {
+    const viewCategoryId = categoryStore.currentCategoryId
     const deleted = await subTaskStore.deleteSubTask(id, parentId)
     if (!deleted) return false
 
     registerUndo('子任务已删除', async () => {
       const categoryId =
+        viewCategoryId ??
         deleted.parentSnapshot?.category_id ??
         taskStore.tasks.find((task) => task.id === parentId)?.category_id
 

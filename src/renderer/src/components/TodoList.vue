@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
-import { FOCUS_SEARCH_EVENT } from '../composables/useHotkeys'
 import { useAppRuntime } from '../app/runtime'
+import { FOCUS_SEARCH_EVENT } from '../composables/useHotkeys'
 import { useSidebarResize } from '../composables/useSidebarResize'
+import { useGlobalSearchStore } from '../store/globalSearch'
 import { useTaskStore } from '../store/task'
+import { MIN_SIDEBAR_WIDTH, MIN_TODO_WIDTH } from '../../../shared/constants/layout'
 import CategoryList from './CategoryList.vue'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
@@ -16,25 +18,25 @@ const app = useAppFacade()
 const { currentCategoryId, categories, tasks, isLoading } = app
 const { confirm } = useAppRuntime().confirm
 const taskStore = useTaskStore()
+const globalSearchStore = useGlobalSearchStore()
 const { sidebarWidth, startResize } = useSidebarResize()
 
 const dragStartOrder = ref<number[]>([])
 const searchQuery = ref('')
 const isSearchExpanded = ref(false)
-const searchBar = useTemplateRef<{ focusSearch: () => void }>('searchBar')
+const searchBar = ref<{ focusSearch: () => void } | null>(null)
 
-const currentCategoryName = computed(() => {
-  const category = categories.value.find((item) => item.id === currentCategoryId.value)
-  return category ? category.name : '未选择分类'
-})
-
+const currentCategory = computed(() =>
+  categories.value.find((item) => item.id === currentCategoryId.value) ?? null
+)
+const currentCategoryName = computed(() => currentCategory.value?.name ?? '未选择分类')
+const isSystemCategoryView = computed(() => currentCategory.value?.is_system ?? false)
+const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
+const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0)
 const currentPendingCount = computed(
   () => tasks.value.filter((task) => !task.is_completed && task.parent_id === null).length
 )
-
 const completedCount = computed(() => tasks.value.filter((task) => task.is_completed).length)
-const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
-const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0)
 const filteredTasks = computed(() => {
   if (!normalizedSearchQuery.value) {
     return tasks.value
@@ -44,6 +46,19 @@ const filteredTasks = computed(() => {
     task.content.toLocaleLowerCase().includes(normalizedSearchQuery.value)
   )
 })
+const clearCompletedTitle = computed(() =>
+  isSystemCategoryView.value ? '清空全部分类中的已完成任务' : '清空已完成任务'
+)
+const clearCompletedLabel = computed(() =>
+  isSystemCategoryView.value
+    ? `清空全部已完成 (${completedCount.value})`
+    : `清空已完成 (${completedCount.value})`
+)
+const clearCompletedConfirmText = computed(() =>
+  isSystemCategoryView.value
+    ? `确认删除“全部”视图中的 ${completedCount.value} 个已完成待办吗？这会清空所有分类中的已完成顶级任务。`
+    : `确认删除 ${completedCount.value} 个已完成的待办吗？`
+)
 
 const draggableTasks = computed({
   get: () => taskStore.tasks,
@@ -53,7 +68,7 @@ const draggableTasks = computed({
 })
 
 const handleClearCompleted = async () => {
-  const confirmed = await confirm(`确认删除 ${completedCount.value} 个已完成的待办吗？`)
+  const confirmed = await confirm(clearCompletedConfirmText.value)
   if (confirmed) {
     await app.clearCompletedTasks()
   }
@@ -77,6 +92,37 @@ watch(currentCategoryId, () => {
   isSearchExpanded.value = false
 })
 
+watch(
+  [() => globalSearchStore.pendingRevealTaskId, tasks],
+  async ([pendingRevealTaskId]) => {
+    if (!pendingRevealTaskId) return
+    if (!tasks.value.some((task) => task.id === pendingRevealTaskId)) return
+
+    await nextTick()
+
+    let target = document.querySelector<HTMLElement>(`[data-task-id="${pendingRevealTaskId}"]`)
+
+    if (!target && hasActiveSearch.value) {
+      searchQuery.value = ''
+      isSearchExpanded.value = false
+      await nextTick()
+      target = document.querySelector<HTMLElement>(`[data-task-id="${pendingRevealTaskId}"]`)
+    }
+
+    if (!target) return
+
+    target.scrollIntoView({
+      block: 'center',
+      behavior: 'smooth'
+    })
+    target.focus({ preventScroll: true })
+
+    globalSearchStore.clearPendingReveal(pendingRevealTaskId)
+    globalSearchStore.highlightTask(pendingRevealTaskId)
+  },
+  { flush: 'post' }
+)
+
 onMounted(() => {
   window.addEventListener(FOCUS_SEARCH_EVENT, handleFocusSearchRequested)
 })
@@ -88,7 +134,10 @@ onUnmounted(() => {
 
 <template>
   <div class="todo-layout">
-    <div :style="{ width: sidebarWidth + 'px' }" class="todo-layout__sidebar">
+    <div
+      :style="{ width: `${sidebarWidth}px`, minWidth: `${MIN_SIDEBAR_WIDTH}px` }"
+      class="todo-layout__sidebar"
+    >
       <CategoryList />
     </div>
     <div
@@ -97,7 +146,7 @@ onUnmounted(() => {
       @mousedown="startResize"
     ></div>
 
-    <div class="todo-panel">
+    <div class="todo-panel" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }">
       <header class="todo-panel__header">
         <div class="todo-panel__title-group">
           <h1 class="todo-panel__title">
@@ -117,15 +166,15 @@ onUnmounted(() => {
             </span>
             <span class="todo-panel__badge-label">待办</span>
           </span>
-          <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中</span>
+          <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中...</span>
           <button
             v-if="currentCategoryId"
             :disabled="completedCount === 0 || taskStore.isClearingCompleted"
             class="todo-panel__clear-btn"
-            title="清空已完成"
+            :title="clearCompletedTitle"
             @click="handleClearCompleted"
           >
-            {{ taskStore.isClearingCompleted ? '删除中...' : `清空已完成 (${completedCount})` }}
+            {{ taskStore.isClearingCompleted ? '删除中...' : clearCompletedLabel }}
           </button>
         </div>
       </header>
@@ -171,17 +220,22 @@ onUnmounted(() => {
             ghost-class="card--ghost"
             drag-class="card--dragging"
             :animation="200"
-            :disabled="taskStore.isReorderingTasks"
+            :disabled="taskStore.isReorderingTasks || isSystemCategoryView"
             class="todo-panel__cards"
             @start="onDragStart"
             @end="onDragEnd"
           >
             <template #item="{ element }">
-              <TodoItem :task="element" />
+              <TodoItem :task="element" :highlight-query="searchQuery" />
             </template>
           </draggable>
           <div v-else class="todo-panel__cards">
-            <TodoItem v-for="task in filteredTasks" :key="task.id" :task="task" />
+            <TodoItem
+              v-for="task in filteredTasks"
+              :key="task.id"
+              :task="task"
+              :highlight-query="searchQuery"
+            />
           </div>
         </template>
       </div>

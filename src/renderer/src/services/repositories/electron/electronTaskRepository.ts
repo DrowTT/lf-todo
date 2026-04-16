@@ -10,6 +10,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async getTasks(categoryId) {
       return parseTasks(await api.db.getTasks(categoryId), 'db:get-tasks.response')
     },
+    async searchTasks(input) {
+      return parseTasks(await api.db.searchTasks(input), 'db:search-tasks.response')
+    },
     async createTask(input) {
       return parseTask(await api.db.createTask(input), 'db:create-task.response')
     },

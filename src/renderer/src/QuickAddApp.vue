@@ -14,7 +14,9 @@ const { adjustHeight } = useAutoHeight(inputRef)
 const placeholderText = computed(() =>
   composer.selectedCategory.value
     ? '输入待办内容，Enter 提交，Shift+Enter 换行'
-    : '#工作 空格后继续输入待办'
+    : composer.defaultCategory.value
+      ? `直接输入待办，Enter 默认进入 #${composer.defaultCategory.value.name}`
+      : '#工作 空格后继续输入待办'
 )
 
 const statusText = computed(() => {
@@ -35,6 +37,10 @@ const statusText = computed(() => {
   }
 
   if (!composer.categoryQuery.value) {
+    if (composer.defaultCategory.value) {
+      return `直接回车会保存到「${composer.defaultCategory.value.name}」，也可输入 #分类名 后按空格切换`
+    }
+
     return '输入 #分类名 后按空格确认'
   }
 

@@ -17,9 +17,11 @@ import { HOTKEY_LABELS, keyToLabel, useHotkeys, type HotkeyAction } from '../com
 import { useSettingsStore } from '../store/settings'
 import { useUpdaterStore } from '../store/updater'
 import { useAppSessionStore } from '../store/appSession'
+import { useGlobalSearchStore } from '../store/globalSearch'
 
 const runtime = useAppRuntime()
 const appSessionStore = useAppSessionStore()
+const globalSearchStore = useGlobalSearchStore()
 const { confirm } = runtime.confirm
 const {
   hotkeyConfig,
@@ -57,6 +59,7 @@ const hotkeyActions: HotkeyAction[] = [
   'toggleExpand',
   'focusInput',
   'focusSearch',
+  'openGlobalSearch',
   'showWindow',
   'showWindowAndFocusInput'
 ]
@@ -305,6 +308,9 @@ async function handleInstallUpdate() {
 function handleKeydown(event: KeyboardEvent) {
   if (recordingAction.value) {
     handleRecordKeydown(event)
+    return
+  }
+  if (globalSearchStore.isOpen) {
     return
   }
 

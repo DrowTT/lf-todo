@@ -54,6 +54,9 @@ export function useQuickAddComposer() {
   )
   const categoryQuery = computed(() => leadingCategoryDraft.value?.query ?? '')
   const taskContent = computed(() => draft.value.trim())
+  const defaultCategory = computed(() => {
+    return categories.value.find((category) => category.is_system) ?? null
+  })
 
   const resolution = computed<CategoryResolution>(() => {
     const query = categoryQuery.value.trim()
@@ -212,7 +215,17 @@ export function useQuickAddComposer() {
       return null
     }
 
-    if (!selectedCategory.value) {
+    const resolvedCategory =
+      selectedCategory.value ??
+      (categoryQuery.value.length === 0 && defaultCategory.value
+        ? {
+            id: defaultCategory.value.id,
+            name: defaultCategory.value.name,
+            isNew: false
+          }
+        : null)
+
+    if (!resolvedCategory) {
       errorMessage.value = '先输入 #分类名，并按空格确认分类。'
       return null
     }
@@ -228,8 +241,8 @@ export function useQuickAddComposer() {
     try {
       const result = await window.api.quickAdd.submit({
         content,
-        categoryId: selectedCategory.value.id,
-        categoryName: selectedCategory.value.id ? null : selectedCategory.value.name
+        categoryId: resolvedCategory.id,
+        categoryName: resolvedCategory.id ? null : resolvedCategory.name
       })
 
       selectedCategory.value = {
@@ -260,6 +273,7 @@ export function useQuickAddComposer() {
     previewMatches,
     resolution,
     canConfirmCategory,
+    defaultCategory,
     taskContent,
     loadCategories,
     clearSelectedCategory,

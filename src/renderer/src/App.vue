@@ -4,6 +4,7 @@ import { useAppFacade } from './app/facade/useAppFacade'
 import { useAppBootstrap } from './app/useAppBootstrap'
 import { useAppRuntime } from './app/runtime'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import GlobalSearchDialog from './components/GlobalSearchDialog.vue'
 import PomodoroView from './components/PomodoroView.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ToastMessage from './components/ToastMessage.vue'
@@ -11,6 +12,7 @@ import TodoList from './components/TodoList.vue'
 import { useHotkeys } from './composables/useHotkeys'
 import ActivityBar from './layout/ActivityBar.vue'
 import TitleBar from './layout/TitleBar.vue'
+import { MIN_MAIN_WINDOW_WIDTH } from '../../shared/constants/layout'
 import { useAppSessionStore } from './store/appSession'
 import { usePomodoroStore } from './store/pomodoro'
 import { useSettingsStore } from './store/settings'
@@ -133,7 +135,7 @@ onUnmounted(() => {
 <template>
   <div class="app-container">
     <TitleBar @close-request="handleCloseRequest" />
-    <div class="app-content">
+    <div class="app-content" :style="{ minWidth: `${MIN_MAIN_WINDOW_WIDTH}px` }">
       <ActivityBar />
       <TodoList v-if="currentMainView === 'tasks'" />
       <PomodoroView v-else-if="currentMainView === 'pomodoro'" />
@@ -145,6 +147,7 @@ onUnmounted(() => {
       @confirm="handleConfirm"
       @cancel="handleCancel"
     />
+    <GlobalSearchDialog />
     <ToastMessage />
   </div>
 </template>

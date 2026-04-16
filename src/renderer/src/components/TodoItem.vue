@@ -8,9 +8,11 @@ import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from '../composables/useHoverTarget'
 import { useInlineEdit } from '../composables/useInlineEdit'
 import { useAppSessionStore } from '../store/appSession'
+import { useGlobalSearchStore } from '../store/globalSearch'
 import { usePomodoroStore } from '../store/pomodoro'
 import { useSubTaskStore } from '../store/subtask'
 import { useTaskStore } from '../store/task'
+import { buildSearchHighlightParts } from '../utils/searchHighlight'
 import SubTaskInput from './SubTaskInput.vue'
 import SubTaskItem from './SubTaskItem.vue'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
@@ -26,12 +28,14 @@ const runtime = useAppRuntime()
 const { confirm } = runtime.confirm
 const { setHoverTask, clearHover } = useHoverTarget()
 const appSessionStore = useAppSessionStore()
+const globalSearchStore = useGlobalSearchStore()
 const pomodoroStore = usePomodoroStore()
 const taskStore = useTaskStore()
 const subTaskStore = useSubTaskStore()
 
 const props = defineProps<{
   task: Task
+  highlightQuery?: string
 }>()
 
 const isExpanded = computed(() => subTaskStore.expandedTaskIds.has(props.task.id))
@@ -60,6 +64,11 @@ const isPomodoroRunningForTask = computed(
 )
 const isPomodoroBusy = computed(() => pomodoroStore.isBusy)
 const dragStartSubTaskOrder = ref<number[]>([])
+const isSystemCategoryView = computed(() =>
+  app.categories.value.some(
+    (category) => category.id === app.currentCategoryId.value && category.is_system
+  )
+)
 
 const subTaskProgress = computed(() => {
   if (isExpanded.value && subTasks.value.length > 0) {
@@ -81,11 +90,11 @@ const subTaskProgress = computed(() => {
 })
 
 const handleToggle = () => {
-  void taskStore.toggleTask(props.task.id, props.task.category_id)
+  void app.toggleTask(props.task.id)
 }
 
 const handleToggleExpand = () => {
-  void subTaskStore.toggleExpand(props.task.id, props.task.category_id)
+  void app.toggleExpand(props.task.id)
 }
 
 const handleDelete = async () => {
@@ -147,11 +156,16 @@ const cardClasses = computed(() => ({
   'card--open': isExpanded.value,
   'card--done': props.task.is_completed,
   'card--busy': isBusy.value,
+  'card--search-highlight': globalSearchStore.activeHighlightTaskId === props.task.id,
+  'card--drag-disabled': isSystemCategoryView.value,
   'card--priority-high': props.task.priority === 'high',
   'card--priority-medium': props.task.priority === 'medium',
   'card--priority-low': props.task.priority === 'low'
 }))
 const nextPriority = computed(() => getNextTaskPriority(props.task.priority))
+const contentHighlightParts = computed(() =>
+  buildSearchHighlightParts(props.task.content, props.highlightQuery ?? '')
+)
 const prioritySwitchTitle = computed(() => {
   const currentCode = getTaskPriorityCode(props.task.priority)
   const currentTitle = getTaskPriorityTitle(props.task.priority)
@@ -203,6 +217,7 @@ const onSubTaskDragEnd = async () => {
     class="card"
     :class="cardClasses"
     :data-task-id="task.id"
+    tabindex="-1"
     @mouseenter="onCardMouseEnter"
     @mouseleave="onCardMouseLeave"
   >
@@ -215,7 +230,11 @@ const onSubTaskDragEnd = async () => {
     ></button>
 
     <div class="card__row">
-      <div class="card__drag-handle">
+      <div
+        class="card__drag-handle"
+        :class="{ 'card__drag-handle--disabled': isSystemCategoryView }"
+        :title="isSystemCategoryView ? '“全部”视图暂不支持拖拽排序' : '拖拽排序'"
+      >
         <GripVertical :size="14" />
       </div>
 
@@ -243,7 +262,10 @@ const onSubTaskDragEnd = async () => {
             @input="adjustHeight"
           />
           <div v-else class="card__text" @dblclick="handleDblClick">
-            {{ task.content }}
+            <template v-for="(part, index) in contentHighlightParts" :key="`${task.id}-${index}`">
+              <mark v-if="part.matched" class="card__text-mark">{{ part.text }}</mark>
+              <span v-else>{{ part.text }}</span>
+            </template>
           </div>
         </div>
         <div v-if="hasMetaContent || shouldAlwaysShowEmptyDuePicker" class="card__meta">
@@ -355,6 +377,14 @@ const onSubTaskDragEnd = async () => {
   cursor: default;
   position: relative;
 
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.92),
+      0 0 0 4px rgba($accent-color, 0.14),
+      0 16px 36px rgba($accent-color, 0.1);
+  }
+
   &:hover {
     border-color: $border-light;
     border-left-color: var(--card-priority-accent);
@@ -390,6 +420,15 @@ const onSubTaskDragEnd = async () => {
 
   &--busy {
     opacity: 0.82;
+  }
+
+  &--search-highlight {
+    border-color: rgba($accent-color, 0.42);
+    border-left-color: $accent-color;
+    box-shadow:
+      0 0 0 1px rgba($accent-color, 0.18),
+      0 16px 36px rgba($accent-color, 0.12);
+    animation: card-search-highlight 1.6s ease;
   }
 
   &--priority-high {
@@ -436,6 +475,7 @@ const onSubTaskDragEnd = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   width: 18px;
   height: 22px;
   margin-top: 1px;
@@ -458,6 +498,15 @@ const onSubTaskDragEnd = async () => {
 
 .card:hover .card__drag-handle {
   opacity: 0.45;
+}
+
+.card--drag-disabled:hover .card__drag-handle {
+  opacity: 0.18;
+}
+
+.card__drag-handle--disabled {
+  cursor: not-allowed;
+  opacity: 0.18 !important;
 }
 
 .card--dragging {
@@ -555,6 +604,27 @@ const onSubTaskDragEnd = async () => {
   }
 }
 
+@keyframes card-search-highlight {
+  0% {
+    transform: translateY(0);
+    box-shadow:
+      0 0 0 0 rgba($accent-color, 0.22),
+      0 0 0 1px rgba($accent-color, 0.2);
+  }
+
+  35% {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 8px rgba($accent-color, 0),
+      0 12px 28px rgba($accent-color, 0.16),
+      0 0 0 1px rgba($accent-color, 0.22);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
 .card__check-svg {
   color: #fff;
 }
@@ -585,6 +655,17 @@ const onSubTaskDragEnd = async () => {
     text-decoration: line-through;
     text-decoration-color: rgba($text-muted, 0.4);
     font-weight: 400;
+  }
+}
+
+.card__text-mark {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba($warning-color, 0.18);
+  color: inherit;
+
+  .card--done & {
+    background: rgba($warning-color, 0.12);
   }
 }
 

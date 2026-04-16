@@ -1,7 +1,14 @@
 import type { Task, TaskCreateInput, TaskUpdate } from '../../../../shared/types/models'
 
+export interface SearchTasksInput {
+  query: string
+  categoryId?: number | null
+  limit?: number
+}
+
 export interface TaskRepository {
   getTasks(categoryId: number): Promise<Task[]>
+  searchTasks?(input: SearchTasksInput): Promise<Task[]>
   createTask(input: TaskCreateInput): Promise<Task>
   updateTask(id: number, updates: TaskUpdate): Promise<void>
   deleteTask(id: number): Promise<void>

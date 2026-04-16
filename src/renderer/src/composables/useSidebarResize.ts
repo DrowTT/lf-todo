@@ -1,26 +1,17 @@
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  ACTIVITY_BAR_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  MIN_TODO_WIDTH
+} from '../../../shared/constants/layout'
 
-const MIN_SIDEBAR_WIDTH = 100 // 左侧最小宽度
-const MIN_TODO_WIDTH = 300 // 右侧最小宽度
-const DEFAULT_WIDTH = 180
-// 统一使用 lf-todo: 前缀（与 categoryStore、subtask.ts 保持一致的命名规范）
 const STORAGE_KEY = 'lf-todo:sidebar-width'
 
-/** Activity Bar 固定宽度，需要在拖拽计算中减去 */
-export const ACTIVITY_BAR_WIDTH = 48
-
-/**
- * 侧边栏拖拽 resize composable
- * - 支持鼠标拖拽调整宽度
- * - 自动应用左/右侧最小宽度约束
- * - 持久化宽度到 localStorage
- * - 自动监听窗口 resize，保证约束始终满足
- */
 export function useSidebarResize() {
-  const sidebarWidth = ref(DEFAULT_WIDTH)
+  const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH)
   const isResizing = ref(false)
 
-  // 最大宽度需减去 ActivityBar 占位
   const getMaxSidebarWidth = () => window.innerWidth - MIN_TODO_WIDTH - ACTIVITY_BAR_WIDTH
 
   const applyConstraints = (width: number): number => {
@@ -34,10 +25,9 @@ export function useSidebarResize() {
     sidebarWidth.value = applyConstraints(sidebarWidth.value)
   }
 
-  // clientX 需减去 ActivityBar 宽度偏移
-  const handleResize = (e: MouseEvent) => {
+  const handleResize = (event: MouseEvent) => {
     if (!isResizing.value) return
-    sidebarWidth.value = applyConstraints(e.clientX - ACTIVITY_BAR_WIDTH)
+    sidebarWidth.value = applyConstraints(event.clientX - ACTIVITY_BAR_WIDTH)
   }
 
   const stopResize = () => {
@@ -54,17 +44,18 @@ export function useSidebarResize() {
     document.addEventListener('mousemove', handleResize)
     document.addEventListener('mouseup', stopResize)
     document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none' // 防止拖动时选中文字
+    document.body.style.userSelect = 'none'
   }
 
   onMounted(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      const width = parseInt(saved)
-      if (!isNaN(width)) {
+      const width = parseInt(saved, 10)
+      if (!Number.isNaN(width)) {
         sidebarWidth.value = applyConstraints(width)
       }
     }
+
     window.addEventListener('resize', handleWindowResize)
   })
 

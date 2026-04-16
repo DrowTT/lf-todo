@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, useTemplateRef } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { Search, X } from 'lucide-vue-next'
 
 interface Props {
@@ -9,17 +9,19 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
-  placeholder: '搜索当前分类中的待办...'
+  placeholder: '搜索当前列表中的待办...'
 })
 
 const query = defineModel<string>({ default: '' })
 const expanded = defineModel<boolean>('expanded', { default: false })
+
 const SEARCH_EXPAND_FOCUS_DELAY_MS = 240
 
-const searchInput = useTemplateRef<HTMLInputElement>('searchInput')
+const searchInput = ref<HTMLInputElement | null>(null)
 const hasQuery = computed(() => query.value.trim().length > 0)
 const isInputInteractive = ref(false)
 const inputActive = computed(() => expanded.value && isInputInteractive.value)
+
 let focusTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearFocusTimer() {
@@ -27,10 +29,6 @@ function clearFocusTimer() {
   clearTimeout(focusTimer)
   focusTimer = null
 }
-
-onUnmounted(() => {
-  clearFocusTimer()
-})
 
 function focusSearchInput(selectText = true) {
   isInputInteractive.value = true
@@ -74,6 +72,7 @@ function clearQuery() {
 
 function collapseIfEmpty() {
   if (hasQuery.value) return
+
   clearFocusTimer()
   isInputInteractive.value = false
   expanded.value = false
@@ -90,6 +89,10 @@ function handleEscape() {
   expanded.value = false
   searchInput.value?.blur()
 }
+
+onUnmounted(() => {
+  clearFocusTimer()
+})
 
 defineExpose({
   focusSearch
@@ -109,7 +112,7 @@ defineExpose({
       type="button"
       class="todo-search__trigger"
       :disabled="disabled"
-      :aria-label="expanded ? '搜索当前分类' : '展开分类内搜索'"
+      :aria-label="expanded ? '搜索当前列表' : '展开列表内搜索'"
       @mousedown.prevent
       @click="openSearch"
     >
@@ -147,6 +150,7 @@ defineExpose({
   --collapsed-size: 36px;
   --expanded-max-size: 320px;
   --expand-duration: 0.34s;
+
   position: relative;
   display: inline-flex;
   align-items: center;

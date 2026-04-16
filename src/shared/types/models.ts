@@ -1,6 +1,7 @@
 export interface Category {
   id: number
   name: string
+  is_system: boolean
   order_index: number
   created_at: number
 }

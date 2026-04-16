@@ -25,6 +25,15 @@ const priority = ref<TaskPriority>(
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
+const currentCategory = computed(() =>
+  categoryStore.categories.find((category) => category.id === categoryStore.currentCategoryId) ?? null
+)
+const isSystemCategoryView = computed(() => currentCategory.value?.is_system ?? false)
+const placeholderText = computed(() =>
+  isSystemCategoryView.value
+    ? '输入待办后回车，默认进入“全部”收件箱'
+    : '添加新的待办事项...'
+)
 const hasContent = computed(() => content.value.trim().length > 0)
 const isSubmitting = computed(() => app.isLoading.value || taskStore.isCreatingTask)
 
@@ -90,7 +99,7 @@ watch(priority, (value) => {
         v-model="content"
         rows="1"
         class="todo-input__field"
-        placeholder="添加新的待办事项..."
+        :placeholder="placeholderText"
         maxlength="100"
         :disabled="isSubmitting"
         @input="adjustHeight"
@@ -123,6 +132,9 @@ watch(priority, (value) => {
         </button>
       </div>
     </div>
+    <p v-if="isSystemCategoryView" class="todo-input__hint">
+      “全部”会聚合显示所有分类的待办；在这里新建的任务会进入默认收件箱。
+    </p>
   </div>
 </template>
 
@@ -131,6 +143,12 @@ watch(priority, (value) => {
 
 .todo-input {
   padding: $spacing-md $spacing-xl;
+
+  &__hint {
+    margin: 8px 2px 0;
+    font-size: $font-xs;
+    color: $text-muted;
+  }
 
   &__wrapper {
     display: flex;

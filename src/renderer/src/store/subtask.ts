@@ -9,6 +9,7 @@ import {
   runAsyncAction
 } from '../services/runAsyncAction'
 import { readStoredJson, writeStoredJson } from '../utils/localStorage'
+import { useCategoryStore } from './category'
 import { useTaskStore } from './task'
 
 const SUBTASK_OPERATION_TYPES = {
@@ -28,6 +29,9 @@ export interface ParentTaskSnapshot {
   category_id: number
   pendingCount: number
   hadPendingCount: boolean
+  system_category_id: number | null
+  systemPendingCount: number
+  hadSystemPendingCount: boolean
 }
 
 export interface DeletedSubTaskSnapshot {
@@ -51,6 +55,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
   let latestSubTaskFetchRequestId = 0
 
   const { repositories, toast } = useAppRuntime()
+  const categoryStore = useCategoryStore()
   const taskRepository = repositories.task
   const notifyError = (message: string) => toast.show(message)
 
@@ -74,6 +79,20 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
   function replaceSubTasks(parentId: number, nextSubTasks: Task[]) {
     subTasksMap.value[parentId] = nextSubTasks
+  }
+
+  function getSystemCategoryId() {
+    return categoryStore.categories.find((category) => category.is_system)?.id ?? null
+  }
+
+  function adjustPendingCountForParent(parentTask: Pick<Task, 'category_id'>, delta: number) {
+    const taskStore = useTaskStore()
+    taskStore._adjustPendingCount(parentTask.category_id, delta)
+
+    const systemCategoryId = getSystemCategoryId()
+    if (systemCategoryId !== null && systemCategoryId !== parentTask.category_id) {
+      taskStore._adjustPendingCount(systemCategoryId, delta)
+    }
   }
 
   function restoreSubTaskOrder(parentId: number, orderedIds: number[]) {
@@ -102,7 +121,12 @@ export const useSubTaskStore = defineStore('subTask', () => {
       subtask_done: parentTask.subtask_done,
       category_id: parentTask.category_id,
       pendingCount: taskStore.pendingCounts[parentTask.category_id] ?? 0,
-      hadPendingCount: parentTask.category_id in taskStore.pendingCounts
+      hadPendingCount: parentTask.category_id in taskStore.pendingCounts,
+      system_category_id: getSystemCategoryId(),
+      systemPendingCount:
+        getSystemCategoryId() === null ? 0 : taskStore.pendingCounts[getSystemCategoryId()!] ?? 0,
+      hadSystemPendingCount:
+        getSystemCategoryId() === null ? false : getSystemCategoryId()! in taskStore.pendingCounts
     }
   }
 
@@ -120,10 +144,20 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
     if (snapshot.hadPendingCount) {
       taskStore.pendingCounts[snapshot.category_id] = snapshot.pendingCount
-      return
+    } else {
+      delete taskStore.pendingCounts[snapshot.category_id]
     }
 
-    delete taskStore.pendingCounts[snapshot.category_id]
+    if (
+      snapshot.system_category_id !== null &&
+      snapshot.system_category_id !== snapshot.category_id
+    ) {
+      if (snapshot.hadSystemPendingCount) {
+        taskStore.pendingCounts[snapshot.system_category_id] = snapshot.systemPendingCount
+      } else {
+        delete taskStore.pendingCounts[snapshot.system_category_id]
+      }
+    }
   }
 
   function isCreatingSubTask(parentId: number) {
@@ -245,7 +279,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
         if (parentTask && parentWasCompleted) {
           parentTask.is_completed = false
-          taskStore._adjustPendingCount(parentTask.category_id, 1)
+          adjustPendingCountForParent(parentTask, 1)
         }
       },
       onError: async () => {
@@ -304,12 +338,12 @@ export const useSubTaskStore = defineStore('subTask', () => {
 
         if (nextParentCompleted && !parentTask.is_completed) {
           parentTask.is_completed = true
-          taskStore._adjustPendingCount(parentTask.category_id, -1)
+          adjustPendingCountForParent(parentTask, -1)
         }
 
         if (!nextParentCompleted && parentTask.is_completed) {
           parentTask.is_completed = false
-          taskStore._adjustPendingCount(parentTask.category_id, 1)
+          adjustPendingCountForParent(parentTask, 1)
         }
       },
       execute: async () => {

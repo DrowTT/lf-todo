@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import path from 'path'
+import { SYSTEM_CATEGORY_NAME, SYSTEM_CATEGORY_ORDER_INDEX } from '../../shared/constants/category'
 import { DEFAULT_TASK_PRIORITY } from '../../shared/constants/task'
+import type { SearchTasksRequest } from '../../shared/contracts/db'
 import type {
   TaskCreateInput,
   TaskDuePrecision,
@@ -96,6 +98,40 @@ const migrations: Migration[] = [
     version: 7,
     description: 'add priority column to tasks',
     up: `ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT '${DEFAULT_TASK_PRIORITY}'`
+  },
+  {
+    version: 8,
+    description: 'add is_system column to categories',
+    up: `ALTER TABLE categories ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0`
+  },
+  {
+    version: 9,
+    description: 'ensure system inbox category exists and stays first',
+    up: `
+      UPDATE categories SET order_index = order_index + 1;
+
+      INSERT INTO categories (name, order_index, is_system)
+      SELECT '${SYSTEM_CATEGORY_NAME}', ${SYSTEM_CATEGORY_ORDER_INDEX}, 1
+      WHERE NOT EXISTS (
+        SELECT 1 FROM categories WHERE TRIM(name) = '${SYSTEM_CATEGORY_NAME}'
+      );
+
+      UPDATE categories
+      SET is_system = CASE
+        WHEN id = (
+          SELECT id
+          FROM categories
+          WHERE TRIM(name) = '${SYSTEM_CATEGORY_NAME}'
+          ORDER BY order_index ASC, id ASC
+          LIMIT 1
+        ) THEN 1
+        ELSE 0
+      END;
+
+      UPDATE categories
+      SET order_index = ${SYSTEM_CATEGORY_ORDER_INDEX}
+      WHERE is_system = 1;
+    `
   }
 ]
 
@@ -150,7 +186,13 @@ export function initDatabase(): void {
     // Category
     getAllCategories: db.prepare('SELECT * FROM categories ORDER BY order_index, id'),
     getCategoryById: db.prepare('SELECT * FROM categories WHERE id = ?'),
-    createCategory: db.prepare('INSERT INTO categories (name) VALUES (?)'),
+    getSystemCategory: db.prepare(
+      'SELECT * FROM categories WHERE is_system = 1 ORDER BY id LIMIT 1'
+    ),
+    createCategory: db.prepare(`
+      INSERT INTO categories (name, order_index, is_system)
+      VALUES (?, COALESCE((SELECT MAX(order_index) + 1 FROM categories), 1), 0)
+    `),
     updateCategory: db.prepare('UPDATE categories SET name = ? WHERE id = ?'),
     deleteCategory: db.prepare('DELETE FROM categories WHERE id = ?'),
     // Task 查询
@@ -234,28 +276,81 @@ export function closeDatabase(): void {
 export interface Category {
   id: number
   name: string
+  is_system: boolean
   order_index: number
   created_at: number
 }
 
+function mapCategory(raw: Record<string, unknown>): Category {
+  return {
+    id: raw.id as number,
+    name: raw.name as string,
+    is_system: raw.is_system === 1 || raw.is_system === true,
+    order_index: raw.order_index as number,
+    created_at: raw.created_at as number
+  }
+}
+
+function normalizeCategoryName(name: string): string {
+  return name.trim().toLocaleLowerCase()
+}
+
+function getSystemCategory(): Category | undefined {
+  const raw = getStmts().getSystemCategory.get()
+  return raw ? mapCategory(raw as Record<string, unknown>) : undefined
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&')
+}
+
+function ensureCategoryMutable(id: number): Category {
+  const category = getCategoryById(id)
+  if (!category) {
+    throw new Error(`Category ${id} does not exist`)
+  }
+
+  if (category.is_system) {
+    throw new Error('System category cannot be modified')
+  }
+
+  return category
+}
+
+function assertCategoryNameAllowed(name: string, currentCategoryId?: number): void {
+  if (normalizeCategoryName(name) !== normalizeCategoryName(SYSTEM_CATEGORY_NAME)) {
+    return
+  }
+
+  const systemCategory = getSystemCategory()
+  if (systemCategory && systemCategory.id !== currentCategoryId) {
+    throw new Error('System category name is reserved')
+  }
+}
+
 export function getAllCategories(): Category[] {
-  return getStmts().getAllCategories.all() as Category[]
+  return (getStmts().getAllCategories.all() as Record<string, unknown>[]).map(mapCategory)
 }
 
 export function createCategory(name: string): Category {
+  assertCategoryNameAllowed(name)
   const info = getStmts().createCategory.run(name)
   return getCategoryById(info.lastInsertRowid as number)!
 }
 
 export function getCategoryById(id: number): Category | undefined {
-  return getStmts().getCategoryById.get(id) as Category | undefined
+  const raw = getStmts().getCategoryById.get(id)
+  return raw ? mapCategory(raw as Record<string, unknown>) : undefined
 }
 
 export function updateCategory(id: number, name: string): void {
+  ensureCategoryMutable(id)
+  assertCategoryNameAllowed(name, id)
   getStmts().updateCategory.run(name, id)
 }
 
 export function deleteCategory(id: number): void {
+  ensureCategoryMutable(id)
   getStmts().deleteCategory.run(id)
 }
 
@@ -307,7 +402,75 @@ function mapTask(raw: Record<string, unknown>): Task {
 }
 
 export function getTasksByCategory(categoryId: number): Task[] {
-  return (getStmts().getTasksByCategory.all(categoryId) as Record<string, unknown>[]).map(mapTask)
+  const queryCategoryId = getCategoryById(categoryId)?.is_system ? undefined : categoryId
+  const rows =
+    queryCategoryId === undefined
+      ? (getDb()
+          .prepare(`
+            SELECT t.*,
+              COUNT(s.id) AS subtask_total,
+              SUM(CASE WHEN s.is_completed = 1 THEN 1 ELSE 0 END) AS subtask_done
+            FROM tasks t
+            LEFT JOIN tasks s ON s.parent_id = t.id
+            WHERE t.parent_id IS NULL
+            GROUP BY t.id
+            ORDER BY t.order_index DESC, t.id DESC
+          `)
+          .all() as Record<string, unknown>[])
+      : ((getStmts().getTasksByCategory.all(queryCategoryId) as Record<string, unknown>[]))
+
+  return rows.map(mapTask)
+}
+
+export function searchTasks(request: SearchTasksRequest): Task[] {
+  const normalizedQuery = request.query.trim().toLocaleLowerCase()
+  if (!normalizedQuery) {
+    return []
+  }
+
+  const escapedQuery = escapeLikePattern(normalizedQuery)
+  const likePattern = `%${escapedQuery}%`
+  const prefixPattern = `${escapedQuery}%`
+  const categoryId =
+    request.categoryId === null || getCategoryById(request.categoryId)?.is_system
+      ? null
+      : request.categoryId
+
+  const sql = `
+    SELECT t.*,
+      COUNT(s.id) AS subtask_total,
+      SUM(CASE WHEN s.is_completed = 1 THEN 1 ELSE 0 END) AS subtask_done
+    FROM tasks t
+    LEFT JOIN tasks s ON s.parent_id = t.id
+    WHERE
+      t.parent_id IS NULL
+      AND LOWER(t.content) LIKE @likePattern ESCAPE '\\'
+      ${categoryId === null ? '' : 'AND t.category_id = @categoryId'}
+    GROUP BY t.id
+    ORDER BY
+      CASE WHEN LOWER(TRIM(t.content)) = @exactQuery THEN 0 ELSE 1 END ASC,
+      CASE WHEN LOWER(t.content) LIKE @prefixPattern ESCAPE '\\' THEN 0 ELSE 1 END ASC,
+      CASE WHEN t.is_completed = 0 THEN 0 ELSE 1 END ASC,
+      CASE
+        WHEN t.priority = 'high' THEN 0
+        WHEN t.priority = 'medium' THEN 1
+        ELSE 2
+      END ASC,
+      t.order_index DESC,
+      t.created_at DESC,
+      t.id DESC
+    LIMIT @limit
+  `
+
+  const rows = getDb().prepare(sql).all({
+    exactQuery: normalizedQuery,
+    prefixPattern,
+    likePattern,
+    categoryId,
+    limit: request.limit
+  }) as Record<string, unknown>[]
+
+  return rows.map(mapTask)
 }
 
 export function getSubTasks(parentId: number): Task[] {
@@ -400,9 +563,13 @@ export function deleteTasks(ids: number[]): void {
 }
 
 export function clearCompletedTasks(categoryId: number): number {
-  const result = getDb()
-    .prepare('DELETE FROM tasks WHERE category_id = ? AND parent_id IS NULL AND is_completed = 1')
-    .run(categoryId)
+  const isSystemCategory = getCategoryById(categoryId)?.is_system ?? false
+  const statement = isSystemCategory
+    ? 'DELETE FROM tasks WHERE parent_id IS NULL AND is_completed = 1'
+    : 'DELETE FROM tasks WHERE category_id = ? AND parent_id IS NULL AND is_completed = 1'
+  const result = isSystemCategory
+    ? getDb().prepare(statement).run()
+    : getDb().prepare(statement).run(categoryId)
 
   return result.changes
 }
@@ -428,7 +595,14 @@ export function batchCompleteSubTasks(parentId: number): number {
 /** 获取各分类的待完成任务数量 */
 export function getPendingTaskCounts(): Record<number, number> {
   const rows = getStmts().getPendingTaskCounts.all() as { category_id: number; count: number }[]
-  return Object.fromEntries(rows.map((r) => [r.category_id, r.count]))
+  const counts = Object.fromEntries(rows.map((r) => [r.category_id, r.count])) as Record<number, number>
+  const systemCategory = getSystemCategory()
+
+  if (systemCategory) {
+    counts[systemCategory.id] = rows.reduce((sum, row) => sum + row.count, 0)
+  }
+
+  return counts
 }
 
 /**
@@ -478,7 +652,9 @@ export function deleteCompletedTasksBefore(timestamp: number): number {
  * 导出所有分类和任务数据（用于数据导出功能）
  */
 export function exportAllData(): { categories: Category[]; tasks: Task[] } {
-  const categories = getStmts().getAllCategories.all() as Category[]
+  const categories = (getStmts().getAllCategories.all() as Record<string, unknown>[]).map(
+    mapCategory
+  )
   const allTasks = getDb()
     .prepare('SELECT * FROM tasks ORDER BY category_id, order_index DESC, id DESC')
     .all() as Record<string, unknown>[]

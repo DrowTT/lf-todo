@@ -25,11 +25,12 @@ import {
 
 export function parseCategory(value: unknown, label = 'category'): Category {
   const record = expectRecord(value, label)
-  assertAllowedKeys(record, ['id', 'name', 'order_index', 'created_at'], label)
+  assertAllowedKeys(record, ['id', 'name', 'is_system', 'order_index', 'created_at'], label)
 
   return {
     id: expectInteger(record.id, `${label}.id`, { min: 1 }),
     name: expectString(record.name, `${label}.name`, { trim: true, minLength: 1, maxLength: 64 }),
+    is_system: expectBoolean(record.is_system, `${label}.is_system`),
     order_index: expectInteger(record.order_index, `${label}.order_index`, { min: 0 }),
     created_at: expectInteger(record.created_at, `${label}.created_at`, { min: 0 })
   }
