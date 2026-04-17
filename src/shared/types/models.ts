@@ -21,12 +21,21 @@ export interface Task {
   category_id: number
   order_index: number
   created_at: number
+  completed_at: number | null
+  last_restored_at: number | null
   parent_id: number | null
   due_at: number | null
   due_precision: TaskDuePrecision | null
   priority: TaskPriority
+  archived_at?: number | null
+  archived_category_name?: string | null
   subtask_total: number
   subtask_done: number
+}
+
+export interface ArchivedTaskGroup {
+  task: Task
+  subTasks: Task[]
 }
 
 export interface TaskCreateInput extends TaskDueState {

@@ -158,7 +158,7 @@ export const useSettingsStore = defineStore('settings', () => {
       return true
     } catch (err) {
       settings.value = { ...settings.value, autoCleanup: previous }
-      error.value = '保存自动清理设置失败，请重试'
+      error.value = '保存自动归档设置失败，请重试'
       runtime.toast.show(error.value)
       throw err
     } finally {

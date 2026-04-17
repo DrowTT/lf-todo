@@ -159,7 +159,6 @@ onUnmounted(() => {
   align-items: center;
   height: 100%;
   gap: 2px;
-  padding-right: 4px;
   -webkit-app-region: no-drag;
 }
 
@@ -184,16 +183,24 @@ onUnmounted(() => {
 }
 
 .title-bar__search-text {
+  display: inline-flex;
+  align-items: center;
   font-size: 12px;
+  line-height: 1;
 }
 
 .title-bar__search-key {
-  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16px;
+  padding: 0 6px;
   border-radius: 999px;
   background: rgba($bg-deep, 0.84);
   color: $text-muted;
   font-size: 10px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .title-bar__btn {

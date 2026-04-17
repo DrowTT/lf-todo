@@ -9,6 +9,7 @@ Update it conservatively. Prefer narrow, evidence-based guidance.
 - Touching `src/main`, `src/preload`, or `src/shared/contracts` usually means version-sensitive or boundary-sensitive work. Bias toward adding `docs_researcher` and use `pnpm verify:agent:full` when behavior changes cross process boundaries.
 - Touching `package.json`, build config, preload bridge, database contracts, or updater flow counts as a conflict zone. Keep a single writer unless there is a very strong reason to split.
 - Renderer-only component, composable, or style changes usually do not need multiple readers beyond `code_mapper` and `reviewer` unless browser or framework behavior is unclear.
+- Renderer-only command palette, global search, modal, or overlay work that changes hotkeys, focus behavior, or `Escape` semantics should still be treated as boundary-sensitive UI. Even without `src/main` or `src/preload` edits, the coordinator should explicitly route around focus retention/restoration, shell-level shortcut conflicts, and dismissal behavior in the acceptance criteria.
 - Requests for a fixed Inbox/default category should bias toward a real protected category, not a virtual sentinel view. LF-Todo currently assumes positive real `categoryId` values across store, IPC, preload, session drafts, and Quick Add.
 
 ## Verification
@@ -17,6 +18,8 @@ Update it conservatively. Prefer narrow, evidence-based guidance.
 - Use `pnpm verify:agent:fast` only for narrow low-risk code changes where build output is not meaningfully affected.
 - Use `pnpm verify:agent:full` for cross-layer changes, shared contracts, storage boundaries, packaging paths, or risky refactors.
 - If `pnpm lint` produces warning-only noise, prefer `pnpm lint:errors` in verifier-facing flows.
+- When one existing hotkey is split into multiple actions, or when search behavior is moved between inline UI and overlay UI, verify legacy local settings/config migration and non-default shortcut states, not just fresh defaults.
+- For overlay-style search and confirmation flows, verify `Escape` from at least three states: initial open, after pointer interaction inside the panel, and after focus has moved across interactive controls.
 
 ## Evolution
 

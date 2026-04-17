@@ -5,9 +5,11 @@ import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 
 export type MainView = 'tasks' | 'pomodoro' | 'settings'
+export type TaskPaneView = 'active' | 'archive'
 
 interface SessionSnapshot {
   currentMainView: MainView
+  taskPaneView: TaskPaneView
   taskDrafts: Record<string, string>
   taskDueDrafts: Record<string, TaskDueState>
   taskPriorityDrafts: Record<string, TaskPriority>
@@ -26,6 +28,7 @@ function loadSnapshot(): SessionSnapshot {
         : parsed.currentMainView === 'settings'
           ? 'settings'
           : 'tasks',
+    taskPaneView: parsed.taskPaneView === 'archive' ? 'archive' : 'active',
     taskDrafts: parsed.taskDrafts ?? {},
     taskDueDrafts: normalizeTaskDueDrafts(parsed.taskDueDrafts),
     taskPriorityDrafts: normalizeTaskPriorityDrafts(parsed.taskPriorityDrafts),
@@ -95,6 +98,7 @@ function normalizeTaskPriorityDrafts(value: unknown): Record<string, TaskPriorit
 export const useAppSessionStore = defineStore('appSession', () => {
   const hydrated = ref(false)
   const currentMainView = ref<MainView>('tasks')
+  const taskPaneView = ref<TaskPaneView>('active')
   const taskDrafts = ref<Record<string, string>>({})
   const taskDueDrafts = ref<Record<string, TaskDueState>>({})
   const taskPriorityDrafts = ref<Record<string, TaskPriority>>({})
@@ -103,6 +107,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
   function persist() {
     const snapshot: SessionSnapshot = {
       currentMainView: currentMainView.value,
+      taskPaneView: taskPaneView.value,
       taskDrafts: taskDrafts.value,
       taskDueDrafts: taskDueDrafts.value,
       taskPriorityDrafts: taskPriorityDrafts.value,
@@ -116,6 +121,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
     const snapshot = loadSnapshot()
     currentMainView.value = snapshot.currentMainView
+    taskPaneView.value = snapshot.taskPaneView
     taskDrafts.value = snapshot.taskDrafts
     taskDueDrafts.value = snapshot.taskDueDrafts
     taskPriorityDrafts.value = snapshot.taskPriorityDrafts
@@ -125,6 +131,11 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
   function setCurrentMainView(view: MainView) {
     currentMainView.value = view
+    persist()
+  }
+
+  function setTaskPaneView(view: TaskPaneView) {
+    taskPaneView.value = view
     persist()
   }
 
@@ -241,12 +252,14 @@ export const useAppSessionStore = defineStore('appSession', () => {
   return {
     hydrated,
     currentMainView,
+    taskPaneView,
     taskDrafts,
     taskDueDrafts,
     taskPriorityDrafts,
     subTaskDrafts,
     hydrate,
     setCurrentMainView,
+    setTaskPaneView,
     getTaskDraft,
     setTaskDraft,
     clearTaskDraft,

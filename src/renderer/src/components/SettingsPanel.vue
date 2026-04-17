@@ -417,8 +417,8 @@ onUnmounted(() => {
 
           <div class="settings-item">
             <div class="settings-item__info">
-              <label class="settings-item__label" for="auto-cleanup">自动清理已完成任务</label>
-              <span class="settings-item__desc">在每次启动时自动删除过期的已完成任务</span>
+              <label class="settings-item__label" for="auto-cleanup">自动归档已完成任务</label>
+              <span class="settings-item__desc">在每次启动时自动归档达到期限的已完成任务</span>
             </div>
             <label class="toggle-switch" for="auto-cleanup">
               <input
@@ -434,10 +434,10 @@ onUnmounted(() => {
 
           <div v-if="autoCleanupEnabled" class="settings-item settings-item--nested">
             <div class="settings-item__info">
-              <label class="settings-item__label" for="cleanup-days">清理范围</label>
+              <label class="settings-item__label" for="cleanup-days">归档范围</label>
             </div>
             <div class="cleanup-days-selector">
-              <span class="cleanup-days-selector__text">清理</span>
+              <span class="cleanup-days-selector__text">归档</span>
               <div ref="cleanupDropdownRef" class="dropdown dropdown--inline">
                 <button
                   class="dropdown__trigger"

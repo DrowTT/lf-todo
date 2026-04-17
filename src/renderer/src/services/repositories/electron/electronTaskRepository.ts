@@ -1,4 +1,5 @@
 import {
+  parseArchivedTaskGroups,
   parsePendingTaskCounts,
   parseTask,
   parseTasks
@@ -9,6 +10,12 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
   return {
     async getTasks(categoryId) {
       return parseTasks(await api.db.getTasks(categoryId), 'db:get-tasks.response')
+    },
+    async getArchivedTaskGroups() {
+      return parseArchivedTaskGroups(
+        await api.db.getArchivedTaskGroups(),
+        'db:get-archived-task-groups.response'
+      )
     },
     async searchTasks(input) {
       return parseTasks(await api.db.searchTasks(input), 'db:search-tasks.response')
@@ -31,8 +38,14 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
         'db:get-pending-counts.response'
       )
     },
-    async clearCompletedTasks(categoryId) {
-      return await api.db.clearCompletedTasks(categoryId)
+    async archiveCompletedTasks(categoryId) {
+      return await api.db.archiveCompletedTasks(categoryId)
+    },
+    async archiveTask(id) {
+      await api.db.archiveTask(id)
+    },
+    async restoreArchivedTasks(ids) {
+      return await api.db.restoreArchivedTasks(ids)
     },
     async reorderTasks(orderedIds) {
       await api.db.reorderTasks(orderedIds)

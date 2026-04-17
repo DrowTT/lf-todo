@@ -297,8 +297,12 @@ export function useHotkeys() {
   const { confirm } = useAppRuntime().confirm
 
   async function executeAction(action: HotkeyAction) {
+    const isArchivePane =
+      appSessionStore.currentMainView === 'tasks' && appSessionStore.taskPaneView === 'archive'
+
     switch (action) {
       case 'toggleComplete': {
+        if (isArchivePane) return
         const taskId = hoveredTarget.taskId
         const type = hoveredTarget.type
         const parentId = hoveredTarget.parentId
@@ -312,6 +316,7 @@ export function useHotkeys() {
         break
       }
       case 'quickDelete': {
+        if (isArchivePane) return
         const taskId = hoveredTarget.taskId
         const type = hoveredTarget.type
         const parentId = hoveredTarget.parentId
@@ -327,6 +332,7 @@ export function useHotkeys() {
         break
       }
       case 'toggleExpand': {
+        if (isArchivePane) return
         const parentId = hoveredParentTaskId.value
         if (parentId) {
           await app.toggleExpand(parentId)
@@ -334,6 +340,7 @@ export function useHotkeys() {
         break
       }
       case 'focusInput': {
+        if (isArchivePane) return
         const parentId = hoveredParentTaskId.value
         if (parentId) {
           if (!app.expandedTaskIds.value.has(parentId)) {
@@ -386,7 +393,12 @@ export function useHotkeys() {
     event.stopPropagation()
     appSessionStore.setCurrentMainView('tasks')
 
-    if (categories[index].id === app.currentCategoryId.value) return true
+    if (
+      categories[index].id === app.currentCategoryId.value &&
+      appSessionStore.taskPaneView === 'active'
+    ) {
+      return true
+    }
 
     void app.selectCategory(categories[index].id)
     return true

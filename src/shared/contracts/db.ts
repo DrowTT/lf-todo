@@ -42,6 +42,14 @@ export interface SearchTasksRequest {
   limit: number
 }
 
+export interface RestoreArchivedTasksRequest {
+  ids: number[]
+}
+
+export interface ArchiveTaskRequest {
+  id: number
+}
+
 function parseOrderedIds(value: unknown, label: string): number[] {
   const orderedIds = expectArray(value, label, (item, itemLabel) =>
     expectInteger(item, itemLabel, { min: 1 })
@@ -221,6 +229,27 @@ export function parseSearchTasksRequest(value: unknown, label = 'payload'): Sear
       record.limit === undefined
         ? 24
         : expectInteger(record.limit, `${label}.limit`, { min: 1, max: 50 })
+  }
+}
+
+export function parseRestoreArchivedTasksRequest(
+  value: unknown,
+  label = 'payload'
+): RestoreArchivedTasksRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['ids'], label)
+
+  return {
+    ids: parseOrderedIds(record.ids, `${label}.ids`)
+  }
+}
+
+export function parseArchiveTaskRequest(value: unknown, label = 'payload'): ArchiveTaskRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['id'], label)
+
+  return {
+    id: expectInteger(record.id, `${label}.id`, { min: 1 })
   }
 }
 

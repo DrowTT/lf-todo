@@ -1,4 +1,5 @@
 import type {
+  ArchivedTaskGroup,
   AppInfo,
   AutoCleanupConfig,
   Category,
@@ -49,10 +50,14 @@ export function parseTask(value: unknown, label = 'task'): Task {
       'category_id',
       'order_index',
       'created_at',
+      'completed_at',
+      'last_restored_at',
       'parent_id',
       'due_at',
       'due_precision',
       'priority',
+      'archived_at',
+      'archived_category_name',
       'subtask_total',
       'subtask_done'
     ],
@@ -63,6 +68,26 @@ export function parseTask(value: unknown, label = 'task'): Task {
     record.due_at === null || record.due_at === undefined
       ? null
       : expectInteger(record.due_at, `${label}.due_at`, { min: 0 })
+  const completedAt =
+    record.completed_at === null || record.completed_at === undefined
+      ? null
+      : expectInteger(record.completed_at, `${label}.completed_at`, { min: 0 })
+  const lastRestoredAt =
+    record.last_restored_at === null || record.last_restored_at === undefined
+      ? null
+      : expectInteger(record.last_restored_at, `${label}.last_restored_at`, { min: 0 })
+  const archivedAt =
+    record.archived_at === null || record.archived_at === undefined
+      ? null
+      : expectInteger(record.archived_at, `${label}.archived_at`, { min: 0 })
+  const archivedCategoryName =
+    record.archived_category_name === null || record.archived_category_name === undefined
+      ? null
+      : expectString(record.archived_category_name, `${label}.archived_category_name`, {
+          trim: true,
+          minLength: 1,
+          maxLength: 64
+        })
   const duePrecision = parseNullableTaskDuePrecision(record.due_precision, `${label}.due_precision`)
 
   if ((dueAt === null) !== (duePrecision === null)) {
@@ -80,6 +105,8 @@ export function parseTask(value: unknown, label = 'task'): Task {
     category_id: expectInteger(record.category_id, `${label}.category_id`, { min: 1 }),
     order_index: expectInteger(record.order_index, `${label}.order_index`, { min: 0 }),
     created_at: expectInteger(record.created_at, `${label}.created_at`, { min: 0 }),
+    completed_at: completedAt,
+    last_restored_at: lastRestoredAt,
     parent_id:
       record.parent_id === null
         ? null
@@ -87,6 +114,8 @@ export function parseTask(value: unknown, label = 'task'): Task {
     due_at: dueAt,
     due_precision: duePrecision,
     priority: parseTaskPriority(record.priority, `${label}.priority`),
+    archived_at: archivedAt,
+    archived_category_name: archivedCategoryName,
     subtask_total: expectInteger(record.subtask_total, `${label}.subtask_total`, { min: 0 }),
     subtask_done: expectInteger(record.subtask_done, `${label}.subtask_done`, { min: 0 })
   }
@@ -94,6 +123,23 @@ export function parseTask(value: unknown, label = 'task'): Task {
 
 export function parseTasks(value: unknown, label = 'tasks'): Task[] {
   return expectArray(value, label, parseTask)
+}
+
+export function parseArchivedTaskGroup(value: unknown, label = 'archivedTaskGroup'): ArchivedTaskGroup {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['task', 'subTasks'], label)
+
+  return {
+    task: parseTask(record.task, `${label}.task`),
+    subTasks: expectArray(record.subTasks, `${label}.subTasks`, parseTask)
+  }
+}
+
+export function parseArchivedTaskGroups(
+  value: unknown,
+  label = 'archivedTaskGroups'
+): ArchivedTaskGroup[] {
+  return expectArray(value, label, parseArchivedTaskGroup)
 }
 
 export function parseQuickAddSubmitResult(

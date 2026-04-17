@@ -16,7 +16,13 @@ import type {
   WindowService
 } from '../services/repositories/settingsRepository'
 import type { SearchTasksInput, TaskRepository } from '../services/repositories/taskRepository'
-import type { Category, Task, TaskCreateInput, TaskUpdate } from '../../../shared/types/models'
+import type {
+  ArchivedTaskGroup,
+  Category,
+  Task,
+  TaskCreateInput,
+  TaskUpdate
+} from '../../../shared/types/models'
 
 export interface AppRuntime {
   repositories: {
@@ -63,6 +69,9 @@ function createUnavailableCategoryRepository(): CategoryRepository {
 function createUnavailableTaskRepository(): TaskRepository {
   return {
     getTasks: createUnavailableAction<[number], Task[]>('taskRepository.getTasks'),
+    getArchivedTaskGroups: createUnavailableAction<[], ArchivedTaskGroup[]>(
+      'taskRepository.getArchivedTaskGroups'
+    ),
     searchTasks: createUnavailableAction<[SearchTasksInput], Task[]>('taskRepository.searchTasks'),
     createTask: createUnavailableAction<[TaskCreateInput], Task>('taskRepository.createTask'),
     updateTask: createUnavailableAction<[number, TaskUpdate], void>('taskRepository.updateTask'),
@@ -73,8 +82,11 @@ function createUnavailableTaskRepository(): TaskRepository {
     getPendingTaskCounts: createUnavailableAction<[], Record<number, number>>(
       'taskRepository.getPendingTaskCounts'
     ),
-    clearCompletedTasks: createUnavailableAction<[number], number>(
-      'taskRepository.clearCompletedTasks'
+    archiveCompletedTasks: createUnavailableAction<[number], number>(
+      'taskRepository.archiveCompletedTasks'
+    ),
+    restoreArchivedTasks: createUnavailableAction<[number[]], number>(
+      'taskRepository.restoreArchivedTasks'
     ),
     reorderTasks: createUnavailableAction<[number[]], void>('taskRepository.reorderTasks'),
     reorderSubTasks: createUnavailableAction<[number[]], void>('taskRepository.reorderSubTasks'),

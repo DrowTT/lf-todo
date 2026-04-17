@@ -7,6 +7,7 @@ import type {
 } from '../shared/types/models'
 import {
   parseAppInfo,
+  parseArchivedTaskGroups,
   parseAutoCleanupConfig,
   parseCategories,
   parseCategory,
@@ -21,10 +22,12 @@ import {
   parseUpdateStatusData
 } from '../shared/contracts/entities'
 import {
+  parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
+  parseRestoreArchivedTasksRequest,
   parseSearchTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
@@ -153,6 +156,10 @@ const api = {
           expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 })
         )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
+    getArchivedTaskGroups: () =>
+      ipcRenderer
+        .invoke('db:get-archived-task-groups')
+        .then((value) => parseArchivedTaskGroups(value, 'db:get-archived-task-groups.response')),
     searchTasks: (input: { query: string; categoryId?: number | null; limit?: number }) =>
       invokeWithPayload(
         'db:search-tasks',
@@ -183,13 +190,22 @@ const api = {
         parseSetTaskCompletedRequest
       ),
     getPendingTaskCounts: () => invokeWithResponse('db:get-pending-counts', parsePendingTaskCounts),
-    clearCompletedTasks: (categoryId: number) =>
+    archiveCompletedTasks: (categoryId: number) =>
       ipcRenderer
         .invoke(
-          'db:clear-completed-tasks',
-          expectInteger(categoryId, 'db:clear-completed-tasks.request.categoryId', { min: 1 })
+          'db:archive-completed-tasks',
+          expectInteger(categoryId, 'db:archive-completed-tasks.request.categoryId', { min: 1 })
         )
-        .then((value) => expectInteger(value, 'db:clear-completed-tasks.response', { min: 0 })),
+        .then((value) => expectInteger(value, 'db:archive-completed-tasks.response', { min: 0 })),
+    archiveTask: (id: number) =>
+      invokeVoidWithPayload('db:archive-task', { id }, parseArchiveTaskRequest),
+    restoreArchivedTasks: (ids: number[]) =>
+      invokeWithPayload(
+        'db:restore-archived-tasks',
+        { ids },
+        parseRestoreArchivedTasksRequest,
+        (value, label) => expectInteger(value, label, { min: 0 })
+      ),
     reorderTasks: (orderedIds: number[]) =>
       invokeVoidWithPayload('db:reorder-tasks', { orderedIds }, parseReorderTasksRequest),
     reorderSubTasks: (orderedIds: number[]) =>

@@ -9,13 +9,14 @@ import { useSidebarResize } from '../composables/useSidebarResize'
 import { useGlobalSearchStore } from '../store/globalSearch'
 import { useTaskStore } from '../store/task'
 import { MIN_SIDEBAR_WIDTH, MIN_TODO_WIDTH } from '../../../shared/constants/layout'
+import ArchiveView from './ArchiveView.vue'
 import CategoryList from './CategoryList.vue'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
 import TodoSearchBar from './TodoSearchBar.vue'
 
 const app = useAppFacade()
-const { currentCategoryId, categories, tasks, isLoading } = app
+const { currentCategoryId, categories, tasks, isLoading, taskPaneView } = app
 const { confirm } = useAppRuntime().confirm
 const taskStore = useTaskStore()
 const globalSearchStore = useGlobalSearchStore()
@@ -26,6 +27,7 @@ const searchQuery = ref('')
 const isSearchExpanded = ref(false)
 const searchBar = ref<{ focusSearch: () => void } | null>(null)
 
+const isArchivePane = computed(() => taskPaneView.value === 'archive')
 const currentCategory = computed(() =>
   categories.value.find((item) => item.id === currentCategoryId.value) ?? null
 )
@@ -46,18 +48,18 @@ const filteredTasks = computed(() => {
     task.content.toLocaleLowerCase().includes(normalizedSearchQuery.value)
   )
 })
-const clearCompletedTitle = computed(() =>
-  isSystemCategoryView.value ? '清空全部分类中的已完成任务' : '清空已完成任务'
+const archiveCompletedTitle = computed(() =>
+  isSystemCategoryView.value ? '归档全部分类中的已完成任务' : '归档已完成任务'
 )
-const clearCompletedLabel = computed(() =>
+const archiveCompletedLabel = computed(() =>
   isSystemCategoryView.value
-    ? `清空全部已完成 (${completedCount.value})`
-    : `清空已完成 (${completedCount.value})`
+    ? `归档全部已完成 (${completedCount.value})`
+    : `归档已完成 (${completedCount.value})`
 )
-const clearCompletedConfirmText = computed(() =>
+const archiveCompletedConfirmText = computed(() =>
   isSystemCategoryView.value
-    ? `确认删除“全部”视图中的 ${completedCount.value} 个已完成待办吗？这会清空所有分类中的已完成顶级任务。`
-    : `确认删除 ${completedCount.value} 个已完成的待办吗？`
+    ? `确认归档“全部”视图中的 ${completedCount.value} 个已完成待办吗？`
+    : `确认归档 ${completedCount.value} 个已完成待办吗？`
 )
 
 const draggableTasks = computed({
@@ -67,10 +69,10 @@ const draggableTasks = computed({
   }
 })
 
-const handleClearCompleted = async () => {
-  const confirmed = await confirm(clearCompletedConfirmText.value)
+const handleArchiveCompleted = async () => {
+  const confirmed = await confirm(archiveCompletedConfirmText.value)
   if (confirmed) {
-    await app.clearCompletedTasks()
+    await app.archiveCompletedTasks()
   }
 }
 
@@ -87,14 +89,15 @@ function handleFocusSearchRequested() {
   searchBar.value?.focusSearch()
 }
 
-watch(currentCategoryId, () => {
+watch([currentCategoryId, taskPaneView], () => {
   searchQuery.value = ''
   isSearchExpanded.value = false
 })
 
 watch(
-  [() => globalSearchStore.pendingRevealTaskId, tasks],
-  async ([pendingRevealTaskId]) => {
+  [() => globalSearchStore.pendingRevealTaskId, tasks, taskPaneView],
+  async ([pendingRevealTaskId, , paneView]) => {
+    if (paneView === 'archive') return
     if (!pendingRevealTaskId) return
     if (!tasks.value.some((task) => task.id === pendingRevealTaskId)) return
 
@@ -146,7 +149,9 @@ onUnmounted(() => {
       @mousedown="startResize"
     ></div>
 
-    <div class="todo-panel" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }">
+    <ArchiveView v-if="isArchivePane" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }" />
+
+    <div v-else class="todo-panel" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }">
       <header class="todo-panel__header">
         <div class="todo-panel__title-group">
           <h1 class="todo-panel__title">
@@ -169,12 +174,12 @@ onUnmounted(() => {
           <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中...</span>
           <button
             v-if="currentCategoryId"
-            :disabled="completedCount === 0 || taskStore.isClearingCompleted"
+            :disabled="completedCount === 0 || taskStore.isArchivingCompleted"
             class="todo-panel__clear-btn"
-            :title="clearCompletedTitle"
-            @click="handleClearCompleted"
+            :title="archiveCompletedTitle"
+            @click="handleArchiveCompleted"
           >
-            {{ taskStore.isClearingCompleted ? '删除中...' : clearCompletedLabel }}
+            {{ taskStore.isArchivingCompleted ? '归档中...' : archiveCompletedLabel }}
           </button>
         </div>
       </header>
@@ -310,7 +315,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  overflow: visible;
 }
 
 .todo-panel__title {
@@ -321,7 +325,6 @@ onUnmounted(() => {
   font-size: $font-xl;
   font-weight: 700;
   color: $text-primary;
-  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
@@ -365,12 +368,11 @@ onUnmounted(() => {
   font-size: $font-xs;
   color: $text-muted;
   cursor: pointer;
-  transition: all $transition-normal;
 
   &:hover:not(:disabled) {
-    border-color: $danger-color;
-    color: $danger-color;
-    background: rgba($danger-color, 0.06);
+    border-color: $accent-color;
+    color: $accent-color;
+    background: rgba($accent-color, 0.06);
   }
 
   &:disabled {
@@ -400,7 +402,6 @@ onUnmounted(() => {
   justify-content: center;
   height: 280px;
   gap: $spacing-md;
-  animation: empty-fade-in 0.5s ease;
 }
 
 .todo-panel__empty-glow {
@@ -413,108 +414,63 @@ onUnmounted(() => {
   background: linear-gradient(135deg, rgba($accent-color, 0.08) 0%, rgba($accent-color, 0.04) 100%);
   border: 1px solid rgba($accent-color, 0.1);
   color: $accent-color;
-  margin-bottom: $spacing-sm;
-  transition: transform $transition-slow;
 
   &--spark {
-    background: linear-gradient(
-      135deg,
-      rgba($warning-color, 0.1) 0%,
-      rgba($warning-color, 0.04) 100%
-    );
-    border-color: rgba($warning-color, 0.12);
-    color: $warning-color;
+    background: linear-gradient(135deg, rgba(255, 196, 88, 0.12) 0%, rgba(255, 196, 88, 0.05) 100%);
+    color: #d97706;
   }
-}
-
-.todo-panel__empty-svg {
-  opacity: 0.85;
 }
 
 .todo-panel__empty-title {
+  color: $text-primary;
   font-size: $font-lg;
   font-weight: 600;
-  color: $text-secondary;
 }
 
 .todo-panel__empty-hint {
-  font-size: $font-sm;
   color: $text-muted;
-}
-
-@keyframes empty-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.card-list-enter-active {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.card-list-leave-active {
-  transition: all 0.2s ease;
-}
-
-.card-list-enter-from {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.98);
-}
-
-.card-list-leave-to {
-  opacity: 0;
-  transform: translateX(20px) scale(0.96);
-}
-
-.card-list-move {
-  transition: transform 0.3s ease;
+  font-size: $font-sm;
 }
 
 .todo-panel__loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  min-height: 240px;
 }
 
 .todo-panel__spinner {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .todo-panel__dot {
-  width: 8px;
-  height: 8px;
-  background: $accent-color;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  animation: dot-bounce 1.2s ease-in-out infinite;
+  background: $accent-color;
+  animation: pulse 1s infinite ease-in-out;
 
   &:nth-child(2) {
-    animation-delay: 0.15s;
+    animation-delay: 0.1s;
   }
 
   &:nth-child(3) {
-    animation-delay: 0.3s;
+    animation-delay: 0.2s;
   }
 }
 
-@keyframes dot-bounce {
+@keyframes pulse {
   0%,
   80%,
   100% {
-    transform: translateY(0);
-    opacity: 0.4;
+    opacity: 0.35;
+    transform: scale(0.9);
   }
 
   40% {
-    transform: translateY(-8px);
     opacity: 1;
+    transform: scale(1);
   }
 }
 </style>

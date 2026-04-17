@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
@@ -23,6 +23,10 @@ const editingCategoryId = ref<number | null>(null)
 const editingName = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
 
+const isArchiveActive = computed(
+  () => appSessionStore.currentMainView === 'tasks' && appSessionStore.taskPaneView === 'archive'
+)
+
 const isSystemCategory = (category: { is_system: boolean }) => category.is_system
 
 const handleAddCategory = async () => {
@@ -44,8 +48,15 @@ const startAdding = async () => {
 }
 
 const handleSelectCategory = (categoryId: number) => {
-  appSessionStore.setCurrentMainView('tasks')
   void app.selectCategory(categoryId)
+}
+
+const handleSelectArchive = () => {
+  if (isArchiveActive.value) {
+    return
+  }
+
+  void app.selectArchivePane()
 }
 
 const handleDeleteCategory = async () => {
@@ -126,7 +137,9 @@ const handleCategoryContextMenu = (
           class="category-item"
           :class="{
             'category-item--active':
-              appSessionStore.currentMainView === 'tasks' && currentCategoryId === category.id,
+              appSessionStore.currentMainView === 'tasks' &&
+              appSessionStore.taskPaneView === 'active' &&
+              currentCategoryId === category.id,
             'category-item--editing': editingCategoryId === category.id,
             'category-item--system': category.is_system
           }"
@@ -168,8 +181,14 @@ const handleCategoryContextMenu = (
     </div>
 
     <div class="category-list__footer">
-      <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">
-        新建分类
+      <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">新建分类</button>
+      <button
+        type="button"
+        class="category-list__archive-entry"
+        :class="{ 'category-list__archive-entry--active': isArchiveActive }"
+        @click="handleSelectArchive"
+      >
+        已归档待办
       </button>
     </div>
 
@@ -200,9 +219,6 @@ const handleCategoryContextMenu = (
 
   &__header {
     padding: 18px 18px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
   }
 
   &__header-label {
@@ -221,15 +237,17 @@ const handleCategoryContextMenu = (
 
   &__footer {
     display: flex;
-    justify-content: center;
-    padding: 10px 14px 10px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px 12px;
+    border-top: 1px solid rgba(19, 78, 74, 0.06);
   }
 
   &__add-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: min(100%, 188px);
+    width: 100%;
     padding: $spacing-sm $spacing-md;
     background: transparent;
     border: 1px dashed $border-light;
@@ -246,6 +264,50 @@ const handleCategoryContextMenu = (
     }
   }
 
+  &__archive-entry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 38px;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    font-size: $font-sm;
+    color: $text-secondary;
+    cursor: pointer;
+    position: relative;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease,
+      box-shadow 0.15s ease;
+    text-align: center;
+
+    &:hover {
+      color: $text-primary;
+      background: rgba(255, 255, 255, 0.68);
+    }
+
+    &--active {
+      color: $text-primary;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: inset 0 0 0 1px rgba(19, 78, 74, 0.06);
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        width: 6px;
+        height: 6px;
+        background: $accent-color;
+        border-radius: 50%;
+        transform: translateY(-50%);
+      }
+    }
+  }
+
   &__input-wrapper {
     padding: $spacing-xs $spacing-md;
   }
@@ -259,15 +321,10 @@ const handleCategoryContextMenu = (
     border: 1px solid $border-light;
     border-radius: $radius-md;
     outline: none;
-    transition: all $transition-fast;
 
     &:focus {
       border-color: $accent-color;
       box-shadow: 0 0 0 3px $accent-soft;
-    }
-
-    &::placeholder {
-      color: $text-muted;
     }
   }
 }
@@ -286,17 +343,20 @@ const handleCategoryContextMenu = (
     color 0.15s ease,
     box-shadow 0.15s ease;
   position: relative;
+  width: calc(100% - 20px);
+  border: none;
+  background: transparent;
+  text-align: left;
 
   &:hover {
     background: rgba(255, 255, 255, 0.72);
     color: $text-primary;
-    box-shadow: 0 8px 14px rgba(15, 23, 42, 0.03);
   }
 
   &--active {
     background: rgba(255, 255, 255, 0.92);
     color: $text-primary;
-    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
+    box-shadow: inset 0 0 0 1px rgba(19, 78, 74, 0.06);
 
     &::before {
       content: '';
@@ -313,36 +373,27 @@ const handleCategoryContextMenu = (
 
   &__name {
     flex: 1;
-    padding-left: 10px;
+    padding-left: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   &__badge {
-    flex-shrink: 0;
+    display: inline-flex;
     min-width: 20px;
     height: 20px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     padding: 0 6px;
     margin-left: $spacing-sm;
+    border-radius: 10px;
+    background: $accent-soft;
+    color: $accent-color;
     font-size: $font-xs;
     font-weight: 600;
-    line-height: 20px;
-    text-align: center;
-    color: $accent-color;
-    background: $accent-soft;
-    border-radius: 10px;
-  }
-
-  &--editing {
-    padding: $spacing-xs $spacing-md;
-    margin: 0;
-  }
-
-  &--system {
-    .category-item__name {
-      font-weight: 600;
-    }
+    line-height: 1;
   }
 
   &__edit-input {
@@ -355,11 +406,21 @@ const handleCategoryContextMenu = (
     border-radius: $radius-md;
     outline: none;
     font-family: inherit;
-    transition: all $transition-fast;
 
     &:focus {
       border-color: $accent-color;
       box-shadow: 0 0 0 3px $accent-soft;
+    }
+  }
+
+  &--editing {
+    padding: $spacing-xs $spacing-md;
+    margin: 0;
+  }
+
+  &--system {
+    .category-item__name {
+      font-weight: 600;
     }
   }
 }

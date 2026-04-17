@@ -1,10 +1,12 @@
 import { ipcMain } from 'electron'
 import * as db from './db/database'
 import {
+  parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
+  parseRestoreArchivedTasksRequest,
   parseSearchTasksRequest,
   parseSetTaskCompletedRequest,
   parseUpdateTaskRequest
@@ -37,6 +39,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
   ipcMain.handle('db:get-tasks', (_event, categoryId: unknown) =>
     db.getTasksByCategory(expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))
   )
+  ipcMain.handle('db:get-archived-task-groups', () => db.getArchivedTaskGroups())
   ipcMain.handle('db:search-tasks', (_event, payload: unknown) => {
     const request = parseSearchTasksRequest(payload, 'db:search-tasks.request')
     return db.searchTasks(request)
@@ -103,11 +106,19 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
     return db.setTaskCompleted(request.id, request.completed)
   })
   ipcMain.handle('db:get-pending-counts', () => db.getPendingTaskCounts())
-  ipcMain.handle('db:clear-completed-tasks', (_event, categoryId: unknown) =>
-    db.clearCompletedTasks(
-      expectInteger(categoryId, 'db:clear-completed-tasks.request.categoryId', { min: 1 })
+  ipcMain.handle('db:archive-completed-tasks', (_event, categoryId: unknown) =>
+    db.archiveCompletedTasks(
+      expectInteger(categoryId, 'db:archive-completed-tasks.request.categoryId', { min: 1 })
     )
   )
+  ipcMain.handle('db:archive-task', (_event, payload: unknown) => {
+    const request = parseArchiveTaskRequest(payload, 'db:archive-task.request')
+    return db.archiveTask(request.id)
+  })
+  ipcMain.handle('db:restore-archived-tasks', (_event, payload: unknown) => {
+    const request = parseRestoreArchivedTasksRequest(payload, 'db:restore-archived-tasks.request')
+    return db.restoreArchivedTasks(request.ids)
+  })
   ipcMain.handle('db:reorder-tasks', (_event, payload: unknown) => {
     const request = parseReorderTasksRequest(payload, 'db:reorder-tasks.request')
     return db.reorderTasks(request.orderedIds)

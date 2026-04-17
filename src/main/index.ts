@@ -1295,7 +1295,7 @@ app.whenReady().then(() => {
   const cleanupConfig = store.get('autoCleanup', { enabled: false, days: 7 })
   if (cleanupConfig.enabled && cleanupConfig.days > 0) {
     const cutoffTimestamp = Math.floor(Date.now() / 1000) - cleanupConfig.days * 86400
-    db.deleteCompletedTasksBefore(cutoffTimestamp)
+    db.archiveCompletedTasksBefore(cutoffTimestamp)
   }
 
   registerIpcHandlers({

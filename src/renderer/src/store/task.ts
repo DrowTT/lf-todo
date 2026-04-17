@@ -17,7 +17,8 @@ const TASK_OPERATION_TYPES = {
   toggle: 'task:toggle',
   delete: 'task:delete',
   update: 'task:update',
-  clearCompleted: 'task:clear-completed',
+  archive: 'task:archive',
+  archiveCompleted: 'task:archive-completed',
   reorder: 'task:reorder'
 } as const
 
@@ -33,11 +34,14 @@ export interface DeletedTaskSnapshot {
   previousOrderedIds: number[]
 }
 
-export interface ClearedCompletedSnapshot {
+export interface ArchivedCompletedSnapshot {
   categoryId: number
-  isSystemView: boolean
-  previousOrderedIds: number[]
-  tasks: DeletedTaskSnapshot[]
+  taskIds: number[]
+}
+
+export interface ArchivedTaskSnapshot {
+  categoryId: number
+  taskId: number
 }
 
 export const useTaskStore = defineStore('task', () => {
@@ -59,8 +63,8 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   const isCreatingTask = computed(() => hasPendingOperation({ type: TASK_OPERATION_TYPES.create }))
-  const isClearingCompleted = computed(() =>
-    hasPendingOperation({ type: TASK_OPERATION_TYPES.clearCompleted })
+  const isArchivingCompleted = computed(() =>
+    hasPendingOperation({ type: TASK_OPERATION_TYPES.archiveCompleted })
   )
   const isReorderingTasks = computed(() =>
     hasPendingOperation({ type: TASK_OPERATION_TYPES.reorder })
@@ -73,10 +77,6 @@ export const useTaskStore = defineStore('task', () => {
 
   function getSystemCategoryId() {
     return categoryStore.categories.find((category) => category.is_system)?.id ?? null
-  }
-
-  function isSystemCategory(categoryId: number) {
-    return categoryStore.categories.some((category) => category.id === categoryId && category.is_system)
   }
 
   function adjustPendingCountForTask(task: Pick<Task, 'category_id'>, delta: number) {
@@ -139,7 +139,12 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function isTaskBusy(id: number) {
-    return isTaskDeleting(id) || isTaskSaving(id) || isTaskToggling(id)
+    return (
+      isTaskDeleting(id) ||
+      isTaskSaving(id) ||
+      isTaskToggling(id) ||
+      hasPendingOperation({ type: TASK_OPERATION_TYPES.archive, entityId: id })
+    )
   }
 
   async function initPendingCounts() {
@@ -162,9 +167,7 @@ export const useTaskStore = defineStore('task', () => {
       }
 
       tasks.value = nextTasks
-      const pending = nextTasks.filter(
-        (task) => !task.is_completed && task.parent_id === null
-      ).length
+      const pending = nextTasks.filter((task) => !task.is_completed && task.parent_id === null).length
       pendingCounts.value[categoryId] = pending
     } catch (error) {
       console.error('[taskStore] fetchTasks failed', error)
@@ -473,7 +476,6 @@ export const useTaskStore = defineStore('task', () => {
     if (!task) return false
 
     const previousPriority = task.priority
-
     if (previousPriority === priority) {
       return true
     }
@@ -494,72 +496,84 @@ export const useTaskStore = defineStore('task', () => {
     })
   }
 
-  async function clearCompletedTasks(categoryId: number) {
+  async function archiveCompletedTasks(categoryId: number) {
     const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
-    if (completedIds.length === 0) return undefined
+    if (completedIds.length === 0) {
+      return undefined
+    }
 
     const completedIdSet = new Set(completedIds)
     const previousTasks = tasks.value.slice()
-    const snapshots = completedIds
-      .map((id) => captureDeletedTaskSnapshot(id))
-      .filter((snapshot): snapshot is DeletedTaskSnapshot => Boolean(snapshot))
 
     const success = await runTaskAction({
-      key: buildPendingOperationKey(TASK_OPERATION_TYPES.clearCompleted, 'current'),
-      type: TASK_OPERATION_TYPES.clearCompleted,
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.archiveCompleted, 'current'),
+      type: TASK_OPERATION_TYPES.archiveCompleted,
       entityId: 'current',
       before: () => {
         tasks.value = tasks.value.filter((task) => !completedIdSet.has(task.id))
       },
       execute: async () => {
-        const deletedCount = await taskRepository.clearCompletedTasks(categoryId)
-
-        if (deletedCount !== completedIds.length) {
+        const archivedCount = await taskRepository.archiveCompletedTasks(categoryId)
+        if (archivedCount !== completedIds.length) {
           throw new Error(
-            `[taskStore] clearCompletedTasks mismatch: expected ${completedIds.length}, got ${deletedCount}`
+            `[taskStore] archiveCompletedTasks mismatch: expected ${completedIds.length}, got ${archivedCount}`
           )
         }
       },
       rollback: () => {
         tasks.value = previousTasks
       },
-      errorMessage: '清空已完成失败，请重试',
-      logPrefix: '[taskStore] clearCompletedTasks failed'
+      errorMessage: '归档已完成任务失败，请重试',
+      logPrefix: '[taskStore] archiveCompletedTasks failed'
     })
 
-    if (!success) return undefined
+    if (!success) {
+      return undefined
+    }
 
     return {
       categoryId,
-      isSystemView: isSystemCategory(categoryId),
-      previousOrderedIds: previousTasks.map((task) => task.id),
-      tasks: snapshots
-    } satisfies ClearedCompletedSnapshot
+      taskIds: completedIds
+    } satisfies ArchivedCompletedSnapshot
   }
 
-  async function restoreClearedCompleted(snapshot: ClearedCompletedSnapshot) {
-    const restoredIds = new Map<number, number>()
-
-    for (const deletedTask of snapshot.tasks) {
-      const restoredTask = await restoreDeletedTask(deletedTask, {
-        reorderToPrevious: false,
-        persistReorder: !snapshot.isSystemView,
-        viewCategoryId: snapshot.categoryId
-      })
-      restoredIds.set(deletedTask.task.id, restoredTask.id)
+  async function archiveTask(id: number) {
+    if (typeof taskRepository.archiveTask !== 'function') {
+      toast.show('当前环境暂不支持单个归档')
+      return false
     }
 
-    if (snapshot.isSystemView) {
-      const nextOrderedIds = snapshot.previousOrderedIds
-        .map((id) => restoredIds.get(id) ?? id)
-        .filter((id, index, array) => array.indexOf(id) === index)
-      restoreTaskOrder(nextOrderedIds)
-      return
+    const index = tasks.value.findIndex((task) => task.id === id)
+    if (index === -1) {
+      return false
     }
 
-    const nextOrderedIds = snapshot.previousOrderedIds.map((id) => restoredIds.get(id) ?? id)
-    restoreTaskOrder(nextOrderedIds)
-    await taskRepository.reorderTasks(nextOrderedIds)
+    const task = tasks.value[index]
+    const previousTasks = tasks.value.slice()
+
+    const success = await runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.archive, id),
+      type: TASK_OPERATION_TYPES.archive,
+      entityId: id,
+      before: () => {
+        tasks.value.splice(index, 1)
+      },
+      execute: () => taskRepository.archiveTask!(id),
+      rollback: () => {
+        tasks.value = previousTasks
+      },
+      errorMessage: '归档任务失败，请重试',
+      logPrefix: '[taskStore] archiveTask failed'
+    })
+
+    if (!success) {
+      return false
+    }
+
+    return {
+      categoryId: task.category_id,
+      taskId: task.id
+    } satisfies ArchivedTaskSnapshot
   }
 
   function removePendingCount(id: number) {
@@ -600,7 +614,7 @@ export const useTaskStore = defineStore('task', () => {
     pendingCounts,
     pendingOperations,
     isCreatingTask,
-    isClearingCompleted,
+    isArchivingCompleted,
     isReorderingTasks,
     _adjustPendingCount,
     initPendingCounts,
@@ -613,8 +627,8 @@ export const useTaskStore = defineStore('task', () => {
     updateTaskContent,
     updateTaskDue,
     updateTaskPriority,
-    clearCompletedTasks,
-    restoreClearedCompleted,
+    archiveTask,
+    archiveCompletedTasks,
     removePendingCount,
     reorderTasks,
     isTaskDeleting,

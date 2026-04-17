@@ -5,5 +5,7 @@
 ## 当前记录
 
 - `2026-04-16-search-hotkey-migration.md`
+- `2026-04-16-archive-follow-ups-need-one-writer-and-full-verification.md`
+- `2026-04-16-search-overlay-shell-shortcuts.md`
 - `2026-04-15-global-search-command-palette.md`
 - `2026-04-15-system-category-inbox.md`

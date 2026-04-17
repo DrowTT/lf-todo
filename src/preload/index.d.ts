@@ -1,5 +1,6 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
+  ArchivedTaskGroup,
   AppInfo,
   AutoCleanupConfig,
   Category,
@@ -38,6 +39,7 @@ interface API {
     updateCategory: (id: number, name: string) => Promise<void>
     deleteCategory: (id: number) => Promise<void>
     getTasks: (categoryId: number) => Promise<Task[]>
+    getArchivedTaskGroups: () => Promise<ArchivedTaskGroup[]>
     searchTasks: (input: {
       query: string
       categoryId?: number | null
@@ -49,7 +51,9 @@ interface API {
     toggleTaskComplete: (id: number) => Promise<void>
     setTaskCompleted: (id: number, completed: boolean) => Promise<void>
     getPendingTaskCounts: () => Promise<Record<number, number>>
-    clearCompletedTasks: (categoryId: number) => Promise<number>
+    archiveCompletedTasks: (categoryId: number) => Promise<number>
+    archiveTask: (id: number) => Promise<void>
+    restoreArchivedTasks: (ids: number[]) => Promise<number>
     reorderTasks: (orderedIds: number[]) => Promise<void>
     reorderSubTasks: (orderedIds: number[]) => Promise<void>
     getSubTasks: (parentId: number) => Promise<Task[]>

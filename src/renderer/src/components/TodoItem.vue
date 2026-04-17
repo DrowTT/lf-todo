@@ -16,7 +16,7 @@ import { buildSearchHighlightParts } from '../utils/searchHighlight'
 import SubTaskInput from './SubTaskInput.vue'
 import SubTaskItem from './SubTaskItem.vue'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
-import { Check, ChevronRight, GripVertical, Play, Timer, Trash2 } from 'lucide-vue-next'
+import { Archive, Check, ChevronRight, GripVertical, Play, Timer, Trash2 } from 'lucide-vue-next'
 import {
   getNextTaskPriority,
   getTaskPriorityCode,
@@ -64,6 +64,7 @@ const isPomodoroRunningForTask = computed(
 )
 const isPomodoroBusy = computed(() => pomodoroStore.isBusy)
 const dragStartSubTaskOrder = ref<number[]>([])
+const canArchiveTask = computed(() => props.task.parent_id === null && props.task.is_completed)
 const isSystemCategoryView = computed(() =>
   app.categories.value.some(
     (category) => category.id === app.currentCategoryId.value && category.is_system
@@ -102,6 +103,10 @@ const handleDelete = async () => {
   if (ok) {
     await app.deleteTask(props.task.id)
   }
+}
+
+const handleArchive = async () => {
+  await app.archiveTask(props.task.id)
 }
 
 const handleStartPomodoro = async () => {
@@ -317,6 +322,17 @@ const onSubTaskDragEnd = async () => {
         @click="handleToggleExpand"
       >
         <ChevronRight class="card__toggle-svg" :size="14" />
+      </button>
+
+      <button
+        v-if="canArchiveTask"
+        class="card__action card__archive"
+        :class="{ 'card__action--hidden': isEditing }"
+        :disabled="isBusy"
+        title="归档任务"
+        @click.stop="handleArchive"
+      >
+        <Archive :size="14" />
       </button>
 
       <button
@@ -854,6 +870,13 @@ const onSubTaskDragEnd = async () => {
   &:hover:not(:disabled) {
     color: $danger-color;
     background: rgba($danger-color, 0.08);
+  }
+}
+
+.card__archive {
+  &:hover:not(:disabled) {
+    color: $accent-color;
+    background: rgba($accent-color, 0.08);
   }
 }
 

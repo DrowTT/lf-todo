@@ -4,7 +4,6 @@ import { storeToRefs } from 'pinia'
 import { CheckCircle2, Command, FolderSearch, Loader2, Search } from 'lucide-vue-next'
 import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
-import { useAppSessionStore } from '../store/appSession'
 import { useGlobalSearchStore, type GlobalSearchScope } from '../store/globalSearch'
 import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 import { buildSearchHighlightParts } from '../utils/searchHighlight'
@@ -20,7 +19,6 @@ const FOCUSABLE_SELECTOR = [
 ].join(', ')
 
 const app = useAppFacade()
-const appSessionStore = useAppSessionStore()
 const globalSearchStore = useGlobalSearchStore()
 
 const { categories, currentCategoryId } = storeToRefs(app.categoryStore)
@@ -164,15 +162,9 @@ function closeDialog() {
 }
 
 async function activateTask(task: Task) {
-  globalSearchStore.markTaskForReveal(task.id)
   globalSearchStore.close()
   restoreFocusTarget = null
-  appSessionStore.setCurrentMainView('tasks')
-
-  if (currentCategoryId.value !== task.category_id) {
-    await app.selectCategory(task.category_id)
-  }
-
+  await app.revealTask(task.id, task.category_id)
   await nextTick()
 }
 

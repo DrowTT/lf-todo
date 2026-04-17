@@ -9,6 +9,7 @@
 - [2026-04-02_pomodoro-duration-should-flow-from-stored-settings.md](./2026-04-02_pomodoro-duration-should-flow-from-stored-settings.md)
 - [2026-04-10_task-priority-should-stay-as-triage-signal-not-auto-sort.md](./2026-04-10_task-priority-should-stay-as-triage-signal-not-auto-sort.md)
 - [2026-04-11_electron-quick-add-needs-sender-aware-window-bridges.md](./2026-04-11_electron-quick-add-needs-sender-aware-window-bridges.md)
+- [2026-04-16_task-archive-should-use-separate-storage-and-id-preserving-restore.md](./2026-04-16_task-archive-should-use-separate-storage-and-id-preserving-restore.md)
 
 ## Bug Fix
 
@@ -30,6 +31,7 @@
 - [2026-04-11_tiny-quick-add-windows-should-grow-inline-with-the-textarea.md](./2026-04-11_tiny-quick-add-windows-should-grow-inline-with-the-textarea.md)
 - [2026-04-14_escape-to-tray-should-be-shell-owned-and-focus-gated.md](./2026-04-14_escape-to-tray-should-be-shell-owned-and-focus-gated.md)
 - [2026-04-16_modal-escape-should-stop-before-shell-shortcuts.md](./2026-04-16_modal-escape-should-stop-before-shell-shortcuts.md)
+- [2026-04-16_archive-follow-ups-should-separate-entry-style-from-real-actions.md](./2026-04-16_archive-follow-ups-should-separate-entry-style-from-real-actions.md)
 
 ## Tooling
 
