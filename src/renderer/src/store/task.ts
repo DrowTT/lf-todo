@@ -9,7 +9,6 @@ import {
   pendingOperations,
   runAsyncAction
 } from '../services/runAsyncAction'
-import { useCategoryStore } from './category'
 import { useSubTaskStore } from './subtask'
 
 const TASK_OPERATION_TYPES = {
@@ -17,6 +16,7 @@ const TASK_OPERATION_TYPES = {
   toggle: 'task:toggle',
   delete: 'task:delete',
   update: 'task:update',
+  move: 'task:move',
   archive: 'task:archive',
   archiveCompleted: 'task:archive-completed',
   reorder: 'task:reorder'
@@ -51,7 +51,6 @@ export const useTaskStore = defineStore('task', () => {
   let latestFetchRequestId = 0
 
   const { repositories, toast } = useAppRuntime()
-  const categoryStore = useCategoryStore()
   const taskRepository = repositories.task
   const notifyError = (message: string) => toast.show(message)
 
@@ -75,17 +74,8 @@ export const useTaskStore = defineStore('task', () => {
     pendingCounts.value[categoryId] = Math.max(0, current + delta)
   }
 
-  function getSystemCategoryId() {
-    return categoryStore.categories.find((category) => category.is_system)?.id ?? null
-  }
-
   function adjustPendingCountForTask(task: Pick<Task, 'category_id'>, delta: number) {
     _adjustPendingCount(task.category_id, delta)
-
-    const systemCategoryId = getSystemCategoryId()
-    if (systemCategoryId !== null && systemCategoryId !== task.category_id) {
-      _adjustPendingCount(systemCategoryId, delta)
-    }
   }
 
   function restorePendingCount(
@@ -143,6 +133,7 @@ export const useTaskStore = defineStore('task', () => {
       isTaskDeleting(id) ||
       isTaskSaving(id) ||
       isTaskToggling(id) ||
+      hasPendingOperation({ type: TASK_OPERATION_TYPES.move, entityId: id }) ||
       hasPendingOperation({ type: TASK_OPERATION_TYPES.archive, entityId: id })
     )
   }
@@ -172,6 +163,29 @@ export const useTaskStore = defineStore('task', () => {
     } catch (error) {
       console.error('[taskStore] fetchTasks failed', error)
       toast.show('加载任务列表失败，请重试')
+      throw error
+    } finally {
+      if (requestId === latestFetchRequestId) {
+        isLoading.value = false
+      }
+    }
+  }
+
+  async function fetchAllTasks() {
+    const requestId = ++latestFetchRequestId
+    isLoading.value = true
+
+    try {
+      const nextTasks = await taskRepository.getAllTasks()
+
+      if (requestId !== latestFetchRequestId) {
+        return
+      }
+
+      tasks.value = nextTasks
+    } catch (error) {
+      console.error('[taskStore] fetchAllTasks failed', error)
+      toast.show('加载全部任务失败，请重试')
       throw error
     } finally {
       if (requestId === latestFetchRequestId) {
@@ -223,12 +237,7 @@ export const useTaskStore = defineStore('task', () => {
     const previousPendingCounts = {
       taskCategoryId: task.category_id,
       taskCategoryCount: pendingCounts.value[task.category_id] ?? 0,
-      hadTaskCategoryCount: task.category_id in pendingCounts.value,
-      systemCategoryId: getSystemCategoryId(),
-      systemCategoryCount:
-        getSystemCategoryId() === null ? 0 : pendingCounts.value[getSystemCategoryId()!] ?? 0,
-      hadSystemCategoryCount:
-        getSystemCategoryId() === null ? false : getSystemCategoryId()! in pendingCounts.value
+      hadTaskCategoryCount: task.category_id in pendingCounts.value
     }
     const previousSubTaskStates = subTasks?.map((subTask) => ({
       id: subTask.id,
@@ -264,16 +273,6 @@ export const useTaskStore = defineStore('task', () => {
           previousPendingCounts.taskCategoryCount,
           previousPendingCounts.hadTaskCategoryCount
         )
-        if (
-          previousPendingCounts.systemCategoryId !== null &&
-          previousPendingCounts.systemCategoryId !== previousPendingCounts.taskCategoryId
-        ) {
-          restorePendingCount(
-            previousPendingCounts.systemCategoryId,
-            previousPendingCounts.systemCategoryCount,
-            previousPendingCounts.hadSystemCategoryCount
-          )
-        }
 
         if (subTasks && previousSubTaskStates) {
           const stateById = new Map(
@@ -318,13 +317,8 @@ export const useTaskStore = defineStore('task', () => {
 
     const task = tasks.value[index]
     const previousTasks = tasks.value.slice()
-    const systemCategoryId = getSystemCategoryId()
     const previousPendingCount = pendingCounts.value[task.category_id] ?? 0
     const hadPendingCount = task.category_id in pendingCounts.value
-    const previousSystemPendingCount =
-      systemCategoryId === null ? 0 : pendingCounts.value[systemCategoryId] ?? 0
-    const hadSystemPendingCount =
-      systemCategoryId === null ? false : systemCategoryId in pendingCounts.value
     const snapshot = captureDeletedTaskSnapshot(id)
 
     if (!snapshot) return false
@@ -344,9 +338,6 @@ export const useTaskStore = defineStore('task', () => {
       rollback: () => {
         tasks.value = previousTasks
         restorePendingCount(task.category_id, previousPendingCount, hadPendingCount)
-        if (systemCategoryId !== null && systemCategoryId !== task.category_id) {
-          restorePendingCount(systemCategoryId, previousSystemPendingCount, hadSystemPendingCount)
-        }
       },
       errorMessage: '删除任务失败，请重试',
       logPrefix: '[taskStore] deleteTask failed'
@@ -357,7 +348,11 @@ export const useTaskStore = defineStore('task', () => {
 
   async function restoreDeletedTask(
     snapshot: DeletedTaskSnapshot,
-    options: { reorderToPrevious?: boolean; persistReorder?: boolean; viewCategoryId?: number } = {}
+    options: {
+      reorderToPrevious?: boolean
+      persistReorder?: boolean
+      viewScopeKey?: string | number
+    } = {}
   ) {
     const subTaskStore = useSubTaskStore()
     const createdTask = await taskRepository.createTask({
@@ -398,7 +393,7 @@ export const useTaskStore = defineStore('task', () => {
 
     subTaskStore.restoreTaskBundle(
       restoredTask.id,
-      options.viewCategoryId ?? restoredTask.category_id,
+      options.viewScopeKey ?? restoredTask.category_id,
       restoredSubTasks,
       snapshot.wasExpanded
     )
@@ -496,6 +491,80 @@ export const useTaskStore = defineStore('task', () => {
     })
   }
 
+  async function moveTaskToCategory(
+    id: number,
+    targetCategoryId: number,
+    options: {
+      taskListView: 'all' | 'category'
+      currentCategoryId: number | null
+      scopeKey: string | number | null
+    }
+  ) {
+    const task = tasks.value.find((item) => item.id === id)
+    if (!task) return false
+
+    const sourceCategoryId = task.category_id
+    if (sourceCategoryId === targetCategoryId) {
+      return true
+    }
+
+    const subTaskStore = useSubTaskStore()
+    const previousTasks = tasks.value.map((item) => ({ ...item }))
+    const previousPendingCounts = { ...pendingCounts.value }
+    const previousSubTasks =
+      subTaskStore.subTasksMap[id]?.map((subTask) => ({ ...subTask })) ?? null
+    const hadSubTasks = id in subTaskStore.subTasksMap
+    const shouldRemoveFromCurrentList =
+      options.taskListView === 'category' && options.currentCategoryId === sourceCategoryId
+
+    return runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.move, id),
+      type: TASK_OPERATION_TYPES.move,
+      entityId: id,
+      before: () => {
+        if (!task.is_completed) {
+          _adjustPendingCount(sourceCategoryId, -1)
+          _adjustPendingCount(targetCategoryId, 1)
+        }
+
+        if (shouldRemoveFromCurrentList) {
+          tasks.value = tasks.value.filter((item) => item.id !== id)
+          return
+        }
+
+        task.category_id = targetCategoryId
+
+        if (previousSubTasks) {
+          subTaskStore.subTasksMap[id] = previousSubTasks.map((subTask) => ({
+            ...subTask,
+            category_id: targetCategoryId
+          }))
+        }
+      },
+      execute: () => taskRepository.moveTaskToCategory(id, targetCategoryId),
+      rollback: () => {
+        tasks.value = previousTasks
+        pendingCounts.value = previousPendingCounts
+
+        if (hadSubTasks && previousSubTasks) {
+          subTaskStore.subTasksMap[id] = previousSubTasks
+          return
+        }
+
+        if (!hadSubTasks) {
+          delete subTaskStore.subTasksMap[id]
+        }
+      },
+      onSuccess: () => {
+        if (shouldRemoveFromCurrentList && options.scopeKey !== null) {
+          subTaskStore.removeTask(id, options.scopeKey)
+        }
+      },
+      errorMessage: '移动任务失败，请重试',
+      logPrefix: '[taskStore] moveTaskToCategory failed'
+    })
+  }
+
   async function archiveCompletedTasks(categoryId: number) {
     const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
     if (completedIds.length === 0) {
@@ -535,6 +604,46 @@ export const useTaskStore = defineStore('task', () => {
       categoryId,
       taskIds: completedIds
     } satisfies ArchivedCompletedSnapshot
+  }
+
+  async function archiveAllCompletedTasks() {
+    const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
+    if (completedIds.length === 0) {
+      return undefined
+    }
+
+    const completedIdSet = new Set(completedIds)
+    const previousTasks = tasks.value.slice()
+
+    const success = await runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.archiveCompleted, 'all'),
+      type: TASK_OPERATION_TYPES.archiveCompleted,
+      entityId: 'all',
+      before: () => {
+        tasks.value = tasks.value.filter((task) => !completedIdSet.has(task.id))
+      },
+      execute: async () => {
+        const archivedCount = await taskRepository.archiveAllCompletedTasks()
+        if (archivedCount !== completedIds.length) {
+          throw new Error(
+            `[taskStore] archiveAllCompletedTasks mismatch: expected ${completedIds.length}, got ${archivedCount}`
+          )
+        }
+      },
+      rollback: () => {
+        tasks.value = previousTasks
+      },
+      errorMessage: '归档已完成任务失败，请重试',
+      logPrefix: '[taskStore] archiveAllCompletedTasks failed'
+    })
+
+    if (!success) {
+      return undefined
+    }
+
+    return {
+      taskIds: completedIds
+    }
   }
 
   async function archiveTask(id: number) {
@@ -619,6 +728,7 @@ export const useTaskStore = defineStore('task', () => {
     _adjustPendingCount,
     initPendingCounts,
     fetchTasks,
+    fetchAllTasks,
     clearTasks,
     addTask,
     toggleTask,
@@ -627,8 +737,10 @@ export const useTaskStore = defineStore('task', () => {
     updateTaskContent,
     updateTaskDue,
     updateTaskPriority,
+    moveTaskToCategory,
     archiveTask,
     archiveCompletedTasks,
+    archiveAllCompletedTasks,
     removePendingCount,
     reorderTasks,
     isTaskDeleting,

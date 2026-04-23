@@ -10,8 +10,10 @@ import {
   Power,
   RefreshCw,
   Settings,
-  Trash2
+  Trash2,
+  Upload
 } from 'lucide-vue-next'
+import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { HOTKEY_LABELS, useHotkeys, type HotkeyAction } from '../composables/useHotkeys'
 import { useHotkeyRecorder } from '../composables/useHotkeyRecorder'
@@ -21,6 +23,7 @@ import { useAppSessionStore } from '../store/appSession'
 import { useGlobalSearchStore } from '../store/globalSearch'
 
 const runtime = useAppRuntime()
+const app = useAppFacade()
 const appSessionStore = useAppSessionStore()
 const globalSearchStore = useGlobalSearchStore()
 const { confirm } = runtime.confirm
@@ -40,6 +43,8 @@ const {
   settings,
   appInfo,
   isLoading,
+  isImporting,
+  isMergingImport,
   isExporting,
   isSavingAutoLaunch,
   isSavingCloseToTray,
@@ -229,6 +234,36 @@ async function handleAutoCleanupChange() {
 async function handleExportData() {
   if (!isElectron || isExporting.value) return
   await settingsStore.exportData()
+}
+
+async function handleImportData() {
+  if (!isElectron || isImporting.value || isMergingImport.value || isExporting.value) return
+
+  const ok = await confirm(
+    '恢复备份会清空当前所有待办、分类和归档数据，并替换为备份内容；应用设置不会恢复。确定继续吗？'
+  )
+  if (!ok) return
+
+  const result = await settingsStore.importData()
+  if (result.status !== 'success') return
+
+  await app.fetchCategories()
+  await app.fetchCurrentTaskPane()
+}
+
+async function handleMergeData() {
+  if (!isElectron || isMergingImport.value || isImporting.value || isExporting.value) return
+
+  const ok = await confirm(
+    '合并导入会保留当前数据；同名分类会并入现有分类，备份中的任务和归档会作为新数据加入，不会按旧 ID 覆盖，可能出现重复内容。确定继续吗？'
+  )
+  if (!ok) return
+
+  const result = await settingsStore.mergeData()
+  if (result.status !== 'success') return
+
+  await app.fetchCategories()
+  await app.fetchCurrentTaskPane()
 }
 
 async function handleCheckUpdate() {
@@ -485,18 +520,58 @@ onUnmounted(() => {
           <div class="settings-item">
             <div class="settings-item__info">
               <label class="settings-item__label">
-                <Download :size="14" class="settings-item__inline-icon" />
-                导出数据
+                <Upload :size="14" class="settings-item__inline-icon" />
+                恢复备份（覆盖当前数据）
               </label>
-              <span class="settings-item__desc">将所有待办数据导出为 JSON 文件</span>
+              <span class="settings-item__desc">
+                从 JSON 备份恢复数据，当前会覆盖现有待办、分类和归档内容
+              </span>
             </div>
             <button
               class="settings-item__action-btn"
               type="button"
-              :disabled="!isElectron || isExporting"
+              :disabled="!isElectron || isImporting || isMergingImport || isExporting"
+              @click="handleImportData"
+            >
+              {{ isImporting ? '恢复中...' : '恢复' }}
+            </button>
+          </div>
+
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label">
+                <Upload :size="14" class="settings-item__inline-icon" />
+                合并导入（仅新增）
+              </label>
+              <span class="settings-item__desc">
+                保留当前数据；同名分类会合并，备份中的任务和归档会作为新数据加入
+              </span>
+            </div>
+            <button
+              class="settings-item__action-btn"
+              type="button"
+              :disabled="!isElectron || isMergingImport || isImporting || isExporting"
+              @click="handleMergeData"
+            >
+              {{ isMergingImport ? '合并中...' : '合并导入' }}
+            </button>
+          </div>
+
+          <div class="settings-item">
+            <div class="settings-item__info">
+              <label class="settings-item__label">
+                <Download :size="14" class="settings-item__inline-icon" />
+                导出备份
+              </label>
+              <span class="settings-item__desc">将当前待办、分类和归档数据导出为 JSON 备份文件</span>
+            </div>
+            <button
+              class="settings-item__action-btn"
+              type="button"
+              :disabled="!isElectron || isExporting || isImporting || isMergingImport"
               @click="handleExportData"
             >
-              {{ isExporting ? '导出中...' : '导出' }}
+              {{ isExporting ? '导出中...' : '导出备份' }}
             </button>
           </div>
         </section>

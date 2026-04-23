@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 import { useAutoHeight } from './composables/useAutoHeight'
 import { useQuickAddComposer } from './composables/useQuickAddComposer'
+import { getCategoryDisplayName } from './utils/taskNavigation'
 
 const QUICK_ADD_WINDOW_MIN_HEIGHT = 140
 
@@ -11,11 +12,19 @@ const rootRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight } = useAutoHeight(inputRef)
 
+const resolvedCategoryLabel = computed(() => {
+  if (composer.resolution.value.kind === 'existing' && composer.resolution.value.category) {
+    return getCategoryDisplayName(composer.resolution.value.category)
+  }
+
+  return composer.resolution.value.name ?? ''
+})
+
 const placeholderText = computed(() =>
   composer.selectedCategory.value
     ? '输入待办内容，Enter 提交，Shift+Enter 换行'
-    : composer.defaultCategory.value
-      ? `直接输入待办，Enter 默认进入 #${composer.defaultCategory.value.name}`
+    : composer.defaultCategoryLabel.value
+      ? `直接输入待办，Enter 默认进入 #${composer.defaultCategoryLabel.value}`
       : '#工作 空格后继续输入待办'
 )
 
@@ -37,15 +46,15 @@ const statusText = computed(() => {
   }
 
   if (!composer.categoryQuery.value) {
-    if (composer.defaultCategory.value) {
-      return `直接回车会保存到「${composer.defaultCategory.value.name}」，也可输入 #分类名 后按空格切换`
+    if (composer.defaultCategoryLabel.value) {
+      return `直接回车会保存到“${composer.defaultCategoryLabel.value}”，也可输入 #分类名 后按空格切换`
     }
 
     return '输入 #分类名 后按空格确认'
   }
 
-  if (composer.resolution.value.kind === 'existing' && composer.resolution.value.category) {
-    return `空格确认分类：${composer.resolution.value.category.name}`
+  if (composer.resolution.value.kind === 'existing') {
+    return `空格确认分类：${resolvedCategoryLabel.value}`
   }
 
   if (composer.resolution.value.kind === 'create' && composer.resolution.value.name) {

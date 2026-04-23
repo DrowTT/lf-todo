@@ -1,3 +1,4 @@
+import { parseBackupImportResult } from '../../../../../shared/contracts/backup'
 import {
   parseAppInfo,
   parseAutoCleanupConfig,
@@ -67,6 +68,15 @@ export function createElectronSettingsRepository(
           'settings:complete-pomodoro-session.fallback'
         )
       },
+      async importData() {
+        return parseBackupImportResult({ status: 'cancelled' }, 'settings:import-data.fallback')
+      },
+      async mergeData() {
+        return parseBackupImportResult(
+          { status: 'cancelled' },
+          'settings:merge-import-data.fallback'
+        )
+      },
       async exportData() {
         return false
       },
@@ -122,6 +132,18 @@ export function createElectronSettingsRepository(
       return parsePomodoroData(
         await api.settings.completePomodoroSession(session),
         'settings:complete-pomodoro-session.response'
+      )
+    },
+    async importData() {
+      return parseBackupImportResult(
+        await api.settings.importData(),
+        'settings:import-data.response'
+      )
+    },
+    async mergeData() {
+      return parseBackupImportResult(
+        await api.settings.mergeData(),
+        'settings:merge-import-data.response'
       )
     },
     async exportData() {

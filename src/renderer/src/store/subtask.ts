@@ -9,7 +9,6 @@ import {
   runAsyncAction
 } from '../services/runAsyncAction'
 import { readStoredJson, writeStoredJson } from '../utils/localStorage'
-import { useCategoryStore } from './category'
 import { useTaskStore } from './task'
 
 const SUBTASK_OPERATION_TYPES = {
@@ -20,7 +19,9 @@ const SUBTASK_OPERATION_TYPES = {
   reorder: 'subtask:reorder'
 } as const
 
-const expandedKey = (categoryId: number) => `lf-todo:expanded-${categoryId}`
+type ExpandedScopeKey = string | number
+
+const expandedKey = (scopeKey: ExpandedScopeKey) => `lf-todo:expanded-${scopeKey}`
 
 export interface ParentTaskSnapshot {
   is_completed: boolean
@@ -29,9 +30,6 @@ export interface ParentTaskSnapshot {
   category_id: number
   pendingCount: number
   hadPendingCount: boolean
-  system_category_id: number | null
-  systemPendingCount: number
-  hadSystemPendingCount: boolean
 }
 
 export interface DeletedSubTaskSnapshot {
@@ -41,12 +39,12 @@ export interface DeletedSubTaskSnapshot {
   parentSnapshot: ParentTaskSnapshot | null
 }
 
-function loadExpandedIds(categoryId: number): Set<number> {
-  return new Set(readStoredJson<number[]>(expandedKey(categoryId), []))
+function loadExpandedIds(scopeKey: ExpandedScopeKey): Set<number> {
+  return new Set(readStoredJson<number[]>(expandedKey(scopeKey), []))
 }
 
-function saveExpandedIds(categoryId: number, ids: Set<number>) {
-  writeStoredJson(expandedKey(categoryId), [...ids])
+function saveExpandedIds(scopeKey: ExpandedScopeKey, ids: Set<number>) {
+  writeStoredJson(expandedKey(scopeKey), [...ids])
 }
 
 export const useSubTaskStore = defineStore('subTask', () => {
@@ -55,7 +53,6 @@ export const useSubTaskStore = defineStore('subTask', () => {
   let latestSubTaskFetchRequestId = 0
 
   const { repositories, toast } = useAppRuntime()
-  const categoryStore = useCategoryStore()
   const taskRepository = repositories.task
   const notifyError = (message: string) => toast.show(message)
 
@@ -81,18 +78,9 @@ export const useSubTaskStore = defineStore('subTask', () => {
     subTasksMap.value[parentId] = nextSubTasks
   }
 
-  function getSystemCategoryId() {
-    return categoryStore.categories.find((category) => category.is_system)?.id ?? null
-  }
-
   function adjustPendingCountForParent(parentTask: Pick<Task, 'category_id'>, delta: number) {
     const taskStore = useTaskStore()
     taskStore._adjustPendingCount(parentTask.category_id, delta)
-
-    const systemCategoryId = getSystemCategoryId()
-    if (systemCategoryId !== null && systemCategoryId !== parentTask.category_id) {
-      taskStore._adjustPendingCount(systemCategoryId, delta)
-    }
   }
 
   function restoreSubTaskOrder(parentId: number, orderedIds: number[]) {
@@ -121,12 +109,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
       subtask_done: parentTask.subtask_done,
       category_id: parentTask.category_id,
       pendingCount: taskStore.pendingCounts[parentTask.category_id] ?? 0,
-      hadPendingCount: parentTask.category_id in taskStore.pendingCounts,
-      system_category_id: getSystemCategoryId(),
-      systemPendingCount:
-        getSystemCategoryId() === null ? 0 : taskStore.pendingCounts[getSystemCategoryId()!] ?? 0,
-      hadSystemPendingCount:
-        getSystemCategoryId() === null ? false : getSystemCategoryId()! in taskStore.pendingCounts
+      hadPendingCount: parentTask.category_id in taskStore.pendingCounts
     }
   }
 
@@ -146,17 +129,6 @@ export const useSubTaskStore = defineStore('subTask', () => {
       taskStore.pendingCounts[snapshot.category_id] = snapshot.pendingCount
     } else {
       delete taskStore.pendingCounts[snapshot.category_id]
-    }
-
-    if (
-      snapshot.system_category_id !== null &&
-      snapshot.system_category_id !== snapshot.category_id
-    ) {
-      if (snapshot.hadSystemPendingCount) {
-        taskStore.pendingCounts[snapshot.system_category_id] = snapshot.systemPendingCount
-      } else {
-        delete taskStore.pendingCounts[snapshot.system_category_id]
-      }
     }
   }
 
@@ -190,16 +162,16 @@ export const useSubTaskStore = defineStore('subTask', () => {
     expandedTaskIds.value = new Set()
   }
 
-  function loadExpandedForCategory(categoryId: number) {
+  function loadExpandedForScope(scopeKey: ExpandedScopeKey) {
     latestSubTaskFetchRequestId++
-    expandedTaskIds.value = loadExpandedIds(categoryId)
+    expandedTaskIds.value = loadExpandedIds(scopeKey)
   }
 
-  function persistExpanded(categoryId: number) {
-    saveExpandedIds(categoryId, expandedTaskIds.value)
+  function persistExpanded(scopeKey: ExpandedScopeKey) {
+    saveExpandedIds(scopeKey, expandedTaskIds.value)
   }
 
-  function setExpanded(taskId: number, categoryId: number, expanded: boolean) {
+  function setExpanded(taskId: number, scopeKey: ExpandedScopeKey, expanded: boolean) {
     const next = new Set(expandedTaskIds.value)
 
     if (expanded) {
@@ -209,7 +181,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     }
 
     expandedTaskIds.value = next
-    persistExpanded(categoryId)
+    persistExpanded(scopeKey)
   }
 
   async function fetchSubTasks(parentId: number) {
@@ -234,9 +206,9 @@ export const useSubTaskStore = defineStore('subTask', () => {
     await Promise.all(neededIds.map((id) => fetchSubTasks(id)))
   }
 
-  async function toggleExpand(taskId: number, categoryId: number) {
+  async function toggleExpand(taskId: number, scopeKey: ExpandedScopeKey) {
     if (expandedTaskIds.value.has(taskId)) {
-      setExpanded(taskId, categoryId, false)
+      setExpanded(taskId, scopeKey, false)
       return true
     }
 
@@ -249,7 +221,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
       }
     }
 
-    setExpanded(taskId, categoryId, true)
+    setExpanded(taskId, scopeKey, true)
     return true
   }
 
@@ -478,15 +450,15 @@ export const useSubTaskStore = defineStore('subTask', () => {
     })
   }
 
-  function removeTask(id: number, categoryId: number) {
+  function removeTask(id: number, scopeKey: ExpandedScopeKey) {
     delete subTasksMap.value[id]
 
     if (expandedTaskIds.value.has(id)) {
-      setExpanded(id, categoryId, false)
+      setExpanded(id, scopeKey, false)
     }
   }
 
-  function removeCompletedTasks(ids: number[], categoryId: number) {
+  function removeCompletedTasks(ids: number[], scopeKey: ExpandedScopeKey) {
     const next = new Set(expandedTaskIds.value)
 
     ids.forEach((id) => {
@@ -495,23 +467,23 @@ export const useSubTaskStore = defineStore('subTask', () => {
     })
 
     expandedTaskIds.value = next
-    persistExpanded(categoryId)
+    persistExpanded(scopeKey)
   }
 
   function restoreTaskBundle(
     parentId: number,
-    categoryId: number,
+    scopeKey: ExpandedScopeKey,
     subTasks: Task[],
     wasExpanded: boolean
   ) {
     subTasksMap.value[parentId] = subTasks
     if (wasExpanded) {
-      setExpanded(parentId, categoryId, true)
+      setExpanded(parentId, scopeKey, true)
       return
     }
 
     if (expandedTaskIds.value.has(parentId)) {
-      setExpanded(parentId, categoryId, false)
+      setExpanded(parentId, scopeKey, false)
     }
   }
 
@@ -520,7 +492,7 @@ export const useSubTaskStore = defineStore('subTask', () => {
     expandedTaskIds,
     pendingOperations,
     reset,
-    loadExpandedForCategory,
+    loadExpandedForScope,
     fetchSubTasks,
     fetchExpandedSubTasks,
     toggleExpand,

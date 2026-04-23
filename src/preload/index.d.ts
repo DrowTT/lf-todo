@@ -15,6 +15,7 @@ import type {
   TaskUpdate,
   UpdateStatusData
 } from '../shared/types/models'
+import type { BackupImportResult } from '../shared/types/backup'
 
 interface API {
   window: {
@@ -39,6 +40,7 @@ interface API {
     updateCategory: (id: number, name: string) => Promise<void>
     deleteCategory: (id: number) => Promise<void>
     getTasks: (categoryId: number) => Promise<Task[]>
+    getAllTasks: () => Promise<Task[]>
     getArchivedTaskGroups: () => Promise<ArchivedTaskGroup[]>
     searchTasks: (input: {
       query: string
@@ -47,11 +49,13 @@ interface API {
     }) => Promise<Task[]>
     createTask: (input: TaskCreateInput) => Promise<Task>
     updateTask: (id: number, updates: TaskUpdate) => Promise<void>
+    moveTaskToCategory: (id: number, targetCategoryId: number) => Promise<void>
     deleteTask: (id: number) => Promise<void>
     toggleTaskComplete: (id: number) => Promise<void>
     setTaskCompleted: (id: number, completed: boolean) => Promise<void>
     getPendingTaskCounts: () => Promise<Record<number, number>>
     archiveCompletedTasks: (categoryId: number) => Promise<number>
+    archiveAllCompletedTasks: () => Promise<number>
     archiveTask: (id: number) => Promise<void>
     restoreArchivedTasks: (ids: number[]) => Promise<number>
     reorderTasks: (orderedIds: number[]) => Promise<void>
@@ -74,6 +78,8 @@ interface API {
       config: Record<'showWindow' | 'showWindowAndFocusInput', { key: string; label: string }>
     ) => Promise<void>
     notifyPomodoroCompleted: (durationSeconds: number) => Promise<void>
+    importData: () => Promise<BackupImportResult>
+    mergeData: () => Promise<BackupImportResult>
     exportData: () => Promise<boolean>
     getAppInfo: () => Promise<AppInfo>
   }

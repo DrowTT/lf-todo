@@ -1,41 +1,33 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
+import { SYSTEM_CATEGORY_NAME } from '../../../shared/constants/category'
 import { DEFAULT_TASK_PRIORITY } from '../../../shared/constants/task'
 import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
-import { useCategoryStore } from '../store/category'
 import { useAppSessionStore } from '../store/appSession'
-import { useTaskStore } from '../store/task'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
 import TaskPriorityPicker from './TaskPriorityPicker.vue'
 import { cloneTaskDueState, EMPTY_TASK_DUE_STATE } from '../utils/taskDue'
 
 const app = useAppFacade()
-const taskStore = useTaskStore()
-const categoryStore = useCategoryStore()
 const appSessionStore = useAppSessionStore()
 
-const content = ref(appSessionStore.getTaskDraft(categoryStore.currentCategoryId))
-const dueState = ref(appSessionStore.getTaskDueDraft(categoryStore.currentCategoryId))
-const priority = ref<TaskPriority>(
-  appSessionStore.getTaskPriorityDraft(categoryStore.currentCategoryId)
-)
+const content = ref(appSessionStore.getTaskDraft(app.currentTaskScopeKey.value))
+const dueState = ref(appSessionStore.getTaskDueDraft(app.currentTaskScopeKey.value))
+const priority = ref<TaskPriority>(appSessionStore.getTaskPriorityDraft(app.currentTaskScopeKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
-const currentCategory = computed(() =>
-  categoryStore.categories.find((category) => category.id === categoryStore.currentCategoryId) ?? null
-)
-const isSystemCategoryView = computed(() => currentCategory.value?.is_system ?? false)
+const isAllTasksView = computed(() => app.isAllTasksView.value)
 const placeholderText = computed(() =>
-  isSystemCategoryView.value
-    ? '输入待办后回车，默认进入“全部”收件箱'
+  isAllTasksView.value
+    ? `这是聚合视图，直接输入后会先进入${SYSTEM_CATEGORY_NAME}`
     : '添加新的待办事项...'
 )
 const hasContent = computed(() => content.value.trim().length > 0)
-const isSubmitting = computed(() => app.isLoading.value || taskStore.isCreatingTask)
+const isSubmitting = computed(() => app.isLoading.value || app.taskStore.isCreatingTask)
 
 const handleSubmit = async () => {
   if (!hasContent.value || isSubmitting.value) return
@@ -46,12 +38,13 @@ const handleSubmit = async () => {
   })
   if (!created) return
 
+  const scopeKey = app.currentTaskScopeKey.value
   content.value = ''
   dueState.value = cloneTaskDueState(EMPTY_TASK_DUE_STATE)
   priority.value = DEFAULT_TASK_PRIORITY
-  appSessionStore.clearTaskDraft(categoryStore.currentCategoryId)
-  appSessionStore.clearTaskDueDraft(categoryStore.currentCategoryId)
-  appSessionStore.clearTaskPriorityDraft(categoryStore.currentCategoryId)
+  appSessionStore.clearTaskDraft(scopeKey)
+  appSessionStore.clearTaskDueDraft(scopeKey)
+  appSessionStore.clearTaskPriorityDraft(scopeKey)
   nextTick(resetHeight)
 }
 
@@ -64,30 +57,30 @@ const handlePriorityApply = (value: TaskPriority) => {
 }
 
 watch(
-  () => categoryStore.currentCategoryId,
-  (categoryId) => {
-    content.value = appSessionStore.getTaskDraft(categoryId)
-    dueState.value = appSessionStore.getTaskDueDraft(categoryId)
-    priority.value = appSessionStore.getTaskPriorityDraft(categoryId)
+  () => app.currentTaskScopeKey.value,
+  (scopeKey) => {
+    content.value = appSessionStore.getTaskDraft(scopeKey)
+    dueState.value = appSessionStore.getTaskDueDraft(scopeKey)
+    priority.value = appSessionStore.getTaskPriorityDraft(scopeKey)
     nextTick(adjustHeight)
   },
   { immediate: true }
 )
 
 watch(content, (value) => {
-  appSessionStore.setTaskDraft(categoryStore.currentCategoryId, value)
+  appSessionStore.setTaskDraft(app.currentTaskScopeKey.value, value)
 })
 
 watch(
   dueState,
   (value) => {
-    appSessionStore.setTaskDueDraft(categoryStore.currentCategoryId, value)
+    appSessionStore.setTaskDueDraft(app.currentTaskScopeKey.value, value)
   },
   { deep: true }
 )
 
 watch(priority, (value) => {
-  appSessionStore.setTaskPriorityDraft(categoryStore.currentCategoryId, value)
+  appSessionStore.setTaskPriorityDraft(app.currentTaskScopeKey.value, value)
 })
 </script>
 
@@ -132,8 +125,8 @@ watch(priority, (value) => {
         </button>
       </div>
     </div>
-    <p v-if="isSystemCategoryView" class="todo-input__hint">
-      “全部”会聚合显示所有分类的待办；在这里新建的任务会进入默认收件箱。
+    <p v-if="isAllTasksView" class="todo-input__hint">
+      {{ `“全部”只是聚合浏览视图，这里新建的任务会先进入${SYSTEM_CATEGORY_NAME}，再出现在全部列表中。` }}
     </p>
   </div>
 </template>

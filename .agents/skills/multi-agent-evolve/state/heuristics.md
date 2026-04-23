@@ -18,6 +18,8 @@ Update it conservatively. Prefer narrow, evidence-based guidance.
 - Use `pnpm verify:agent:fast` only for narrow low-risk code changes where build output is not meaningfully affected.
 - Use `pnpm verify:agent:full` for cross-layer changes, shared contracts, storage boundaries, packaging paths, or risky refactors.
 - If `pnpm lint` produces warning-only noise, prefer `pnpm lint:errors` in verifier-facing flows.
+- For backup import/export or other versioned contract work, do not stop at build success: the verifier should also exercise one legacy sample, one forward-compatible sample, and one malformed-envelope fail-fast sample.
+- When backup work or storage-boundary work touches both `tasks` and `archived_tasks`, the verifier should explicitly check post-import/post-merge ID allocation safety, not just current-row collisions.
 - When one existing hotkey is split into multiple actions, or when search behavior is moved between inline UI and overlay UI, verify legacy local settings/config migration and non-default shortcut states, not just fresh defaults.
 - For overlay-style search and confirmation flows, verify `Escape` from at least three states: initial open, after pointer interaction inside the panel, and after focus has moved across interactive controls.
 

@@ -11,13 +11,19 @@ import {
   Notification
 } from 'electron'
 import type { Display, Rectangle } from 'electron'
-import { appendFileSync, writeFileSync } from 'fs'
+import { appendFileSync } from 'fs'
+import { readFile, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
 import { initAutoUpdater } from './updater'
+import {
+  BackupCompatibilityError,
+  buildBackupEnvelope,
+  parseBackupImportPayload
+} from '../shared/contracts/backup'
 import {
   parseBooleanSetting,
   parseNotifyPomodoroCompletedRequest,
@@ -31,7 +37,14 @@ import {
   normalizePomodoroDurationSeconds
 } from '../shared/constants/pomodoro'
 import { MIN_MAIN_WINDOW_WIDTH } from '../shared/constants/layout'
+import type {
+  BackupDataPayload,
+  BackupImportErrorCode,
+  BackupImportResult,
+  BackupImportSummary
+} from '../shared/types/backup'
 import type { QuickAddCommittedEvent } from '../shared/types/models'
+import { ContractError } from '../shared/contracts/utils'
 
 interface AutoCleanupConfig {
   enabled: boolean
@@ -115,6 +128,7 @@ const DEFAULT_DUE_REMINDER_STATE: DueReminderState = {
 const APP_USER_MODEL_ID = 'com.lf.todo'
 const AUTO_LAUNCH_HIDDEN_ARG = '--hidden'
 const DUE_REMINDER_CHECK_INTERVAL_MS = 30 * 1000
+const MAX_BACKUP_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024
 const SECOND = 1000
 
 let mainWindow: BrowserWindow | null = null
@@ -846,6 +860,123 @@ function resolveRuntimeAsset(fileName: string): string {
     : join(process.resourcesPath, fileName)
 }
 
+function createBackupImportErrorResult(
+  code: BackupImportErrorCode,
+  message: string
+): BackupImportResult {
+  return {
+    status: 'error',
+    error: {
+      code,
+      message
+    }
+  }
+}
+
+async function readBackupFile(filePath: string): Promise<unknown> {
+  let fileStat: Awaited<ReturnType<typeof stat>>
+
+  try {
+    fileStat = await stat(filePath)
+  } catch {
+    throw createBackupImportErrorResult('FILE_READ_FAILED', '读取备份文件失败，请检查文件权限后重试')
+  }
+
+  if (fileStat.size > MAX_BACKUP_IMPORT_FILE_SIZE_BYTES) {
+    throw createBackupImportErrorResult(
+      'FILE_TOO_LARGE',
+      `备份文件不能超过 ${Math.floor(MAX_BACKUP_IMPORT_FILE_SIZE_BYTES / 1024 / 1024)} MB`
+    )
+  }
+
+  let raw: string
+
+  try {
+    raw = (await readFile(filePath, 'utf-8')).replace(/^\uFEFF/, '').trim()
+  } catch {
+    throw createBackupImportErrorResult('FILE_READ_FAILED', '读取备份文件失败，请检查文件权限后重试')
+  }
+
+  if (!raw) {
+    throw createBackupImportErrorResult('EMPTY_FILE', '备份文件为空')
+  }
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw createBackupImportErrorResult('INVALID_JSON', '备份文件不是有效的 JSON')
+  }
+}
+
+function normalizeBackupImportError(error: unknown): BackupImportResult {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    error.status === 'error' &&
+    'error' in error
+  ) {
+    return error as BackupImportResult
+  }
+
+  if (error instanceof BackupCompatibilityError) {
+    if (error.code === 'UNSUPPORTED_BACKUP_FORMAT') {
+      return createBackupImportErrorResult('UNSUPPORTED_BACKUP_FORMAT', '当前文件不是 LF-Todo 备份文件')
+    }
+
+    return createBackupImportErrorResult(
+      'BACKUP_REQUIRES_NEWER_READER',
+      '该备份由更高版本导出，当前版本暂不支持读取'
+    )
+  }
+
+  if (error instanceof ContractError) {
+    return createBackupImportErrorResult(
+      'INVALID_BACKUP_PAYLOAD',
+      '备份文件结构无效或关键字段缺失'
+    )
+  }
+
+  return createBackupImportErrorResult('IMPORT_FAILED', '处理备份失败，请稍后重试')
+}
+
+async function applyBackupFromDialog(
+  win: BrowserWindow,
+  options: {
+    dialogTitle: string
+    payloadLabel: string
+    apply: (payload: BackupDataPayload) => BackupImportSummary
+  }
+): Promise<BackupImportResult> {
+  const result = await dialog.showOpenDialog(win, {
+    title: options.dialogTitle,
+    properties: ['openFile'],
+    filters: [{ name: 'JSON 文件', extensions: ['json'] }]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { status: 'cancelled' } as const
+  }
+
+  const filePath = result.filePaths[0]
+  if (!filePath.toLocaleLowerCase().endsWith('.json')) {
+    return createBackupImportErrorResult('INVALID_FILE_TYPE', '请选择 JSON 备份文件')
+  }
+
+  try {
+    const parsed = await readBackupFile(filePath)
+    const payload = parseBackupImportPayload(parsed, options.payloadLabel)
+    const summary = options.apply(payload)
+
+    return {
+      status: 'success' as const,
+      summary
+    }
+  } catch (error) {
+    return normalizeBackupImportError(error)
+  }
+}
+
 function registerSettingsHandlers(): void {
   if (settingsHandlersRegistered) return
   settingsHandlersRegistered = true
@@ -937,16 +1068,43 @@ function registerSettingsHandlers(): void {
     if (!win) return false
 
     const result = await dialog.showSaveDialog(win, {
-      title: '导出待办数据',
-      defaultPath: `极简待办-数据导出-${new Date().toISOString().slice(0, 10)}.json`,
+      title: '导出备份',
+      defaultPath: `极简待办-数据备份-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: 'JSON 文件', extensions: ['json'] }]
     })
 
     if (result.canceled || !result.filePath) return false
 
     const data = db.exportAllData()
-    writeFileSync(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
+    const backup = buildBackupEnvelope(data, app.getVersion())
+    await writeFile(result.filePath, JSON.stringify(backup, null, 2), 'utf-8')
     return true
+  })
+
+  ipcMain.handle('settings:import-data', async () => {
+    const win = mainWindow
+    if (!win) {
+      return { status: 'cancelled' } as const
+    }
+
+    return applyBackupFromDialog(win, {
+      dialogTitle: '恢复备份',
+      payloadLabel: 'settings:import-data.payload',
+      apply: (payload) => db.importAllData(payload)
+    })
+  })
+
+  ipcMain.handle('settings:merge-import-data', async () => {
+    const win = mainWindow
+    if (!win) {
+      return { status: 'cancelled' } as const
+    }
+
+    return applyBackupFromDialog(win, {
+      dialogTitle: '合并导入备份',
+      payloadLabel: 'settings:merge-import-data.payload',
+      apply: (payload) => db.mergeImportData(payload)
+    })
   })
 
   ipcMain.handle('settings:get-app-info', () => {

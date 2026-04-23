@@ -6,10 +6,13 @@ import { readStoredJson, writeStoredJson } from '../utils/localStorage'
 
 export type MainView = 'tasks' | 'pomodoro' | 'settings'
 export type TaskPaneView = 'active' | 'archive'
+export type TaskListView = 'category' | 'all'
+type TaskDraftScopeKey = string | number | null
 
 interface SessionSnapshot {
   currentMainView: MainView
   taskPaneView: TaskPaneView
+  taskListView: TaskListView
   taskDrafts: Record<string, string>
   taskDueDrafts: Record<string, TaskDueState>
   taskPriorityDrafts: Record<string, TaskPriority>
@@ -29,6 +32,7 @@ function loadSnapshot(): SessionSnapshot {
           ? 'settings'
           : 'tasks',
     taskPaneView: parsed.taskPaneView === 'archive' ? 'archive' : 'active',
+    taskListView: parsed.taskListView === 'all' ? 'all' : 'category',
     taskDrafts: parsed.taskDrafts ?? {},
     taskDueDrafts: normalizeTaskDueDrafts(parsed.taskDueDrafts),
     taskPriorityDrafts: normalizeTaskPriorityDrafts(parsed.taskPriorityDrafts),
@@ -99,6 +103,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
   const hydrated = ref(false)
   const currentMainView = ref<MainView>('tasks')
   const taskPaneView = ref<TaskPaneView>('active')
+  const taskListView = ref<TaskListView>('category')
   const taskDrafts = ref<Record<string, string>>({})
   const taskDueDrafts = ref<Record<string, TaskDueState>>({})
   const taskPriorityDrafts = ref<Record<string, TaskPriority>>({})
@@ -108,6 +113,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     const snapshot: SessionSnapshot = {
       currentMainView: currentMainView.value,
       taskPaneView: taskPaneView.value,
+      taskListView: taskListView.value,
       taskDrafts: taskDrafts.value,
       taskDueDrafts: taskDueDrafts.value,
       taskPriorityDrafts: taskPriorityDrafts.value,
@@ -122,6 +128,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     const snapshot = loadSnapshot()
     currentMainView.value = snapshot.currentMainView
     taskPaneView.value = snapshot.taskPaneView
+    taskListView.value = snapshot.taskListView
     taskDrafts.value = snapshot.taskDrafts
     taskDueDrafts.value = snapshot.taskDueDrafts
     taskPriorityDrafts.value = snapshot.taskPriorityDrafts
@@ -139,15 +146,20 @@ export const useAppSessionStore = defineStore('appSession', () => {
     persist()
   }
 
-  function getTaskDraft(categoryId: number | null) {
-    if (!categoryId) return ''
-    return taskDrafts.value[String(categoryId)] ?? ''
+  function setTaskListView(view: TaskListView) {
+    taskListView.value = view
+    persist()
   }
 
-  function setTaskDraft(categoryId: number | null, content: string) {
-    if (!categoryId) return
+  function getTaskDraft(scopeKey: TaskDraftScopeKey) {
+    if (scopeKey === null) return ''
+    return taskDrafts.value[String(scopeKey)] ?? ''
+  }
 
-    const key = String(categoryId)
+  function setTaskDraft(scopeKey: TaskDraftScopeKey, content: string) {
+    if (scopeKey === null) return
+
+    const key = String(scopeKey)
     if (content) {
       taskDrafts.value = { ...taskDrafts.value, [key]: content }
     } else if (key in taskDrafts.value) {
@@ -159,24 +171,24 @@ export const useAppSessionStore = defineStore('appSession', () => {
     persist()
   }
 
-  function clearTaskDraft(categoryId: number | null) {
-    setTaskDraft(categoryId, '')
+  function clearTaskDraft(scopeKey: TaskDraftScopeKey) {
+    setTaskDraft(scopeKey, '')
   }
 
-  function getTaskDueDraft(categoryId: number | null): TaskDueState {
-    if (!categoryId) {
+  function getTaskDueDraft(scopeKey: TaskDraftScopeKey): TaskDueState {
+    if (scopeKey === null) {
       return { due_at: null, due_precision: null }
     }
 
     return cloneTaskDueState(
-      taskDueDrafts.value[String(categoryId)] ?? { due_at: null, due_precision: null }
+      taskDueDrafts.value[String(scopeKey)] ?? { due_at: null, due_precision: null }
     )
   }
 
-  function setTaskDueDraft(categoryId: number | null, dueState: TaskDueState) {
-    if (!categoryId) return
+  function setTaskDueDraft(scopeKey: TaskDraftScopeKey, dueState: TaskDueState) {
+    if (scopeKey === null) return
 
-    const key = String(categoryId)
+    const key = String(scopeKey)
     const hasDueDate = dueState.due_at !== null && dueState.due_precision !== null
 
     if (hasDueDate) {
@@ -193,22 +205,22 @@ export const useAppSessionStore = defineStore('appSession', () => {
     persist()
   }
 
-  function clearTaskDueDraft(categoryId: number | null) {
-    setTaskDueDraft(categoryId, { due_at: null, due_precision: null })
+  function clearTaskDueDraft(scopeKey: TaskDraftScopeKey) {
+    setTaskDueDraft(scopeKey, { due_at: null, due_precision: null })
   }
 
-  function getTaskPriorityDraft(categoryId: number | null): TaskPriority {
-    if (!categoryId) {
+  function getTaskPriorityDraft(scopeKey: TaskDraftScopeKey): TaskPriority {
+    if (scopeKey === null) {
       return DEFAULT_TASK_PRIORITY
     }
 
-    return taskPriorityDrafts.value[String(categoryId)] ?? DEFAULT_TASK_PRIORITY
+    return taskPriorityDrafts.value[String(scopeKey)] ?? DEFAULT_TASK_PRIORITY
   }
 
-  function setTaskPriorityDraft(categoryId: number | null, priority: TaskPriority) {
-    if (!categoryId) return
+  function setTaskPriorityDraft(scopeKey: TaskDraftScopeKey, priority: TaskPriority) {
+    if (scopeKey === null) return
 
-    const key = String(categoryId)
+    const key = String(scopeKey)
 
     if (priority !== DEFAULT_TASK_PRIORITY) {
       taskPriorityDrafts.value = {
@@ -224,8 +236,8 @@ export const useAppSessionStore = defineStore('appSession', () => {
     persist()
   }
 
-  function clearTaskPriorityDraft(categoryId: number | null) {
-    setTaskPriorityDraft(categoryId, DEFAULT_TASK_PRIORITY)
+  function clearTaskPriorityDraft(scopeKey: TaskDraftScopeKey) {
+    setTaskPriorityDraft(scopeKey, DEFAULT_TASK_PRIORITY)
   }
 
   function getSubTaskDraft(parentId: number) {
@@ -253,6 +265,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     hydrated,
     currentMainView,
     taskPaneView,
+    taskListView,
     taskDrafts,
     taskDueDrafts,
     taskPriorityDrafts,
@@ -260,6 +273,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     hydrate,
     setCurrentMainView,
     setTaskPaneView,
+    setTaskListView,
     getTaskDraft,
     setTaskDraft,
     clearTaskDraft,

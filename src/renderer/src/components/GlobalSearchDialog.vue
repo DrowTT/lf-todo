@@ -5,8 +5,9 @@ import { CheckCircle2, Command, FolderSearch, Loader2, Search } from 'lucide-vue
 import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useGlobalSearchStore, type GlobalSearchScope } from '../store/globalSearch'
-import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 import { buildSearchHighlightParts } from '../utils/searchHighlight'
+import { getCategoryDisplayName } from '../utils/taskNavigation'
+import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 
 const SEARCH_DEBOUNCE_MS = 140
 const FOCUSABLE_SELECTOR = [
@@ -33,10 +34,12 @@ const descriptionId = 'global-search-description'
 const currentCategory = computed(
   () => categories.value.find((category) => category.id === currentCategoryId.value) ?? null
 )
-const isSystemCategory = computed(() => currentCategory.value?.is_system ?? false)
-const currentCategoryLabel = computed(() => currentCategory.value?.name ?? '未选择分类')
+const isAllTasksView = computed(() => app.isAllTasksView.value)
+const currentCategoryLabel = computed(
+  () => getCategoryDisplayName(currentCategory.value) || '未选择分类'
+)
 const currentScopeLabel = computed(() =>
-  isSystemCategory.value ? '当前视图（全部）' : '当前分类'
+  isAllTasksView.value ? '当前视图（全部）' : `当前分类 · ${currentCategoryLabel.value}`
 )
 const activeDescendantId = computed(() =>
   selectedTask.value ? `global-search-option-${selectedTask.value.id}` : undefined
@@ -46,7 +49,7 @@ const scopeOptions = computed<{ value: GlobalSearchScope; label: string; disable
     {
       value: 'current',
       label: currentScopeLabel.value,
-      disabled: currentCategoryId.value === null || isSystemCategory.value
+      disabled: currentCategoryId.value === null || isAllTasksView.value
     },
     {
       value: 'all',
@@ -61,9 +64,11 @@ const panelHint = computed(() => {
       return `正在“${currentCategoryLabel.value}”中搜索`
     }
 
-    return isSystemCategory.value
-      ? '当前位于“全部”视图，将在所有任务中搜索'
-      : '正在全部任务中搜索'
+    if (isAllTasksView.value) {
+      return '当前位于“全部”视图，将在所有任务中搜索'
+    }
+
+    return '正在全部任务中搜索'
   }
 
   if (isLoading.value) {
@@ -119,7 +124,7 @@ async function runSearch() {
   }
 
   const categoryId =
-    scope.value === 'current' && currentCategoryId.value && !isSystemCategory.value
+    scope.value === 'current' && currentCategoryId.value !== null && !isAllTasksView.value
       ? currentCategoryId.value
       : null
 
@@ -154,6 +159,11 @@ function restoreFocus() {
 
 function getDueLabel(task: Task): string {
   return hasTaskDue(task) ? formatTaskDueLabel(task) : ''
+}
+
+function getTaskCategoryLabel(task: Task): string {
+  const category = categories.value.find((item) => item.id === task.category_id)
+  return getCategoryDisplayName(category) || '未知分类'
 }
 
 function closeDialog() {
@@ -265,7 +275,7 @@ function handlePanelMouseDown(event: MouseEvent) {
 function handleScopeChange(nextScope: GlobalSearchScope) {
   globalSearchStore.setScope(nextScope, {
     currentCategoryId: currentCategoryId.value,
-    isSystemCategory: isSystemCategory.value
+    isAllTasksView: isAllTasksView.value
   })
   focusInput()
 }
@@ -281,7 +291,18 @@ watch(isOpen, (opened) => {
   clearSearchTimer()
 })
 
-watch([isOpen, query, scope, currentCategoryId], () => {
+watch([isOpen, isAllTasksView, currentCategoryId], ([opened, allTasksView, categoryId]) => {
+  if (!opened) {
+    return
+  }
+
+  globalSearchStore.setScope(scope.value, {
+    currentCategoryId: categoryId,
+    isAllTasksView: allTasksView
+  })
+})
+
+watch([isOpen, query, scope, currentCategoryId, isAllTasksView], () => {
   scheduleSearch()
 })
 
@@ -362,9 +383,7 @@ onBeforeUnmount(() => {
               :aria-controls="listboxId"
               :aria-activedescendant="activeDescendantId"
               aria-autocomplete="list"
-              @input="
-                globalSearchStore.setQuery(($event.target as HTMLInputElement).value)
-              "
+              @input="globalSearchStore.setQuery(($event.target as HTMLInputElement).value)"
               @keydown="handleInputKeydown"
             />
             <div class="global-search__shortcut">
@@ -389,13 +408,7 @@ onBeforeUnmount(() => {
               <span>没有找到匹配任务，试试更短的关键词</span>
             </div>
 
-            <ul
-              v-else
-              :id="listboxId"
-              class="global-search__list"
-              role="listbox"
-              aria-label="搜索结果"
-            >
+            <ul v-else :id="listboxId" class="global-search__list" role="listbox" aria-label="搜索结果">
               <li
                 v-for="(task, index) in results"
                 :id="`global-search-option-${task.id}`"
@@ -420,10 +433,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="global-search__option-meta">
                     <span class="global-search__meta-chip">
-                      {{
-                        categories.find((category) => category.id === task.category_id)?.name ??
-                        '未知分类'
-                      }}
+                      {{ getTaskCategoryLabel(task) }}
                     </span>
                     <span v-if="task.is_completed" class="global-search__meta-chip">
                       <CheckCircle2 :size="12" />

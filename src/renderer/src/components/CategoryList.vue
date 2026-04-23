@@ -1,19 +1,32 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { SYSTEM_CATEGORY_NAME } from '../../../shared/constants/category'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
+import { useTaskMoveDrag } from '../composables/useTaskMoveDrag'
 import { useAppSessionStore } from '../store/appSession'
+import { ALL_TASKS_VIEW_LABEL, getCategoryDisplayName } from '../utils/taskNavigation'
 
 const app = useAppFacade()
-const { categories, currentCategoryId, pendingCounts } = app
+const { categories, currentCategoryId, pendingCounts, inboxCategory, taskListView } = app
 const { confirm } = useAppRuntime().confirm
 const appSessionStore = useAppSessionStore()
 const {
   menu: contextMenu,
+  menuRef: contextMenuRef,
   open: openContextMenu,
-  close: closeContextMenu
+  close: closeContextMenu,
+  reposition: repositionContextMenu
 } = useContextMenu<number>()
+const {
+  dragTaskId,
+  dragSourceCategoryId,
+  hoverCategoryId,
+  isDraggingTask,
+  setHoverCategory,
+  markDropHandled
+} = useTaskMoveDrag()
 
 const newCategoryName = ref('')
 const isAdding = ref(false)
@@ -22,17 +35,72 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const editingCategoryId = ref<number | null>(null)
 const editingName = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
+const setEditInputRef = (element: Element | ComponentPublicInstance | null) => {
+  editInputRef.value = element instanceof HTMLInputElement ? element : null
+}
 
 const isArchiveActive = computed(
   () => appSessionStore.currentMainView === 'tasks' && appSessionStore.taskPaneView === 'archive'
 )
 
-const isSystemCategory = (category: { is_system: boolean }) => category.is_system
+const customCategories = computed(() => categories.value.filter((category) => !category.is_system))
+
+const systemEntries = computed(() => {
+  const inboxId = inboxCategory.value?.id ?? null
+
+  return [
+    {
+      key: 'all',
+      label: ALL_TASKS_VIEW_LABEL,
+      badge: app.allPendingCount.value,
+      dropCategoryId: null,
+      active:
+        appSessionStore.currentMainView === 'tasks' &&
+        appSessionStore.taskPaneView === 'active' &&
+        taskListView.value === 'all',
+      onClick: () => {
+        void app.selectAllTasksView()
+      }
+    },
+    {
+      key: 'inbox',
+      label: getCategoryDisplayName(inboxCategory.value) || SYSTEM_CATEGORY_NAME,
+      badge: inboxId === null ? 0 : (pendingCounts.value[inboxId] ?? 0),
+      dropCategoryId: inboxId,
+      active:
+        appSessionStore.currentMainView === 'tasks' &&
+        appSessionStore.taskPaneView === 'active' &&
+        taskListView.value === 'category' &&
+        currentCategoryId.value === inboxId,
+      onClick: () => {
+        if (inboxId !== null) {
+          void app.selectCategory(inboxId)
+        }
+      }
+    },
+    {
+      key: 'archive',
+      label: '已归档',
+      badge: 0,
+      dropCategoryId: null,
+      active: isArchiveActive.value,
+      onClick: () => {
+        void handleSelectArchive()
+      }
+    }
+  ]
+})
+const contextMenuStyle = computed(() => ({
+  left: `${contextMenu.value.x}px`,
+  top: `${contextMenu.value.y}px`,
+  maxHeight: contextMenu.value.maxHeight === null ? undefined : `${contextMenu.value.maxHeight}px`,
+  maxWidth: contextMenu.value.maxWidth === null ? undefined : `${contextMenu.value.maxWidth}px`
+}))
 
 const handleAddCategory = async () => {
   const trimmed = newCategoryName.value.trim()
   if (!trimmed) {
-    isAdding.value = false
+    cancelAddCategory()
     return
   }
 
@@ -47,23 +115,44 @@ const startAdding = async () => {
   inputRef.value?.focus()
 }
 
+const cancelAddCategory = () => {
+  isAdding.value = false
+  newCategoryName.value = ''
+}
+
 const handleSelectCategory = (categoryId: number) => {
+  if (isDraggingTask.value) {
+    return
+  }
+
   void app.selectCategory(categoryId)
 }
 
-const handleSelectArchive = () => {
+const handleSelectArchive = async () => {
+  if (isDraggingTask.value) {
+    return
+  }
+
   if (isArchiveActive.value) {
     return
   }
 
-  void app.selectArchivePane()
+  await app.selectArchivePane()
+}
+
+function handleSelectSystemEntry(onClick: () => void) {
+  if (isDraggingTask.value) {
+    return
+  }
+
+  onClick()
 }
 
 const handleDeleteCategory = async () => {
   if (contextMenu.value.data === null) return
 
   const category = categories.value.find((item) => item.id === contextMenu.value.data)
-  if (!category || isSystemCategory(category)) {
+  if (!category || category.is_system) {
     closeContextMenu()
     return
   }
@@ -80,7 +169,7 @@ const handleRenameClick = async () => {
   if (contextMenu.value.data === null) return
 
   const category = categories.value.find((item) => item.id === contextMenu.value.data)
-  if (!category || isSystemCategory(category)) {
+  if (!category || category.is_system) {
     closeContextMenu()
     return
   }
@@ -89,7 +178,10 @@ const handleRenameClick = async () => {
   editingName.value = category.name
   closeContextMenu()
   await nextTick()
-  editInputRef.value?.focus()
+  requestAnimationFrame(() => {
+    editInputRef.value?.focus()
+    editInputRef.value?.select()
+  })
 }
 
 const handleRenameConfirm = async () => {
@@ -114,96 +206,202 @@ const handleCategoryContextMenu = (
 ) => {
   event.preventDefault()
 
-  if (isSystemCategory(category)) {
+  if (category.is_system) {
     closeContextMenu()
     return
   }
 
   openContextMenu(event, category.id)
 }
+
+function canAcceptTaskDrop(categoryId: number | null): categoryId is number {
+  return (
+    categoryId !== null &&
+    isDraggingTask.value &&
+    dragTaskId.value !== null &&
+    dragSourceCategoryId.value !== categoryId
+  )
+}
+
+function handleTaskDragEnter(event: DragEvent, categoryId: number | null) {
+  if (!canAcceptTaskDrop(categoryId)) {
+    return
+  }
+
+  event.preventDefault()
+  setHoverCategory(categoryId)
+}
+
+function handleTaskDragOver(event: DragEvent, categoryId: number | null) {
+  if (!canAcceptTaskDrop(categoryId)) {
+    return
+  }
+
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  setHoverCategory(categoryId)
+}
+
+function handleTaskDragLeave(event: DragEvent, categoryId: number | null) {
+  if (!canAcceptTaskDrop(categoryId) || hoverCategoryId.value !== categoryId) {
+    return
+  }
+
+  const currentTarget = event.currentTarget
+  if (!(currentTarget instanceof HTMLElement)) {
+    setHoverCategory(null)
+    return
+  }
+
+  const nextTarget = document.elementFromPoint(event.clientX, event.clientY)
+  if (nextTarget && currentTarget.contains(nextTarget)) {
+    return
+  }
+
+  setHoverCategory(null)
+}
+
+function handleTaskDrop(event: DragEvent, categoryId: number | null) {
+  if (!canAcceptTaskDrop(categoryId)) {
+    setHoverCategory(null)
+    return
+  }
+
+  event.preventDefault()
+  setHoverCategory(null)
+  markDropHandled(categoryId)
+}
+
+watch(isDraggingTask, (dragging) => {
+  if (!dragging) {
+    setHoverCategory(null)
+  }
+})
+
+watch(contextMenuRef, (element) => {
+  if (element && contextMenu.value.visible) {
+    repositionContextMenu()
+  }
+})
 </script>
 
 <template>
   <div class="category-list">
-    <div class="category-list__header">
-      <span class="category-list__header-label">分类</span>
-    </div>
-
-    <div class="category-list__content">
-      <ul>
+    <section class="category-list__system">
+      <div class="category-section__label">系统视图</div>
+      <ul class="category-section__list">
         <li
-          v-for="category in categories"
-          :key="category.id"
-          class="category-item"
+          v-for="entry in systemEntries"
+          :key="entry.key"
+          class="category-item category-item--system-entry"
           :class="{
-            'category-item--active':
-              appSessionStore.currentMainView === 'tasks' &&
-              appSessionStore.taskPaneView === 'active' &&
-              currentCategoryId === category.id,
-            'category-item--editing': editingCategoryId === category.id,
-            'category-item--system': category.is_system
+            'category-item--active': entry.active,
+            'category-item--drop-target':
+              entry.dropCategoryId !== null && hoverCategoryId === entry.dropCategoryId,
+            'category-item--drop-disabled':
+              isDraggingTask && entry.dropCategoryId !== null && dragSourceCategoryId === entry.dropCategoryId
           }"
-          @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"
-          @contextmenu="handleCategoryContextMenu($event, category)"
+          :data-category-drop-id="entry.dropCategoryId ?? undefined"
+          @click="handleSelectSystemEntry(entry.onClick)"
+          @dragenter="handleTaskDragEnter($event, entry.dropCategoryId)"
+          @dragover="handleTaskDragOver($event, entry.dropCategoryId)"
+          @dragleave="handleTaskDragLeave($event, entry.dropCategoryId)"
+          @drop="handleTaskDrop($event, entry.dropCategoryId)"
         >
-          <input
-            v-if="editingCategoryId === category.id"
-            ref="editInputRef"
-            v-model="editingName"
-            class="category-item__edit-input"
-            maxlength="6"
-            @keyup.enter="handleRenameConfirm"
-            @keyup.escape="cancelRename"
-            @blur="handleRenameConfirm"
-            @click.stop
-          />
-          <template v-else>
-            <span class="category-item__name">{{ category.name }}</span>
-            <span v-if="pendingCounts[category.id]" class="category-item__badge">
-              {{ pendingCounts[category.id] }}
-            </span>
-          </template>
+          <span class="category-item__name">{{ entry.label }}</span>
+          <span v-if="entry.badge" class="category-item__badge">
+            {{ entry.badge }}
+          </span>
         </li>
       </ul>
+    </section>
 
-      <div v-if="isAdding" class="category-list__input-wrapper">
-        <input
-          ref="inputRef"
-          v-model="newCategoryName"
-          class="category-list__input"
-          placeholder="输入名称..."
-          maxlength="6"
-          autofocus
-          @keyup.enter="handleAddCategory"
-          @blur="handleAddCategory"
-        />
+    <section class="category-list__categories">
+      <div class="category-section__label">分类</div>
+      <div class="category-list__categories-scroll">
+        <ul class="category-section__list category-section__list--categories">
+          <li
+            v-for="category in customCategories"
+            :key="category.id"
+            class="category-item category-item--category-entry"
+            :class="{
+              'category-item--active':
+                appSessionStore.currentMainView === 'tasks' &&
+                appSessionStore.taskPaneView === 'active' &&
+                taskListView === 'category' &&
+                currentCategoryId === category.id &&
+                editingCategoryId !== category.id,
+              'category-item--editing': editingCategoryId === category.id,
+              'category-item--input-shell': editingCategoryId === category.id,
+              'category-item--drop-target': hoverCategoryId === category.id,
+              'category-item--drop-disabled':
+                isDraggingTask && dragSourceCategoryId === category.id
+            }"
+            :data-category-drop-id="category.id"
+            @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"
+            @contextmenu="handleCategoryContextMenu($event, category)"
+            @dragenter="handleTaskDragEnter($event, category.id)"
+            @dragover="handleTaskDragOver($event, category.id)"
+            @dragleave="handleTaskDragLeave($event, category.id)"
+            @drop="handleTaskDrop($event, category.id)"
+          >
+            <input
+              v-if="editingCategoryId === category.id"
+              :ref="setEditInputRef"
+              v-model="editingName"
+              class="category-item__edit-input--embedded category-item__edit-input--category-entry"
+              maxlength="6"
+              @keyup.enter="handleRenameConfirm"
+              @keyup.escape="cancelRename"
+              @blur="cancelRename"
+              @click.stop
+            />
+            <template v-else>
+              <span class="category-item__name">{{ category.name }}</span>
+              <span v-if="pendingCounts[category.id]" class="category-item__badge">
+                {{ pendingCounts[category.id] }}
+              </span>
+            </template>
+          </li>
+
+          <li v-if="!isAdding" class="category-item category-item--create" @click="startAdding">
+            <span class="category-item__name category-item__name--muted">新建分类</span>
+          </li>
+
+          <li v-else class="category-item category-item--create-input">
+            <input
+              ref="inputRef"
+              v-model="newCategoryName"
+              class="category-item__edit-input--embedded"
+              placeholder="输入分类名称..."
+              maxlength="6"
+              autofocus
+              @keyup.enter="handleAddCategory"
+              @keyup.escape="cancelAddCategory"
+              @blur="handleAddCategory"
+            />
+          </li>
+        </ul>
       </div>
-    </div>
+    </section>
 
-    <div class="category-list__footer">
-      <button v-if="!isAdding" class="category-list__add-btn" @click="startAdding">新建分类</button>
-      <button
-        type="button"
-        class="category-list__archive-entry"
-        :class="{ 'category-list__archive-entry--active': isArchiveActive }"
-        @click="handleSelectArchive"
+    <Teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        ref="contextMenuRef"
+        class="context-menu"
+        :style="contextMenuStyle"
+        @click.stop
       >
-        已归档待办
-      </button>
-    </div>
-
-    <div
-      v-if="contextMenu.visible"
-      class="context-menu"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      @click.stop
-    >
-      <button class="context-menu__item" @click="handleRenameClick">重命名</button>
-      <div class="context-menu__divider"></div>
-      <button class="context-menu__item context-menu__item--danger" @click="handleDeleteCategory">
-        删除分类
-      </button>
-    </div>
+        <button class="context-menu__item" @click="handleRenameClick">重命名</button>
+        <div class="context-menu__divider"></div>
+        <button class="context-menu__item context-menu__item--danger" @click="handleDeleteCategory">
+          删除分类
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -213,118 +411,61 @@ const handleCategoryContextMenu = (
 .category-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   height: 100%;
+  padding: 12px 10px 14px;
   background: linear-gradient(180deg, #edf3f5 0%, #e8eef3 100%);
   border-right: 1px solid rgba(19, 78, 74, 0.07);
+  box-sizing: border-box;
 
-  &__header {
-    padding: 18px 18px 10px;
+  &__system {
+    flex-shrink: 0;
   }
 
-  &__header-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: $text-muted;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-  }
-
-  &__content {
+  &__categories {
+    min-height: 0;
     flex: 1;
-    overflow-y: auto;
-    padding: $spacing-xs 0;
-  }
-
-  &__footer {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 14px 12px;
-    border-top: 1px solid rgba(19, 78, 74, 0.06);
   }
 
-  &__add-btn {
+  &__categories-scroll {
+    min-height: 0;
+    flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    padding: $spacing-sm $spacing-md;
-    background: transparent;
-    border: 1px dashed $border-light;
-    border-radius: 12px;
-    font-size: $font-sm;
-    color: $text-muted;
-    cursor: pointer;
-    transition: all $transition-normal;
+    flex-direction: column;
+    overflow: hidden;
+  }
+}
 
-    &:hover {
-      color: $accent-color;
-      border-color: $accent-color;
-      background: $accent-soft;
-    }
+.category-section {
+  &__label {
+    margin: 0 10px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(71, 85, 105, 0.72);
+    letter-spacing: 0.08em;
   }
 
-  &__archive-entry {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    min-height: 38px;
-    padding: 10px 16px;
-    background: transparent;
-    border: none;
-    border-radius: 14px;
-    font-size: $font-sm;
-    color: $text-secondary;
-    cursor: pointer;
-    position: relative;
-    transition:
-      color 0.15s ease,
-      background-color 0.15s ease,
-      box-shadow 0.15s ease;
-    text-align: center;
+  &__list {
+    margin: 0;
+    padding: 10px 8px;
+    list-style: none;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.58),
+      0 8px 18px rgba(148, 163, 184, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-sizing: border-box;
 
-    &:hover {
-      color: $text-primary;
-      background: rgba(255, 255, 255, 0.68);
-    }
-
-    &--active {
-      color: $text-primary;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: inset 0 0 0 1px rgba(19, 78, 74, 0.06);
-
-      &::before {
-        content: '';
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        width: 6px;
-        height: 6px;
-        background: $accent-color;
-        border-radius: 50%;
-        transform: translateY(-50%);
-      }
-    }
-  }
-
-  &__input-wrapper {
-    padding: $spacing-xs $spacing-md;
-  }
-
-  &__input {
-    width: 100%;
-    background: $bg-input;
-    color: $text-primary;
-    font-size: $font-sm;
-    padding: $spacing-sm $spacing-md;
-    border: 1px solid $border-light;
-    border-radius: $radius-md;
-    outline: none;
-
-    &:focus {
-      border-color: $accent-color;
-      box-shadow: 0 0 0 3px $accent-soft;
+    &--categories {
+      min-height: 0;
+      flex: 1;
+      padding-bottom: 8px;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
     }
   }
 }
@@ -332,36 +473,43 @@ const handleCategoryContextMenu = (
 .category-item {
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
   padding: 10px 16px;
-  margin: 2px 10px;
-  font-size: $font-sm;
-  color: $text-secondary;
-  cursor: pointer;
+  margin: 0;
+  border: none;
   border-radius: 14px;
+  background: transparent;
+  color: $text-secondary;
+  font-size: $font-sm;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
   transition:
     background-color 0.15s ease,
     color 0.15s ease,
     box-shadow 0.15s ease;
-  position: relative;
-  width: calc(100% - 20px);
-  border: none;
-  background: transparent;
-  text-align: left;
+
+  & + & {
+    margin-top: 4px;
+  }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.74);
     color: $text-primary;
   }
 
   &--active {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.94);
     color: $text-primary;
-    box-shadow: inset 0 0 0 1px rgba(19, 78, 74, 0.06);
+    box-shadow:
+      inset 0 0 0 1px rgba(19, 78, 74, 0.06),
+      0 10px 22px rgba(148, 163, 184, 0.12);
 
     &::before {
       content: '';
       position: absolute;
-      left: 10px;
+      left: 11.5px;
       top: 50%;
       width: 6px;
       height: 6px;
@@ -371,12 +519,96 @@ const handleCategoryContextMenu = (
     }
   }
 
+  &--system-entry .category-item__name {
+    font-weight: 600;
+  }
+
+  &--category-entry .category-item__name {
+    padding-left: 13px;
+    padding-top: 2px;
+    line-height: 18px;
+  }
+
+  &--create,
+  &--create-input,
+  &--input-shell {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  &--create {
+    border: 1px dashed rgba($border-light, 0.95);
+    background: rgba(255, 255, 255, 0.3);
+
+    &:hover {
+      border-color: rgba($accent-color, 0.4);
+      background: rgba(255, 255, 255, 0.62);
+      box-shadow: none;
+    }
+  }
+
+  &--create-input,
+  &--input-shell {
+    border: 1px solid rgba($accent-color, 0.14);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 10px 22px rgba(148, 163, 184, 0.1);
+    cursor: text;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 10.75px;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      background: rgba($accent-color, 0.28);
+      border-radius: 50%;
+      transform: translateY(-50%);
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.94);
+      color: $text-primary;
+    }
+
+    &:focus-within {
+      border-color: rgba($accent-color, 0.18);
+      box-shadow:
+        0 0 0 3px rgba($accent-color, 0.08),
+        0 10px 22px rgba(148, 163, 184, 0.1);
+    }
+  }
+
+  &--editing {
+    cursor: text;
+  }
+
+  &--drop-target {
+    background: rgba($accent-color, 0.12);
+    color: $text-primary;
+    box-shadow:
+      inset 0 0 0 1px rgba($accent-color, 0.18),
+      0 10px 22px rgba(37, 99, 235, 0.1);
+  }
+
+  &--drop-disabled {
+    opacity: 0.74;
+  }
+
   &__name {
     flex: 1;
+    display: block;
+    box-sizing: border-box;
     padding-left: 12px;
+    padding-top: 1px;
+    line-height: 19px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    &--muted {
+      color: $text-muted;
+    }
   }
 
   &__badge {
@@ -398,29 +630,52 @@ const handleCategoryContextMenu = (
 
   &__edit-input {
     width: 100%;
-    background: $bg-input;
-    color: $text-primary;
-    font-size: $font-sm;
     padding: $spacing-sm $spacing-md;
     border: 1px solid $border-light;
     border-radius: $radius-md;
-    outline: none;
+    background: $bg-input;
+    color: $text-primary;
+    font-size: $font-sm;
     font-family: inherit;
+    outline: none;
 
     &:focus {
       border-color: $accent-color;
       box-shadow: 0 0 0 3px $accent-soft;
     }
-  }
 
-  &--editing {
-    padding: $spacing-xs $spacing-md;
-    margin: 0;
-  }
+    &--embedded {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      height: 20px;
+      padding: 0 0 1px 12px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: $text-primary;
+      font-size: inherit;
+      font-family: inherit;
+      font-weight: inherit;
+      box-shadow: none;
+      line-height: 19px;
+      appearance: none;
+      outline: none;
 
-  &--system {
-    .category-item__name {
-      font-weight: 600;
+      &::placeholder {
+        color: $text-muted;
+        opacity: 1;
+      }
+
+      &:focus {
+        border-color: transparent;
+        box-shadow: none;
+      }
+    }
+
+    &--category-entry {
+      padding: 1px 0 1px 12px;
+      line-height: 18px;
     }
   }
 }
@@ -428,25 +683,30 @@ const handleCategoryContextMenu = (
 .context-menu {
   position: fixed;
   z-index: 1000;
+  min-width: 140px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  padding: $spacing-xs;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: $glass-border;
+  border-radius: $radius-lg;
   background: $glass-bg;
   backdrop-filter: $glass-blur;
   -webkit-backdrop-filter: $glass-blur;
-  border: $glass-border;
-  border-radius: $radius-lg;
   box-shadow: $shadow-lg;
-  padding: $spacing-xs;
-  min-width: 140px;
 
   &__item {
     display: block;
     width: 100%;
     padding: $spacing-sm $spacing-md;
-    background: transparent;
     border: none;
     border-radius: $radius-sm;
-    text-align: left;
-    font-size: $font-sm;
+    background: transparent;
     color: $text-primary;
+    font-size: $font-sm;
+    text-align: left;
     cursor: pointer;
     transition: background-color $transition-fast;
 
@@ -465,8 +725,8 @@ const handleCategoryContextMenu = (
 
   &__divider {
     height: 1px;
-    background: $border-subtle;
     margin: $spacing-xs 0;
+    background: $border-subtle;
   }
 }
 </style>

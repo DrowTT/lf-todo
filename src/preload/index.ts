@@ -5,6 +5,7 @@ import type {
   TaskCreateInput,
   TaskUpdate
 } from '../shared/types/models'
+import { parseBackupImportResult } from '../shared/contracts/backup'
 import {
   parseAppInfo,
   parseArchivedTaskGroups,
@@ -25,6 +26,7 @@ import {
   parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
+  parseMoveTaskToCategoryRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseRestoreArchivedTasksRequest,
@@ -156,6 +158,8 @@ const api = {
           expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 })
         )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
+    getAllTasks: () =>
+      ipcRenderer.invoke('db:get-all-tasks').then((value) => parseTasks(value, 'db:get-all-tasks.response')),
     getArchivedTaskGroups: () =>
       ipcRenderer
         .invoke('db:get-archived-task-groups')
@@ -175,6 +179,12 @@ const api = {
       invokeWithPayload('db:create-task', input, parseCreateTaskRequest, parseTask),
     updateTask: (id: number, updates: TaskUpdate) =>
       invokeVoidWithPayload('db:update-task', { id, updates }, parseUpdateTaskRequest),
+    moveTaskToCategory: (id: number, targetCategoryId: number) =>
+      invokeVoidWithPayload(
+        'db:move-task-to-category',
+        { id, targetCategoryId },
+        parseMoveTaskToCategoryRequest
+      ),
     deleteTask: (id: number) =>
       ipcRenderer
         .invoke('db:delete-task', expectInteger(id, 'db:delete-task.request.id', { min: 1 }))
@@ -197,6 +207,10 @@ const api = {
           expectInteger(categoryId, 'db:archive-completed-tasks.request.categoryId', { min: 1 })
         )
         .then((value) => expectInteger(value, 'db:archive-completed-tasks.response', { min: 0 })),
+    archiveAllCompletedTasks: () =>
+      ipcRenderer
+        .invoke('db:archive-all-completed-tasks')
+        .then((value) => expectInteger(value, 'db:archive-all-completed-tasks.response', { min: 0 })),
     archiveTask: (id: number) =>
       invokeVoidWithPayload('db:archive-task', { id }, parseArchiveTaskRequest),
     restoreArchivedTasks: (ids: number[]) =>
@@ -305,6 +319,14 @@ const api = {
           )
         )
         .then((value) => parseVoid(value, 'settings:notify-pomodoro-completed.response')),
+    importData: () =>
+      ipcRenderer
+        .invoke('settings:import-data')
+        .then((value) => parseBackupImportResult(value, 'settings:import-data.response')),
+    mergeData: () =>
+      ipcRenderer
+        .invoke('settings:merge-import-data')
+        .then((value) => parseBackupImportResult(value, 'settings:merge-import-data.response')),
     exportData: () =>
       ipcRenderer
         .invoke('settings:export-data')

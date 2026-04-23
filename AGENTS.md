@@ -28,7 +28,8 @@
 - Preserve existing behavior unless the task explicitly changes product behavior.
 - Do not revert unrelated user changes.
 - Keep comments rare. When a comment is truly needed, write it in Chinese.
-- Default UI direction for product work: 极简、暗色优先、无边框窗口，延续现有 LF-Todo / JingyeSign 风格，除非任务明确要求改风格。
+- Default UI direction for product work: 极简、浅色 Arctic Blue 风格、无边框窗口，延续现有 LF-Todo 的清爽蓝灰与轻玻璃质感，除非任务明确要求改风格。
+- 所有 hover 效果都必须保持原位，禁止使用上浮、悬停抬升或 translate-on-hover 位移。
 
 ## Workflow
 

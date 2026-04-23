@@ -4,6 +4,7 @@ import {
   parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
+  parseMoveTaskToCategoryRequest,
   parseQuickAddSubmitRequest,
   parseReorderTasksRequest,
   parseRestoreArchivedTasksRequest,
@@ -39,6 +40,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
   ipcMain.handle('db:get-tasks', (_event, categoryId: unknown) =>
     db.getTasksByCategory(expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))
   )
+  ipcMain.handle('db:get-all-tasks', () => db.getAllTasks())
   ipcMain.handle('db:get-archived-task-groups', () => db.getArchivedTaskGroups())
   ipcMain.handle('db:search-tasks', (_event, payload: unknown) => {
     const request = parseSearchTasksRequest(payload, 'db:search-tasks.request')
@@ -95,6 +97,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
     const request = parseUpdateTaskRequest(payload, 'db:update-task.request')
     return db.updateTask(request.id, request.updates)
   })
+  ipcMain.handle('db:move-task-to-category', (_event, payload: unknown) => {
+    const request = parseMoveTaskToCategoryRequest(payload, 'db:move-task-to-category.request')
+    return db.moveTaskToCategory(request.id, request.targetCategoryId)
+  })
   ipcMain.handle('db:delete-task', (_event, id: unknown) =>
     db.deleteTask(expectInteger(id, 'db:delete-task.request.id', { min: 1 }))
   )
@@ -111,6 +117,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
       expectInteger(categoryId, 'db:archive-completed-tasks.request.categoryId', { min: 1 })
     )
   )
+  ipcMain.handle('db:archive-all-completed-tasks', () => db.archiveAllCompletedTasks())
   ipcMain.handle('db:archive-task', (_event, payload: unknown) => {
     const request = parseArchiveTaskRequest(payload, 'db:archive-task.request')
     return db.archiveTask(request.id)

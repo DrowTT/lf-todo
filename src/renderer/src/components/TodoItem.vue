@@ -37,6 +37,9 @@ const props = defineProps<{
   task: Task
   highlightQuery?: string
 }>()
+const emit = defineEmits<{
+  taskContextmenu: [event: MouseEvent, task: Task]
+}>()
 
 const isExpanded = computed(() => subTaskStore.expandedTaskIds.has(props.task.id))
 const subTasks = computed(() => subTaskStore.subTasksMap[props.task.id] ?? [])
@@ -65,10 +68,9 @@ const isPomodoroRunningForTask = computed(
 const isPomodoroBusy = computed(() => pomodoroStore.isBusy)
 const dragStartSubTaskOrder = ref<number[]>([])
 const canArchiveTask = computed(() => props.task.parent_id === null && props.task.is_completed)
-const isSystemCategoryView = computed(() =>
-  app.categories.value.some(
-    (category) => category.id === app.currentCategoryId.value && category.is_system
-  )
+const isAllTasksView = computed(() => app.isAllTasksView.value)
+const dragHandleTitle = computed(() =>
+  isAllTasksView.value ? '“全部”视图暂不支持拖拽排序' : '拖拽排序'
 )
 
 const subTaskProgress = computed(() => {
@@ -140,6 +142,13 @@ const onCardMouseLeave = () => {
   isHovered.value = false
   clearHover()
 }
+const handleContextMenu = (event: MouseEvent) => {
+  if (isEditing.value) {
+    return
+  }
+
+  emit('taskContextmenu', event, props.task)
+}
 const hasDueDate = computed(() => props.task.due_at !== null && props.task.due_precision !== null)
 const shouldShowDuePicker = computed(
   () => isEditing.value || hasDueDate.value || isHovered.value || isDuePickerOpen.value
@@ -162,7 +171,6 @@ const cardClasses = computed(() => ({
   'card--done': props.task.is_completed,
   'card--busy': isBusy.value,
   'card--search-highlight': globalSearchStore.activeHighlightTaskId === props.task.id,
-  'card--drag-disabled': isSystemCategoryView.value,
   'card--priority-high': props.task.priority === 'high',
   'card--priority-medium': props.task.priority === 'medium',
   'card--priority-low': props.task.priority === 'low'
@@ -225,6 +233,7 @@ const onSubTaskDragEnd = async () => {
     tabindex="-1"
     @mouseenter="onCardMouseEnter"
     @mouseleave="onCardMouseLeave"
+    @contextmenu="handleContextMenu"
   >
     <button
       class="card__priority-switch"
@@ -235,11 +244,7 @@ const onSubTaskDragEnd = async () => {
     ></button>
 
     <div class="card__row">
-      <div
-        class="card__drag-handle"
-        :class="{ 'card__drag-handle--disabled': isSystemCategoryView }"
-        :title="isSystemCategoryView ? '“全部”视图暂不支持拖拽排序' : '拖拽排序'"
-      >
+      <div class="card__drag-handle" :title="dragHandleTitle">
         <GripVertical :size="14" />
       </div>
 

@@ -1,9 +1,20 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import path from 'path'
-import { SYSTEM_CATEGORY_NAME, SYSTEM_CATEGORY_ORDER_INDEX } from '../../shared/constants/category'
+import {
+  LEGACY_SYSTEM_CATEGORY_NAME,
+  SYSTEM_CATEGORY_NAME,
+  SYSTEM_CATEGORY_ORDER_INDEX
+} from '../../shared/constants/category'
 import { DEFAULT_TASK_PRIORITY } from '../../shared/constants/task'
 import type { SearchTasksRequest } from '../../shared/contracts/db'
+import type {
+  BackupArchivedTaskRecord,
+  BackupCategoryRecord,
+  BackupDataPayload,
+  BackupImportSummary,
+  BackupTaskRecord
+} from '../../shared/types/backup'
 import type {
   ArchivedTaskGroup,
   TaskCreateInput,
@@ -146,6 +157,50 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_archived_tasks_archived_at ON archived_tasks(archived_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_archived_tasks_category ON archived_tasks(category_id);
     `
+  },
+  {
+    version: 11,
+    description: 'rename system category to inbox',
+    up: `
+      UPDATE categories
+      SET name = '${SYSTEM_CATEGORY_NAME}'
+      WHERE
+        is_system = 1
+        AND LOWER(TRIM(name)) = LOWER('${LEGACY_SYSTEM_CATEGORY_NAME}')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM categories AS conflict
+          WHERE
+            conflict.is_system = 0
+            AND LOWER(TRIM(conflict.name)) = LOWER('${SYSTEM_CATEGORY_NAME}')
+        );
+
+      UPDATE categories
+      SET order_index = ${SYSTEM_CATEGORY_ORDER_INDEX}
+      WHERE is_system = 1;
+    `
+  },
+  {
+    version: 12,
+    description: 'rename system category to staging area',
+    up: `
+      UPDATE categories
+      SET name = '${SYSTEM_CATEGORY_NAME}'
+      WHERE
+        is_system = 1
+        AND LOWER(TRIM(name)) = LOWER('收件箱')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM categories AS conflict
+          WHERE
+            conflict.is_system = 0
+            AND LOWER(TRIM(conflict.name)) = LOWER('${SYSTEM_CATEGORY_NAME}')
+        );
+
+      UPDATE categories
+      SET order_index = ${SYSTEM_CATEGORY_ORDER_INDEX}
+      WHERE is_system = 1;
+    `
   }
 ]
 
@@ -212,8 +267,13 @@ export function initDatabase(): void {
       INSERT INTO categories (name, order_index, is_system)
       VALUES (?, COALESCE((SELECT MAX(order_index) + 1 FROM categories), 1), 0)
     `),
+    insertCategorySnapshot: db.prepare(`
+      INSERT INTO categories (id, name, order_index, created_at, is_system)
+      VALUES (?, ?, ?, ?, ?)
+    `),
     updateCategory: db.prepare('UPDATE categories SET name = ? WHERE id = ?'),
     deleteCategory: db.prepare('DELETE FROM categories WHERE id = ?'),
+    clearCategories: db.prepare('DELETE FROM categories'),
     findCategoryByName: db.prepare('SELECT * FROM categories WHERE LOWER(TRIM(name)) = ? ORDER BY id LIMIT 1'),
     getTasksByCategory: db.prepare(`
       SELECT
@@ -235,7 +295,7 @@ export function initDatabase(): void {
       LEFT JOIN tasks s ON s.parent_id = t.id
       WHERE t.parent_id IS NULL
       GROUP BY t.id
-      ORDER BY t.order_index DESC, t.id DESC
+      ORDER BY t.created_at DESC, t.id DESC
     `),
     getSubTasks: db.prepare(
       'SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
@@ -282,7 +342,19 @@ export function initDatabase(): void {
     updateDueAt: db.prepare('UPDATE tasks SET due_at = ? WHERE id = ?'),
     updateDuePrecision: db.prepare('UPDATE tasks SET due_precision = ? WHERE id = ?'),
     updatePriority: db.prepare('UPDATE tasks SET priority = ? WHERE id = ?'),
+    getNextRootOrderIndexByCategory: db.prepare(`
+      SELECT COALESCE(MAX(order_index), 0) + 1 AS order_index
+      FROM tasks
+      WHERE category_id = ? AND parent_id IS NULL
+    `),
+    moveRootTaskToCategory: db.prepare(`
+      UPDATE tasks
+      SET category_id = ?, order_index = ?
+      WHERE id = ?
+    `),
+    moveSubTasksToCategory: db.prepare('UPDATE tasks SET category_id = ? WHERE parent_id = ?'),
     deleteTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
+    clearTasks: db.prepare('DELETE FROM tasks'),
     batchCompleteSubTasks: db.prepare(`
       UPDATE tasks
       SET
@@ -332,6 +404,40 @@ export function initDatabase(): void {
         priority
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
+    insertTaskSnapshot: db.prepare(`
+      INSERT INTO tasks (
+        id,
+        content,
+        is_completed,
+        category_id,
+        order_index,
+        created_at,
+        completed_at,
+        last_restored_at,
+        parent_id,
+        due_at,
+        due_precision,
+        priority
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertArchivedTaskSnapshot: db.prepare(`
+      INSERT INTO archived_tasks (
+        id,
+        content,
+        is_completed,
+        category_id,
+        order_index,
+        created_at,
+        completed_at,
+        last_restored_at,
+        archived_at,
+        archived_category_name,
+        parent_id,
+        due_at,
+        due_precision,
+        priority
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
     getArchivedRootTasks: db.prepare(`
       SELECT
         t.*,
@@ -346,6 +452,7 @@ export function initDatabase(): void {
     getArchivedSubTasks: db.prepare(
       'SELECT * FROM archived_tasks WHERE parent_id = ? ORDER BY order_index ASC, id ASC'
     ),
+    clearArchivedTasks: db.prepare('DELETE FROM archived_tasks'),
     getArchivedTaskRowById: db.prepare('SELECT * FROM archived_tasks WHERE id = ?'),
     getArchivedTaskTreeRows: db.prepare(`
       SELECT * FROM archived_tasks
@@ -450,6 +557,306 @@ function mapTask(raw: Record<string, unknown>): Task {
 
 function normalizeCategoryName(name: string): string {
   return name.trim().toLocaleLowerCase()
+}
+
+function assertUniqueIds<T extends { id: number }>(records: T[], label: string): void {
+  const seenIds = new Set<number>()
+
+  for (const record of records) {
+    if (seenIds.has(record.id)) {
+      throw new Error(`${label} contains duplicate id ${record.id}`)
+    }
+
+    seenIds.add(record.id)
+  }
+}
+
+function normalizeImportedCategories(categories: BackupCategoryRecord[]): BackupCategoryRecord[] {
+  const sourceCategories = categories.map((category) => ({
+    ...category,
+    name: category.name.trim()
+  }))
+  assertUniqueIds(sourceCategories, 'categories')
+
+  const systemCategoryName = normalizeCategoryName(SYSTEM_CATEGORY_NAME)
+  let systemCategoryIndex = sourceCategories.findIndex(
+    (category) => normalizeCategoryName(category.name) === systemCategoryName
+  )
+
+  if (systemCategoryIndex === -1) {
+    systemCategoryIndex = sourceCategories.findIndex((category) => category.is_system)
+  }
+
+  const normalized = sourceCategories.map((category) => ({
+    ...category,
+    is_system: false
+  }))
+
+  if (systemCategoryIndex === -1) {
+    const nextId = Math.max(0, ...normalized.map((category) => category.id)) + 1
+    normalized.push({
+      id: nextId,
+      name: SYSTEM_CATEGORY_NAME,
+      is_system: true,
+      order_index: SYSTEM_CATEGORY_ORDER_INDEX,
+      created_at: Math.floor(Date.now() / 1000)
+    })
+    systemCategoryIndex = normalized.length - 1
+  }
+
+  normalized[systemCategoryIndex] = {
+    ...normalized[systemCategoryIndex],
+    name: SYSTEM_CATEGORY_NAME,
+    is_system: true
+  }
+
+  const systemCategory = normalized[systemCategoryIndex]
+  const otherCategories = normalized
+    .filter((_, index) => index !== systemCategoryIndex)
+    .sort((left, right) => left.order_index - right.order_index || left.id - right.id)
+    .map((category, index) => ({
+      ...category,
+      is_system: false,
+      order_index: index + 1
+    }))
+
+  const result = [
+    {
+      ...systemCategory,
+      order_index: SYSTEM_CATEGORY_ORDER_INDEX
+    },
+    ...otherCategories
+  ]
+  const seenNames = new Set<string>()
+
+  for (const category of result) {
+    const normalizedName = normalizeCategoryName(category.name)
+
+    if (seenNames.has(normalizedName)) {
+      throw new Error(`categories contains duplicate name "${category.name}"`)
+    }
+
+    seenNames.add(normalizedName)
+  }
+
+  return result
+}
+
+function assertTaskRelations<T extends BackupTaskRecord | BackupArchivedTaskRecord>(
+  records: T[],
+  categoryIds: Set<number>,
+  label: string
+): void {
+  assertUniqueIds(records, label)
+  const recordsById = new Map(records.map((record) => [record.id, record]))
+
+  for (const record of records) {
+    if (!categoryIds.has(record.category_id)) {
+      throw new Error(`${label} contains task ${record.id} with unknown category ${record.category_id}`)
+    }
+
+    if (record.parent_id === null) {
+      continue
+    }
+
+    if (record.parent_id === record.id) {
+      throw new Error(`${label} contains task ${record.id} referencing itself as parent`)
+    }
+
+    const parent = recordsById.get(record.parent_id)
+    if (!parent) {
+      throw new Error(`${label} contains task ${record.id} with missing parent ${record.parent_id}`)
+    }
+
+    if (parent.parent_id !== null) {
+      throw new Error(`${label} contains nested subtask ${record.id}`)
+    }
+
+    if (parent.category_id !== record.category_id) {
+      throw new Error(
+        `${label} contains task ${record.id} with parent/category mismatch (${record.parent_id})`
+      )
+    }
+  }
+}
+
+function assertNoConflictingTaskIds(
+  tasks: BackupTaskRecord[],
+  archivedTasks: BackupArchivedTaskRecord[]
+): void {
+  const activeTaskIds = new Set(tasks.map((task) => task.id))
+
+  for (const archivedTask of archivedTasks) {
+    if (activeTaskIds.has(archivedTask.id)) {
+      throw new Error(`tasks and archivedTasks contain conflicting id ${archivedTask.id}`)
+    }
+  }
+}
+
+function sortTaskSnapshotsForMerge(records: BackupTaskRecord[]): BackupTaskRecord[] {
+  const rootTasks = records
+    .filter((record) => record.parent_id === null)
+    .sort((left, right) => right.order_index - left.order_index || right.id - left.id)
+  const subTasks = records
+    .filter((record) => record.parent_id !== null)
+    .sort(
+      (left, right) =>
+        (left.parent_id ?? 0) - (right.parent_id ?? 0) ||
+        left.order_index - right.order_index ||
+        left.id - right.id
+    )
+
+  return [...rootTasks, ...subTasks]
+}
+
+function sortTaskSnapshots<T extends BackupTaskRecord | BackupArchivedTaskRecord>(records: T[]): T[] {
+  const rootTasks = records
+    .filter((record) => record.parent_id === null)
+    .sort((left, right) => left.category_id - right.category_id || left.order_index - right.order_index || left.id - right.id)
+  const subTasks = records
+    .filter((record) => record.parent_id !== null)
+    .sort(
+      (left, right) =>
+        (left.parent_id ?? 0) - (right.parent_id ?? 0) ||
+        left.order_index - right.order_index ||
+        left.id - right.id
+    )
+
+  return [...rootTasks, ...subTasks]
+}
+
+function insertTaskSnapshot(task: BackupTaskRecord): void {
+  getStmts().insertTaskSnapshot.run(
+    task.id,
+    task.content,
+    task.is_completed,
+    task.category_id,
+    task.order_index,
+    task.created_at,
+    task.completed_at,
+    task.last_restored_at,
+    task.parent_id,
+    task.due_at,
+    task.due_precision,
+    task.priority
+  )
+}
+
+function insertArchivedTaskSnapshot(task: BackupArchivedTaskRecord): void {
+  getStmts().insertArchivedTaskSnapshot.run(
+    task.id,
+    task.content,
+    task.is_completed,
+    task.category_id,
+    task.order_index,
+    task.created_at,
+    task.completed_at,
+    task.last_restored_at,
+    task.archived_at,
+    task.archived_category_name,
+    task.parent_id,
+    task.due_at,
+    task.due_precision,
+    task.priority
+  )
+}
+
+function resolveMergedCategoryIds(
+  categories: BackupCategoryRecord[]
+): { categoryIdMap: Map<number, number>; createdCount: number } {
+  const systemCategory = getSystemCategory()
+  if (!systemCategory) {
+    throw new Error('System category is missing')
+  }
+
+  const existingByName = new Map(
+    getAllCategories().map((category) => [normalizeCategoryName(category.name), category])
+  )
+  const categoryIdMap = new Map<number, number>()
+  let createdCount = 0
+
+  for (const category of categories) {
+    const normalizedName = normalizeCategoryName(category.name)
+
+    if (category.is_system || normalizedName === normalizeCategoryName(SYSTEM_CATEGORY_NAME)) {
+      categoryIdMap.set(category.id, systemCategory.id)
+      continue
+    }
+
+    const matchedCategory = existingByName.get(normalizedName)
+    if (matchedCategory) {
+      categoryIdMap.set(category.id, matchedCategory.id)
+      continue
+    }
+
+    const createdCategory = createCategory(category.name)
+    existingByName.set(normalizedName, createdCategory)
+    categoryIdMap.set(category.id, createdCategory.id)
+    createdCount += 1
+  }
+
+  return {
+    categoryIdMap,
+    createdCount
+  }
+}
+
+function getNextMergedTaskId(): number {
+  const activeMaxRow = getDb()
+    .prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM tasks')
+    .get() as Record<string, unknown>
+  const archivedMaxRow = getDb()
+    .prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM archived_tasks')
+    .get() as Record<string, unknown>
+
+  return Math.max(activeMaxRow.max_id as number, archivedMaxRow.max_id as number) + 1
+}
+
+function createMergedRootOrderIndexAllocator(): () => number {
+  const row = getDb()
+    .prepare('SELECT MIN(order_index) AS min_order_index FROM tasks WHERE parent_id IS NULL')
+    .get() as Record<string, unknown>
+  let nextOrderIndex =
+    (typeof row.min_order_index === 'number' ? (row.min_order_index as number) : 1) - 1
+
+  return () => {
+    const current = nextOrderIndex
+    nextOrderIndex -= 1
+    return current
+  }
+}
+
+function syncTaskAutoincrementSequence(nextTaskId: number): void {
+  const currentTaskMaxRow = getDb()
+    .prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM tasks')
+    .get() as Record<string, unknown>
+  const currentTaskMaxId = currentTaskMaxRow.max_id as number
+  const targetMaxId = nextTaskId - 1
+
+  if (targetMaxId <= currentTaskMaxId) {
+    return
+  }
+
+  const systemCategory = getSystemCategory()
+  if (!systemCategory) {
+    throw new Error('System category is missing')
+  }
+
+  insertTaskSnapshot({
+    id: targetMaxId,
+    content: '__lf_todo_sequence__',
+    is_completed: false,
+    category_id: systemCategory.id,
+    order_index: 0,
+    created_at: 0,
+    completed_at: null,
+    last_restored_at: null,
+    parent_id: null,
+    due_at: null,
+    due_precision: null,
+    priority: DEFAULT_TASK_PRIORITY
+  })
+  getStmts().deleteTask.run(targetMaxId)
 }
 
 function getSystemCategory(): Category | undefined {
@@ -673,11 +1080,12 @@ export function deleteCategory(id: number): void {
 }
 
 export function getTasksByCategory(categoryId: number): Task[] {
-  const category = getCategoryById(categoryId)
-  const rows = category?.is_system
-    ? (getStmts().getAllRootTasks.all() as Record<string, unknown>[])
-    : (getStmts().getTasksByCategory.all(categoryId) as Record<string, unknown>[])
+  const rows = getStmts().getTasksByCategory.all(categoryId) as Record<string, unknown>[]
+  return mapRows(rows)
+}
 
+export function getAllTasks(): Task[] {
+  const rows = getStmts().getAllRootTasks.all() as Record<string, unknown>[]
   return mapRows(rows)
 }
 
@@ -690,10 +1098,7 @@ export function searchTasks(request: SearchTasksRequest): Task[] {
   const escapedQuery = escapeLikePattern(normalizedQuery)
   const likePattern = `%${escapedQuery}%`
   const prefixPattern = `${escapedQuery}%`
-  const categoryId =
-    request.categoryId === null || getCategoryById(request.categoryId)?.is_system
-      ? null
-      : request.categoryId
+  const categoryId = request.categoryId === null ? null : request.categoryId
 
   const sql = `
     SELECT
@@ -779,6 +1184,14 @@ export function getTaskById(id: number): Task | undefined {
   return raw ? mapTask(raw) : undefined
 }
 
+function getNextRootOrderIndex(categoryId: number): number {
+  const row = getStmts().getNextRootOrderIndexByCategory.get(categoryId) as
+    | Record<string, unknown>
+    | undefined
+
+  return typeof row?.order_index === 'number' ? row.order_index : 1
+}
+
 export function updateTask(id: number, updates: TaskUpdate): void {
   const s = getStmts()
 
@@ -807,6 +1220,33 @@ export function updateTask(id: number, updates: TaskUpdate): void {
   }
 }
 
+export function moveTaskToCategory(id: number, targetCategoryId: number): void {
+  const sourceTask = getStmts().getTaskRowById.get(id) as Record<string, unknown> | undefined
+  if (!sourceTask) {
+    throw new Error(`Task ${id} does not exist`)
+  }
+
+  if (typeof sourceTask.parent_id === 'number') {
+    throw new Error(`Task ${id} is not a root task`)
+  }
+
+  if (!getCategoryById(targetCategoryId)) {
+    throw new Error(`Category ${targetCategoryId} does not exist`)
+  }
+
+  const currentCategoryId = sourceTask.category_id as number
+  if (currentCategoryId === targetCategoryId) {
+    return
+  }
+
+  const nextOrderIndex = getNextRootOrderIndex(targetCategoryId)
+
+  getDb().transaction(() => {
+    getStmts().moveRootTaskToCategory.run(targetCategoryId, nextOrderIndex, id)
+    getStmts().moveSubTasksToCategory.run(targetCategoryId, id)
+  })()
+}
+
 export function deleteTask(id: number): void {
   getStmts().deleteTask.run(id)
 }
@@ -831,34 +1271,12 @@ export function batchCompleteSubTasks(parentId: number): number {
 
 export function getPendingTaskCounts(): Record<number, number> {
   const rows = getStmts().getPendingTaskCounts.all() as { category_id: number; count: number }[]
-  const counts = Object.fromEntries(rows.map((row) => [row.category_id, row.count])) as Record<
-    number,
-    number
-  >
-  const systemCategory = getSystemCategory()
-
-  if (systemCategory) {
-    counts[systemCategory.id] = rows.reduce((sum, row) => sum + row.count, 0)
-  }
-
-  return counts
+  return Object.fromEntries(rows.map((row) => [row.category_id, row.count])) as Record<number, number>
 }
 
 export function archiveCompletedTasks(categoryId: number): number {
-  const category = getCategoryById(categoryId)
-  const sql = category?.is_system
-    ? `
-      SELECT id
-      FROM tasks
-      WHERE
-        parent_id IS NULL
-        AND is_completed = 1
-        AND NOT EXISTS (
-          SELECT 1 FROM tasks s WHERE s.parent_id = tasks.id AND s.is_completed = 0
-        )
-      ORDER BY order_index DESC, id DESC
-    `
-    : `
+  const rows = getDb()
+    .prepare(`
       SELECT id
       FROM tasks
       WHERE
@@ -869,10 +1287,38 @@ export function archiveCompletedTasks(categoryId: number): number {
           SELECT 1 FROM tasks s WHERE s.parent_id = tasks.id AND s.is_completed = 0
         )
       ORDER BY order_index DESC, id DESC
-    `
-  const rows = category?.is_system
-    ? (getDb().prepare(sql).all() as { id: number }[])
-    : (getDb().prepare(sql).all(categoryId) as { id: number }[])
+    `)
+    .all(categoryId) as { id: number }[]
+
+  if (rows.length === 0) {
+    return 0
+  }
+
+  const archivedAt = Math.floor(Date.now() / 1000)
+
+  getDb().transaction(() => {
+    for (const row of rows) {
+      archiveTaskTree(row.id, archivedAt)
+    }
+  })()
+
+  return rows.length
+}
+
+export function archiveAllCompletedTasks(): number {
+  const rows = getDb()
+    .prepare(`
+      SELECT id
+      FROM tasks
+      WHERE
+        parent_id IS NULL
+        AND is_completed = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks s WHERE s.parent_id = tasks.id AND s.is_completed = 0
+        )
+      ORDER BY order_index DESC, id DESC
+    `)
+    .all() as { id: number }[]
 
   if (rows.length === 0) {
     return 0
@@ -985,26 +1431,200 @@ export function deleteCompletedTasksBefore(timestamp: number): number {
   return archiveCompletedTasksBefore(timestamp)
 }
 
-export function exportAllData(): {
-  categories: Category[]
-  tasks: Task[]
-  archivedTasks: Task[]
-} {
-  const categories = getAllCategories()
+export function exportAllData(): BackupDataPayload {
+  const categories = getAllCategories().map((category) => ({
+    id: category.id,
+    name: category.name,
+    is_system: category.is_system,
+    order_index: category.order_index,
+    created_at: category.created_at
+  }))
   const tasks = mapRows(
     getDb()
       .prepare('SELECT * FROM tasks ORDER BY category_id, order_index DESC, id DESC')
       .all() as Record<string, unknown>[]
-  )
+  ).map((task) => ({
+    id: task.id,
+    content: task.content,
+    is_completed: task.is_completed,
+    category_id: task.category_id,
+    order_index: task.order_index,
+    created_at: task.created_at,
+    completed_at: task.completed_at,
+    last_restored_at: task.last_restored_at,
+    parent_id: task.parent_id,
+    due_at: task.due_at,
+    due_precision: task.due_precision,
+    priority: task.priority
+  }))
   const archivedTasks = mapRows(
     getDb()
       .prepare('SELECT * FROM archived_tasks ORDER BY archived_at DESC, id DESC')
       .all() as Record<string, unknown>[]
-  )
+  ).map((task) => ({
+    id: task.id,
+    content: task.content,
+    is_completed: task.is_completed,
+    category_id: task.category_id,
+    order_index: task.order_index,
+    created_at: task.created_at,
+    completed_at: task.completed_at,
+    last_restored_at: task.last_restored_at,
+    parent_id: task.parent_id,
+    due_at: task.due_at,
+    due_precision: task.due_precision,
+    priority: task.priority,
+    archived_at: task.archived_at ?? task.completed_at ?? task.created_at,
+    archived_category_name: task.archived_category_name ?? null
+  }))
 
   return {
     categories,
     tasks,
     archivedTasks
+  }
+}
+
+export function importAllData(payload: BackupDataPayload): BackupImportSummary {
+  const categories = normalizeImportedCategories(payload.categories)
+  const categoryIds = new Set(categories.map((category) => category.id))
+  const tasks = sortTaskSnapshots(payload.tasks)
+  const archivedTasks = sortTaskSnapshots(payload.archivedTasks)
+
+  assertTaskRelations(tasks, categoryIds, 'tasks')
+  assertTaskRelations(archivedTasks, categoryIds, 'archivedTasks')
+  assertNoConflictingTaskIds(tasks, archivedTasks)
+
+  getDb().transaction(() => {
+    const statements = getStmts()
+
+    statements.clearTasks.run()
+    statements.clearArchivedTasks.run()
+    statements.clearCategories.run()
+
+    for (const category of categories) {
+      statements.insertCategorySnapshot.run(
+        category.id,
+        category.name,
+        category.order_index,
+        category.created_at,
+        category.is_system ? 1 : 0
+      )
+    }
+
+    for (const task of tasks) {
+      insertTaskSnapshot(task)
+    }
+
+    for (const task of archivedTasks) {
+      insertArchivedTaskSnapshot(task)
+    }
+
+    syncTaskAutoincrementSequence(
+      Math.max(
+        1,
+        ...tasks.map((task) => task.id + 1),
+        ...archivedTasks.map((task) => task.id + 1)
+      )
+    )
+
+    const foreignKeyIssues = getDb().pragma('foreign_key_check') as Array<Record<string, unknown>>
+    if (foreignKeyIssues.length > 0) {
+      throw new Error('Imported backup failed foreign key validation')
+    }
+  })()
+
+  return {
+    categories: categories.length,
+    tasks: tasks.length,
+    archivedTasks: archivedTasks.length
+  }
+}
+
+export function mergeImportData(payload: BackupDataPayload): BackupImportSummary {
+  const categories = normalizeImportedCategories(payload.categories)
+  const categoryIds = new Set(categories.map((category) => category.id))
+  const tasks = sortTaskSnapshotsForMerge(payload.tasks)
+  const archivedTasks = sortTaskSnapshots(payload.archivedTasks)
+
+  assertTaskRelations(tasks, categoryIds, 'tasks')
+  assertTaskRelations(archivedTasks, categoryIds, 'archivedTasks')
+  assertNoConflictingTaskIds(tasks, archivedTasks)
+
+  let createdCategoryCount = 0
+
+  getDb().transaction(() => {
+    const { categoryIdMap, createdCount } = resolveMergedCategoryIds(categories)
+    createdCategoryCount = createdCount
+
+    let nextTaskId = getNextMergedTaskId()
+    const allocateRootOrderIndex = createMergedRootOrderIndexAllocator()
+    const mergedTaskIds = new Map<number, number>()
+
+    for (const task of tasks) {
+      const mappedCategoryId = categoryIdMap.get(task.category_id)
+      if (!mappedCategoryId) {
+        throw new Error(`Missing mapped category for task ${task.id}`)
+      }
+
+      const mappedParentId =
+        task.parent_id === null ? null : (mergedTaskIds.get(task.parent_id) ?? null)
+
+      if (task.parent_id !== null && mappedParentId === null) {
+        throw new Error(`Missing merged parent for task ${task.id}`)
+      }
+
+      const mergedId = nextTaskId
+      nextTaskId += 1
+
+      insertTaskSnapshot({
+        ...task,
+        id: mergedId,
+        category_id: mappedCategoryId,
+        parent_id: mappedParentId,
+        order_index: task.parent_id === null ? allocateRootOrderIndex() : task.order_index
+      })
+      mergedTaskIds.set(task.id, mergedId)
+    }
+
+    const mergedArchivedTaskIds = new Map<number, number>()
+
+    for (const task of archivedTasks) {
+      const mappedCategoryId = categoryIdMap.get(task.category_id)
+      if (!mappedCategoryId) {
+        throw new Error(`Missing mapped category for archived task ${task.id}`)
+      }
+
+      const mappedParentId =
+        task.parent_id === null ? null : (mergedArchivedTaskIds.get(task.parent_id) ?? null)
+
+      if (task.parent_id !== null && mappedParentId === null) {
+        throw new Error(`Missing merged archived parent for task ${task.id}`)
+      }
+
+      const mergedId = nextTaskId
+      nextTaskId += 1
+
+      insertArchivedTaskSnapshot({
+        ...task,
+        id: mergedId,
+        category_id: mappedCategoryId,
+        parent_id: mappedParentId
+      })
+      mergedArchivedTaskIds.set(task.id, mergedId)
+    }
+
+    syncTaskAutoincrementSequence(nextTaskId)
+
+    const foreignKeyIssues = getDb().pragma('foreign_key_check') as Array<Record<string, unknown>>
+    if (foreignKeyIssues.length > 0) {
+      throw new Error('Merged backup failed foreign key validation')
+    }
+  })()
+
+  return {
+    categories: createdCategoryCount,
+    tasks: tasks.length,
+    archivedTasks: archivedTasks.length
   }
 }

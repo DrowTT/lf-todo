@@ -69,12 +69,16 @@ function createUnavailableCategoryRepository(): CategoryRepository {
 function createUnavailableTaskRepository(): TaskRepository {
   return {
     getTasks: createUnavailableAction<[number], Task[]>('taskRepository.getTasks'),
+    getAllTasks: createUnavailableAction<[], Task[]>('taskRepository.getAllTasks'),
     getArchivedTaskGroups: createUnavailableAction<[], ArchivedTaskGroup[]>(
       'taskRepository.getArchivedTaskGroups'
     ),
     searchTasks: createUnavailableAction<[SearchTasksInput], Task[]>('taskRepository.searchTasks'),
     createTask: createUnavailableAction<[TaskCreateInput], Task>('taskRepository.createTask'),
     updateTask: createUnavailableAction<[number, TaskUpdate], void>('taskRepository.updateTask'),
+    moveTaskToCategory: createUnavailableAction<[number, number], void>(
+      'taskRepository.moveTaskToCategory'
+    ),
     deleteTask: createUnavailableAction<[number], void>('taskRepository.deleteTask'),
     setTaskCompleted: createUnavailableAction<[number, boolean], void>(
       'taskRepository.setTaskCompleted'
@@ -84,6 +88,9 @@ function createUnavailableTaskRepository(): TaskRepository {
     ),
     archiveCompletedTasks: createUnavailableAction<[number], number>(
       'taskRepository.archiveCompletedTasks'
+    ),
+    archiveAllCompletedTasks: createUnavailableAction<[], number>(
+      'taskRepository.archiveAllCompletedTasks'
     ),
     restoreArchivedTasks: createUnavailableAction<[number[]], number>(
       'taskRepository.restoreArchivedTasks'

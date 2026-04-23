@@ -1,8 +1,9 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task } from '../../../shared/types/models'
-import type { SearchTasksInput } from '../services/repositories/taskRepository'
 import { useAppRuntime } from '../app/runtime'
+import type { SearchTasksInput } from '../services/repositories/taskRepository'
+import { useAppSessionStore } from './appSession'
 import { useCategoryStore } from './category'
 
 export type GlobalSearchScope = 'all' | 'current'
@@ -12,11 +13,17 @@ const TASK_HIGHLIGHT_DURATION_MS = 1800
 
 interface ScopeContext {
   currentCategoryId: number | null
-  isSystemCategory?: boolean
+  isAllTasksView?: boolean
+}
+
+type OpenOptions = Partial<ScopeContext> & {
+  scope?: GlobalSearchScope
+  preserveQuery?: boolean
 }
 
 export const useGlobalSearchStore = defineStore('globalSearch', () => {
   const { repositories, toast } = useAppRuntime()
+  const appSessionStore = useAppSessionStore()
   const categoryStore = useCategoryStore()
 
   const isOpen = ref(false)
@@ -33,20 +40,51 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
   let latestSearchRequestId = 0
   let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
+  function inferIsAllTasksView(): boolean {
+    return (
+      appSessionStore.currentMainView === 'tasks' &&
+      appSessionStore.taskPaneView === 'active' &&
+      appSessionStore.taskListView === 'all'
+    )
+  }
+
   function normalizeScope(
     nextScope: GlobalSearchScope,
     currentCategoryId: number | null,
-    isSystemCategory = false
+    isAllTasksView = false
   ): GlobalSearchScope {
-    if (nextScope === 'current' && currentCategoryId && !isSystemCategory) {
+    if (nextScope === 'current' && currentCategoryId !== null && !isAllTasksView) {
       return 'current'
     }
 
     return 'all'
   }
 
+  function resolveOpenOptions(
+    nextScopeOrOptions: GlobalSearchScope | OpenOptions,
+    options?: ScopeContext & {
+      preserveQuery?: boolean
+    }
+  ) {
+    if (typeof nextScopeOrOptions === 'string') {
+      return {
+        scope: nextScopeOrOptions,
+        currentCategoryId: options?.currentCategoryId ?? categoryStore.currentCategoryId,
+        isAllTasksView: options?.isAllTasksView ?? inferIsAllTasksView(),
+        preserveQuery: options?.preserveQuery ?? false
+      }
+    }
+
+    return {
+      scope: nextScopeOrOptions.scope ?? 'all',
+      currentCategoryId: nextScopeOrOptions.currentCategoryId ?? categoryStore.currentCategoryId,
+      isAllTasksView: nextScopeOrOptions.isAllTasksView ?? inferIsAllTasksView(),
+      preserveQuery: nextScopeOrOptions.preserveQuery ?? false
+    }
+  }
+
   function open(
-    nextScopeOrOptions: GlobalSearchScope | ({ scope?: GlobalSearchScope } & Partial<ScopeContext>),
+    nextScopeOrOptions: GlobalSearchScope | OpenOptions,
     options?: ScopeContext & {
       preserveQuery?: boolean
     }
@@ -55,7 +93,7 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
     const resolvedScope = normalizeScope(
       resolvedOpenOptions.scope,
       resolvedOpenOptions.currentCategoryId,
-      resolvedOpenOptions.isSystemCategory
+      resolvedOpenOptions.isAllTasksView
     )
 
     if (!isOpen.value || !resolvedOpenOptions.preserveQuery) {
@@ -83,10 +121,10 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
     nextScope: GlobalSearchScope,
     options: {
       currentCategoryId: number | null
-      isSystemCategory?: boolean
+      isAllTasksView?: boolean
     }
   ) {
-    scope.value = normalizeScope(nextScope, options.currentCategoryId, options.isSystemCategory)
+    scope.value = normalizeScope(nextScope, options.currentCategoryId, options.isAllTasksView)
     selectedIndex.value = 0
   }
 
@@ -206,31 +244,5 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
     markTaskForReveal,
     clearPendingReveal,
     highlightTask
-  }
-
-  function resolveOpenOptions(
-    nextScopeOrOptions: GlobalSearchScope | ({ scope?: GlobalSearchScope } & Partial<ScopeContext>),
-    options?: ScopeContext & {
-      preserveQuery?: boolean
-    }
-  ) {
-    if (typeof nextScopeOrOptions === 'string') {
-      return {
-        scope: nextScopeOrOptions,
-        currentCategoryId: options?.currentCategoryId ?? categoryStore.currentCategoryId,
-        isSystemCategory: options?.isSystemCategory ?? false,
-        preserveQuery: options?.preserveQuery ?? false
-      }
-    }
-
-    const currentCategory =
-      categoryStore.categories.find((category) => category.id === categoryStore.currentCategoryId) ?? null
-
-    return {
-      scope: nextScopeOrOptions.scope ?? 'all',
-      currentCategoryId: nextScopeOrOptions.currentCategoryId ?? categoryStore.currentCategoryId,
-      isSystemCategory: nextScopeOrOptions.isSystemCategory ?? currentCategory?.is_system ?? false,
-      preserveQuery: false
-    }
   }
 })

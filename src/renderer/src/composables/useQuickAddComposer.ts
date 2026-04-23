@@ -2,6 +2,7 @@ import { computed, ref, shallowRef } from 'vue'
 import type { Category, QuickAddSubmitResult } from '../../../shared/types/models'
 import { writeStoredNumber } from '../utils/localStorage'
 import { normalizeCategoryName, parseLeadingCategoryDraft } from '../utils/quickAdd'
+import { getCategoryDisplayName } from '../utils/taskNavigation'
 
 const QUICK_ADD_CATEGORY_STORAGE_KEY = 'lf-todo:quick-add-category-id'
 
@@ -18,14 +19,47 @@ interface CategoryResolution {
   matches: Category[]
 }
 
+function getCategoryLabel(category: Pick<Category, 'name' | 'is_system'>): string {
+  return getCategoryDisplayName(category) || category.name
+}
+
+function getCategoryLookupNames(category: Category): string[] {
+  const lookupNames = [category.name, getCategoryLabel(category)]
+
+  return [...new Set(lookupNames.map((name) => normalizeCategoryName(name)).filter(Boolean))]
+}
+
+function getBestLookupName(category: Category, normalizedQuery: string): string {
+  return (
+    getCategoryLookupNames(category)
+      .filter((lookupName) => lookupName.includes(normalizedQuery))
+      .sort((left, right) => {
+        const leftStartsWith = left.startsWith(normalizedQuery)
+        const rightStartsWith = right.startsWith(normalizedQuery)
+
+        if (leftStartsWith !== rightStartsWith) {
+          return leftStartsWith ? -1 : 1
+        }
+
+        if (left.length !== right.length) {
+          return left.length - right.length
+        }
+
+        return left.localeCompare(right)
+      })[0] ?? ''
+  )
+}
+
 function rankCategories(categories: Category[], query: string): Category[] {
   const normalizedQuery = normalizeCategoryName(query)
 
   return categories
-    .filter((category) => normalizeCategoryName(category.name).includes(normalizedQuery))
+    .filter((category) =>
+      getCategoryLookupNames(category).some((lookupName) => lookupName.includes(normalizedQuery))
+    )
     .sort((left, right) => {
-      const leftName = normalizeCategoryName(left.name)
-      const rightName = normalizeCategoryName(right.name)
+      const leftName = getBestLookupName(left, normalizedQuery)
+      const rightName = getBestLookupName(right, normalizedQuery)
       const leftStartsWith = leftName.startsWith(normalizedQuery)
       const rightStartsWith = rightName.startsWith(normalizedQuery)
 
@@ -54,9 +88,10 @@ export function useQuickAddComposer() {
   )
   const categoryQuery = computed(() => leadingCategoryDraft.value?.query ?? '')
   const taskContent = computed(() => draft.value.trim())
-  const defaultCategory = computed(() => {
-    return categories.value.find((category) => category.is_system) ?? null
-  })
+  const defaultCategory = computed(() => categories.value.find((category) => category.is_system) ?? null)
+  const defaultCategoryLabel = computed(() =>
+    defaultCategory.value ? getCategoryLabel(defaultCategory.value) : ''
+  )
 
   const resolution = computed<CategoryResolution>(() => {
     const query = categoryQuery.value.trim()
@@ -65,8 +100,8 @@ export function useQuickAddComposer() {
     }
 
     const normalizedQuery = normalizeCategoryName(query)
-    const exactCategory = categories.value.find(
-      (category) => normalizeCategoryName(category.name) === normalizedQuery
+    const exactCategory = categories.value.find((category) =>
+      getCategoryLookupNames(category).some((lookupName) => lookupName === normalizedQuery)
     )
 
     if (exactCategory) {
@@ -103,13 +138,13 @@ export function useQuickAddComposer() {
   })
 
   const previewMatches = computed(() => resolution.value.matches.slice(0, 3))
-  const canConfirmCategory = computed(() => {
-    return resolution.value.kind === 'existing' || resolution.value.kind === 'create'
-  })
+  const canConfirmCategory = computed(
+    () => resolution.value.kind === 'existing' || resolution.value.kind === 'create'
+  )
 
   async function loadCategories(): Promise<void> {
     if (!window.api?.db) {
-      errorMessage.value = '当前环境不支持快速新增。'
+      errorMessage.value = '当前环境不支持快捷新增。'
       return
     }
 
@@ -165,7 +200,7 @@ export function useQuickAddComposer() {
     if (resolution.value.kind === 'ambiguous') {
       const matchNames = resolution.value.matches
         .slice(0, 3)
-        .map((category) => category.name)
+        .map((category) => getCategoryLabel(category))
         .join('、')
       errorMessage.value = `匹配到多个分类：${matchNames}，请继续输入更完整的分类名。`
       return false
@@ -179,7 +214,7 @@ export function useQuickAddComposer() {
     if (resolution.value.kind === 'existing' && resolution.value.category) {
       selectedCategory.value = {
         id: resolution.value.category.id,
-        name: resolution.value.category.name,
+        name: getCategoryLabel(resolution.value.category),
         isNew: false
       }
       draft.value = parsedDraft?.remainder ?? ''
@@ -220,7 +255,7 @@ export function useQuickAddComposer() {
       (categoryQuery.value.length === 0 && defaultCategory.value
         ? {
             id: defaultCategory.value.id,
-            name: defaultCategory.value.name,
+            name: defaultCategoryLabel.value,
             isNew: false
           }
         : null)
@@ -231,7 +266,7 @@ export function useQuickAddComposer() {
     }
 
     if (!window.api?.quickAdd) {
-      errorMessage.value = '当前环境不支持快速新增。'
+      errorMessage.value = '当前环境不支持快捷新增。'
       return null
     }
 
@@ -247,7 +282,7 @@ export function useQuickAddComposer() {
 
       selectedCategory.value = {
         id: result.category.id,
-        name: result.category.name,
+        name: getCategoryLabel(result.category),
         isNew: false
       }
       writeStoredNumber(QUICK_ADD_CATEGORY_STORAGE_KEY, result.category.id)
@@ -274,6 +309,7 @@ export function useQuickAddComposer() {
     resolution,
     canConfirmCategory,
     defaultCategory,
+    defaultCategoryLabel,
     taskContent,
     loadCategories,
     clearSelectedCategory,

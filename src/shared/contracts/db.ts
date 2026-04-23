@@ -50,6 +50,11 @@ export interface ArchiveTaskRequest {
   id: number
 }
 
+export interface MoveTaskToCategoryRequest {
+  id: number
+  targetCategoryId: number
+}
+
 function parseOrderedIds(value: unknown, label: string): number[] {
   const orderedIds = expectArray(value, label, (item, itemLabel) =>
     expectInteger(item, itemLabel, { min: 1 })
@@ -250,6 +255,21 @@ export function parseArchiveTaskRequest(value: unknown, label = 'payload'): Arch
 
   return {
     id: expectInteger(record.id, `${label}.id`, { min: 1 })
+  }
+}
+
+export function parseMoveTaskToCategoryRequest(
+  value: unknown,
+  label = 'payload'
+): MoveTaskToCategoryRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['id', 'targetCategoryId'], label)
+
+  return {
+    id: expectInteger(record.id, `${label}.id`, { min: 1 }),
+    targetCategoryId: expectInteger(record.targetCategoryId, `${label}.targetCategoryId`, {
+      min: 1
+    })
   }
 }
 

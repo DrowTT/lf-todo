@@ -7,6 +7,7 @@ import type {
   SettingsData,
   UpdateStatusData
 } from '../../../../shared/types/models'
+import type { BackupImportResult } from '../../../../shared/types/backup'
 
 export interface SettingsRepository {
   isAvailable: boolean
@@ -19,6 +20,8 @@ export interface SettingsRepository {
     session: PomodoroSessionState | null
   ): Promise<PomodoroSessionState | null>
   completePomodoroSession(session: PomodoroSessionState): Promise<PomodoroData>
+  importData(): Promise<BackupImportResult>
+  mergeData(): Promise<BackupImportResult>
   exportData(): Promise<boolean>
   getAppInfo(): Promise<AppInfo>
   notifyPomodoroCompleted(durationSeconds: number): Promise<void>

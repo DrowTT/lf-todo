@@ -4,11 +4,16 @@ import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
+import { useTaskDragAutoScroll } from '../composables/useTaskDragAutoScroll'
 import { FOCUS_SEARCH_EVENT } from '../composables/useHotkeys'
+import { useContextMenu } from '../composables/useContextMenu'
 import { useSidebarResize } from '../composables/useSidebarResize'
+import { useTaskMoveDrag } from '../composables/useTaskMoveDrag'
 import { useGlobalSearchStore } from '../store/globalSearch'
 import { useTaskStore } from '../store/task'
 import { MIN_SIDEBAR_WIDTH, MIN_TODO_WIDTH } from '../../../shared/constants/layout'
+import type { Task } from '../../../shared/types/models'
+import { getCategoryDisplayName } from '../utils/taskNavigation'
 import ArchiveView from './ArchiveView.vue'
 import CategoryList from './CategoryList.vue'
 import TodoInput from './TodoInput.vue'
@@ -16,28 +21,40 @@ import TodoItem from './TodoItem.vue'
 import TodoSearchBar from './TodoSearchBar.vue'
 
 const app = useAppFacade()
-const { currentCategoryId, categories, tasks, isLoading, taskPaneView } = app
+const { currentCategoryId, tasks, isLoading, taskPaneView, taskListView } = app
 const { confirm } = useAppRuntime().confirm
 const taskStore = useTaskStore()
 const globalSearchStore = useGlobalSearchStore()
 const { sidebarWidth, startResize } = useSidebarResize()
+useTaskDragAutoScroll()
 
 const dragStartOrder = ref<number[]>([])
 const searchQuery = ref('')
 const isSearchExpanded = ref(false)
 const searchBar = ref<{ focusSearch: () => void } | null>(null)
+const {
+  menu: taskContextMenu,
+  menuRef: taskContextMenuRef,
+  open: openTaskContextMenu,
+  close: closeTaskContextMenu,
+  reposition: repositionTaskContextMenu
+} = useContextMenu<{ taskId: number }>()
+const { dragTaskId, dropHandled, dropCategoryId, startTaskMoveDrag, clearTaskMoveDrag } =
+  useTaskMoveDrag()
 
 const isArchivePane = computed(() => taskPaneView.value === 'archive')
-const currentCategory = computed(() =>
-  categories.value.find((item) => item.id === currentCategoryId.value) ?? null
-)
-const currentCategoryName = computed(() => currentCategory.value?.name ?? '未选择分类')
-const isSystemCategoryView = computed(() => currentCategory.value?.is_system ?? false)
+const currentViewTitle = computed(() => app.currentTaskViewLabel.value)
+const isAllTasksView = computed(() => app.isAllTasksView.value)
+const hasTaskScope = computed(() => app.currentTaskScopeKey.value !== null)
 const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
 const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0)
-const currentPendingCount = computed(
-  () => tasks.value.filter((task) => !task.is_completed && task.parent_id === null).length
-)
+const currentPendingCount = computed(() => {
+  if (isAllTasksView.value) {
+    return app.allPendingCount.value
+  }
+
+  return tasks.value.filter((task) => !task.is_completed && task.parent_id === null).length
+})
 const completedCount = computed(() => tasks.value.filter((task) => task.is_completed).length)
 const filteredTasks = computed(() => {
   if (!normalizedSearchQuery.value) {
@@ -48,19 +65,48 @@ const filteredTasks = computed(() => {
     task.content.toLocaleLowerCase().includes(normalizedSearchQuery.value)
   )
 })
+const taskContextMenuTask = computed(() => {
+  const taskId = taskContextMenu.value.data?.taskId
+  if (taskId === undefined) {
+    return null
+  }
+
+  return tasks.value.find((task) => task.id === taskId) ?? null
+})
+const taskMoveTargets = computed(() => {
+  const task = taskContextMenuTask.value
+  if (!task) {
+    return []
+  }
+
+  return app.categories.value
+    .filter((category) => category.id !== task.category_id)
+    .map((category) => ({
+      id: category.id,
+      label: getCategoryDisplayName(category)
+    }))
+})
 const archiveCompletedTitle = computed(() =>
-  isSystemCategoryView.value ? '归档全部分类中的已完成任务' : '归档已完成任务'
+  isAllTasksView.value ? '归档“全部”视图中的已完成任务' : '归档当前分类中的已完成任务'
 )
 const archiveCompletedLabel = computed(() =>
-  isSystemCategoryView.value
+  isAllTasksView.value
     ? `归档全部已完成 (${completedCount.value})`
     : `归档已完成 (${completedCount.value})`
 )
 const archiveCompletedConfirmText = computed(() =>
-  isSystemCategoryView.value
+  isAllTasksView.value
     ? `确认归档“全部”视图中的 ${completedCount.value} 个已完成待办吗？`
-    : `确认归档 ${completedCount.value} 个已完成待办吗？`
+    : `确认归档当前分类中的 ${completedCount.value} 个已完成待办吗？`
 )
+const taskContextMenuStyle = computed(() => ({
+  left: `${taskContextMenu.value.x}px`,
+  top: `${taskContextMenu.value.y}px`,
+  maxHeight:
+    taskContextMenu.value.maxHeight === null ? undefined : `${taskContextMenu.value.maxHeight}px`,
+  maxWidth:
+    taskContextMenu.value.maxWidth === null ? undefined : `${taskContextMenu.value.maxWidth}px`
+}))
 
 const draggableTasks = computed({
   get: () => taskStore.tasks,
@@ -76,22 +122,83 @@ const handleArchiveCompleted = async () => {
   }
 }
 
-const onDragStart = () => {
+function resolveDraggedTask(oldIndex?: number): Task | null {
+  if (oldIndex === undefined || oldIndex < 0) {
+    return null
+  }
+
+  return taskStore.tasks[oldIndex] ?? null
+}
+
+const onDragStart = (event: { oldIndex?: number }) => {
   dragStartOrder.value = taskStore.tasks.map((task) => task.id)
+
+  const draggedTask = resolveDraggedTask(event.oldIndex)
+  if (draggedTask) {
+    startTaskMoveDrag(draggedTask)
+    return
+  }
+
+  clearTaskMoveDrag()
 }
 
 const onDragEnd = async () => {
-  await app.reorderTasks(dragStartOrder.value)
+  const wasDroppedToCategory = dropHandled.value
+  const draggedTaskId = dragTaskId.value
+  const targetCategoryId = dropCategoryId.value
+
+  if (!wasDroppedToCategory && !isAllTasksView.value) {
+    await app.reorderTasks(dragStartOrder.value)
+  }
+
+  clearTaskMoveDrag()
   dragStartOrder.value = []
+
+  if (wasDroppedToCategory && draggedTaskId !== null && targetCategoryId !== null) {
+    await app.moveTaskToCategory(draggedTaskId, targetCategoryId)
+  }
+}
+
+function handleTaskDragSetData(dataTransfer: DataTransfer) {
+  dataTransfer.effectAllowed = 'move'
+  dataTransfer.setData('text/plain', 'lf-todo-task')
 }
 
 function handleFocusSearchRequested() {
   searchBar.value?.focusSearch()
 }
 
-watch([currentCategoryId, taskPaneView], () => {
+function handleTaskContextMenu(event: MouseEvent, task: Task) {
+  openTaskContextMenu(event, { taskId: task.id })
+}
+
+async function handleMoveTaskToCategory(targetCategoryId: number) {
+  const taskId = taskContextMenu.value.data?.taskId
+  closeTaskContextMenu()
+
+  if (taskId === undefined) {
+    return
+  }
+
+  await app.moveTaskToCategory(taskId, targetCategoryId)
+}
+
+watch([currentCategoryId, taskPaneView, taskListView], () => {
   searchQuery.value = ''
   isSearchExpanded.value = false
+  closeTaskContextMenu()
+})
+
+watch(taskContextMenuTask, (task) => {
+  if (!task && taskContextMenu.value.visible) {
+    closeTaskContextMenu()
+  }
+})
+
+watch(taskContextMenuRef, (element) => {
+  if (element && taskContextMenu.value.visible) {
+    repositionTaskContextMenu()
+  }
 })
 
 watch(
@@ -132,6 +239,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener(FOCUS_SEARCH_EVENT, handleFocusSearchRequested)
+  clearTaskMoveDrag()
+  closeTaskContextMenu()
 })
 </script>
 
@@ -155,17 +264,17 @@ onUnmounted(() => {
       <header class="todo-panel__header">
         <div class="todo-panel__title-group">
           <h1 class="todo-panel__title">
-            {{ currentCategoryName }}
+            {{ currentViewTitle }}
           </h1>
           <TodoSearchBar
-            v-if="currentCategoryId"
+            v-if="hasTaskScope"
             ref="searchBar"
             v-model="searchQuery"
             v-model:expanded="isSearchExpanded"
           />
         </div>
         <div class="todo-panel__actions">
-          <span v-if="currentCategoryId" class="todo-panel__badge">
+          <span v-if="hasTaskScope" class="todo-panel__badge">
             <span class="todo-panel__badge-num">
               {{ currentPendingCount }}
             </span>
@@ -173,7 +282,7 @@ onUnmounted(() => {
           </span>
           <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中...</span>
           <button
-            v-if="currentCategoryId"
+            v-if="hasTaskScope"
             :disabled="completedCount === 0 || taskStore.isArchivingCompleted"
             class="todo-panel__clear-btn"
             :title="archiveCompletedTitle"
@@ -184,7 +293,7 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <TodoInput v-if="currentCategoryId" />
+      <TodoInput v-if="hasTaskScope" />
 
       <div class="todo-panel__body">
         <div v-if="isLoading" class="todo-panel__loading">
@@ -195,19 +304,21 @@ onUnmounted(() => {
           </div>
         </div>
         <template v-else>
-          <div v-if="!currentCategoryId" class="todo-panel__empty">
+          <div v-if="!hasTaskScope" class="todo-panel__empty">
             <div class="todo-panel__empty-glow">
               <ClipboardList class="todo-panel__empty-svg" :size="32" />
             </div>
-            <div class="todo-panel__empty-title">请选择或创建一个分类</div>
-            <div class="todo-panel__empty-hint">在左侧添加分类后即可开始管理待办</div>
+            <div class="todo-panel__empty-title">请选择暂存区、全部或一个分类</div>
+            <div class="todo-panel__empty-hint">左侧导航会把系统视图、分类和归档明确分开</div>
           </div>
           <div v-else-if="tasks.length === 0" class="todo-panel__empty">
             <div class="todo-panel__empty-glow todo-panel__empty-glow--spark">
               <Sparkles class="todo-panel__empty-svg" :size="32" />
             </div>
             <div class="todo-panel__empty-title">暂无任务</div>
-            <div class="todo-panel__empty-hint">在上方输入框添加你的第一个待办吧</div>
+            <div class="todo-panel__empty-hint">
+              {{ isAllTasksView ? '这里会聚合展示所有分类中的待办' : '在上方输入框添加你的第一个待办吧' }}
+            </div>
           </div>
           <div v-else-if="filteredTasks.length === 0" class="todo-panel__empty">
             <div class="todo-panel__empty-glow">
@@ -225,13 +336,19 @@ onUnmounted(() => {
             ghost-class="card--ghost"
             drag-class="card--dragging"
             :animation="200"
-            :disabled="taskStore.isReorderingTasks || isSystemCategoryView"
+            :disabled="taskStore.isReorderingTasks"
+            :sort="!isAllTasksView"
+            :set-data="handleTaskDragSetData"
             class="todo-panel__cards"
             @start="onDragStart"
             @end="onDragEnd"
           >
             <template #item="{ element }">
-              <TodoItem :task="element" :highlight-query="searchQuery" />
+              <TodoItem
+                :task="element"
+                :highlight-query="searchQuery"
+                @task-contextmenu="handleTaskContextMenu"
+              />
             </template>
           </draggable>
           <div v-else class="todo-panel__cards">
@@ -240,11 +357,33 @@ onUnmounted(() => {
               :key="task.id"
               :task="task"
               :highlight-query="searchQuery"
+              @task-contextmenu="handleTaskContextMenu"
             />
           </div>
         </template>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="taskContextMenu.visible"
+        ref="taskContextMenuRef"
+        class="context-menu"
+        :style="taskContextMenuStyle"
+        @click.stop
+      >
+        <div class="context-menu__label">移动到</div>
+        <button
+          v-for="target in taskMoveTargets"
+          :key="target.id"
+          class="context-menu__item"
+          @click="handleMoveTaskToCategory(target.id)"
+        >
+          {{ target.label }}
+        </button>
+        <div v-if="taskMoveTargets.length === 0" class="context-menu__empty">没有可移动的分类</div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -416,8 +555,17 @@ onUnmounted(() => {
   color: $accent-color;
 
   &--spark {
-    background: linear-gradient(135deg, rgba(255, 196, 88, 0.12) 0%, rgba(255, 196, 88, 0.05) 100%);
-    color: #d97706;
+    background: linear-gradient(
+      135deg,
+      rgba(37, 99, 235, 0.14) 0%,
+      rgba(96, 165, 250, 0.08) 58%,
+      rgba(191, 219, 254, 0.18) 100%
+    );
+    border-color: rgba(37, 99, 235, 0.14);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.52),
+      0 10px 24px rgba(37, 99, 235, 0.08);
+    color: #3b82f6;
   }
 }
 
@@ -458,6 +606,62 @@ onUnmounted(() => {
   &:nth-child(3) {
     animation-delay: 0.2s;
   }
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 168px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  padding: $spacing-xs;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: $glass-border;
+  border-radius: $radius-lg;
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  -webkit-backdrop-filter: $glass-blur;
+  box-shadow: $shadow-lg;
+}
+
+.context-menu__label {
+  position: sticky;
+  top: 0;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: $glass-bg;
+  color: $text-muted;
+  letter-spacing: 0.04em;
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: $spacing-sm $spacing-md;
+  border: none;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text-primary;
+  font-size: $font-sm;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color $transition-fast,
+    color $transition-fast;
+
+  &:hover {
+    background: rgba($accent-color, 0.08);
+    color: $accent-color;
+  }
+}
+
+.context-menu__empty {
+  padding: $spacing-sm $spacing-md;
+  color: $text-muted;
+  font-size: $font-sm;
 }
 
 @keyframes pulse {

@@ -7,8 +7,10 @@ import type {
   PomodoroSessionState,
   SettingsData
 } from '../../../shared/types/models'
+import type { BackupImportResult } from '../../../shared/types/backup'
 import { useAppRuntime } from '../app/runtime'
 import { DEFAULT_FOCUS_DURATION_SECONDS } from '../../../shared/constants/pomodoro'
+import { useUndoStore } from './undo'
 
 const defaultSettings = (): SettingsData => ({
   autoLaunch: false,
@@ -35,11 +37,14 @@ const defaultAppInfo = (): AppInfo => ({
 
 export const useSettingsStore = defineStore('settings', () => {
   const runtime = useAppRuntime()
+  const undoStore = useUndoStore()
   const repository = runtime.repositories.settings
 
   const settings = ref<SettingsData>(defaultSettings())
   const appInfo = ref<AppInfo>(defaultAppInfo())
   const isLoading = ref(false)
+  const isImporting = ref(false)
+  const isMergingImport = ref(false)
   const isExporting = ref(false)
   const isSavingAutoLaunch = ref(false)
   const isSavingCloseToTray = ref(false)
@@ -175,16 +180,88 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       const exported = await repository.exportData()
       if (exported) {
-        runtime.toast.show('导出完成', 'success')
+        runtime.toast.show('备份导出完成', 'success')
       }
       markSynced()
       return exported
     } catch (err) {
-      error.value = '导出数据失败，请重试'
+      error.value = '导出备份失败，请重试'
       runtime.toast.show(error.value)
       throw err
     } finally {
       isExporting.value = false
+    }
+  }
+
+  async function importData(): Promise<BackupImportResult> {
+    if (!repository.isAvailable || isImporting.value || isMergingImport.value) {
+      return { status: 'cancelled' }
+    }
+
+    isImporting.value = true
+    error.value = ''
+
+    try {
+      const result = await repository.importData()
+
+      if (result.status === 'success') {
+        undoStore.clear()
+        runtime.toast.show(
+          `恢复完成：${result.summary.categories} 个分类，${result.summary.tasks} 个待办，${result.summary.archivedTasks} 条归档`,
+          'success'
+        )
+        markSynced()
+        return result
+      }
+
+      if (result.status === 'error') {
+        error.value = result.error.message
+        runtime.toast.show(result.error.message)
+      }
+
+      return result
+    } catch (err) {
+      error.value = '恢复备份失败，请稍后重试'
+      runtime.toast.show(error.value)
+      throw err
+    } finally {
+      isImporting.value = false
+    }
+  }
+
+  async function mergeData(): Promise<BackupImportResult> {
+    if (!repository.isAvailable || isMergingImport.value || isImporting.value) {
+      return { status: 'cancelled' }
+    }
+
+    isMergingImport.value = true
+    error.value = ''
+
+    try {
+      const result = await repository.mergeData()
+
+      if (result.status === 'success') {
+        undoStore.clear()
+        runtime.toast.show(
+          `合并完成：新增 ${result.summary.categories} 个分类，${result.summary.tasks} 个待办，${result.summary.archivedTasks} 条归档`,
+          'success'
+        )
+        markSynced()
+        return result
+      }
+
+      if (result.status === 'error') {
+        error.value = result.error.message
+        runtime.toast.show(result.error.message)
+      }
+
+      return result
+    } catch (err) {
+      error.value = '合并导入失败，请稍后重试'
+      runtime.toast.show(error.value)
+      throw err
+    } finally {
+      isMergingImport.value = false
     }
   }
 
@@ -315,6 +392,8 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     appInfo,
     isLoading,
+    isImporting,
+    isMergingImport,
     isExporting,
     isSavingAutoLaunch,
     isSavingCloseToTray,
@@ -334,6 +413,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setPomodoroActiveSession,
     completePomodoroSession,
     notifyPomodoroCompleted,
+    importData,
+    mergeData,
     exportData
   }
 })

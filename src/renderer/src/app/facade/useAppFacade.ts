@@ -1,3 +1,4 @@
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { DEFAULT_TASK_PRIORITY } from '../../../../shared/constants/task'
 import type { TaskDueState, TaskPriority } from '../../../../shared/types/models'
@@ -8,8 +9,23 @@ import { useGlobalSearchStore } from '../../store/globalSearch'
 import { useSubTaskStore } from '../../store/subtask'
 import { useTaskStore } from '../../store/task'
 import { useUndoStore } from '../../store/undo'
+import {
+  ALL_TASKS_VIEW_KEY,
+  ALL_TASKS_VIEW_LABEL,
+  getCategoryDisplayName,
+  getTaskListStorageKey
+} from '../../utils/taskNavigation'
 
 const UNDO_LABEL = '撤销'
+
+type ActiveTaskTarget =
+  | {
+      taskListView: 'all'
+    }
+  | {
+      taskListView: 'category'
+      categoryId: number
+    }
 
 export function useAppFacade() {
   const appSessionStore = useAppSessionStore()
@@ -21,11 +37,53 @@ export function useAppFacade() {
   const undoStore = useUndoStore()
   let latestTaskRequestId = 0
 
-  const { currentMainView, taskPaneView } = storeToRefs(appSessionStore)
+  const { currentMainView, taskPaneView, taskListView } = storeToRefs(appSessionStore)
   const { categories, currentCategoryId } = storeToRefs(categoryStore)
   const { tasks, isLoading, pendingCounts } = storeToRefs(taskStore)
   const { groups: archivedTaskGroups, isLoading: isArchiveLoading } = storeToRefs(archiveStore)
   const { subTasksMap, expandedTaskIds } = storeToRefs(subTaskStore)
+
+  const inboxCategory = computed(
+    () => categories.value.find((category) => category.is_system) ?? null
+  )
+  const inboxCategoryId = computed(() => inboxCategory.value?.id ?? null)
+  const currentCategory = computed(
+    () => categories.value.find((category) => category.id === currentCategoryId.value) ?? null
+  )
+  const isAllTasksView = computed(
+    () =>
+      currentMainView.value === 'tasks' &&
+      taskPaneView.value === 'active' &&
+      taskListView.value === 'all'
+  )
+  const currentTaskScopeKey = computed(() =>
+    getTaskListStorageKey(taskListView.value, currentCategoryId.value)
+  )
+  const currentTaskCreateCategoryId = computed(() => {
+    if (taskPaneView.value !== 'active') {
+      return null
+    }
+
+    if (taskListView.value === 'all') {
+      return inboxCategoryId.value
+    }
+
+    return currentCategoryId.value
+  })
+  const currentTaskViewLabel = computed(() => {
+    if (taskPaneView.value === 'archive') {
+      return '已归档待办'
+    }
+
+    if (taskListView.value === 'all') {
+      return ALL_TASKS_VIEW_LABEL
+    }
+
+    return getCategoryDisplayName(currentCategory.value) || '未选择分类'
+  })
+  const allPendingCount = computed(() =>
+    categories.value.reduce((sum, category) => sum + (pendingCounts.value[category.id] ?? 0), 0)
+  )
 
   function registerUndo(text: string, undo: () => Promise<boolean>) {
     undoStore.register({
@@ -35,8 +93,23 @@ export function useAppFacade() {
     })
   }
 
-  function isSystemCategory(categoryId: number) {
-    return categoryStore.categories.some((category) => category.id === categoryId && category.is_system)
+  function getActiveTaskTarget(): ActiveTaskTarget | null {
+    if (appSessionStore.taskPaneView !== 'active') {
+      return null
+    }
+
+    if (appSessionStore.taskListView === 'all') {
+      return { taskListView: 'all' }
+    }
+
+    if (categoryStore.currentCategoryId === null) {
+      return null
+    }
+
+    return {
+      taskListView: 'category',
+      categoryId: categoryStore.currentCategoryId
+    }
   }
 
   async function fetchCurrentTaskPane() {
@@ -44,6 +117,11 @@ export function useAppFacade() {
       taskStore.clearTasks()
       subTaskStore.reset()
       await archiveStore.fetchGroups()
+      return
+    }
+
+    if (appSessionStore.taskListView === 'all') {
+      await fetchAllTasks()
       return
     }
 
@@ -57,15 +135,27 @@ export function useAppFacade() {
     await fetchTasks(categoryId)
   }
 
-  async function ensureCategoryReady(categoryId: number) {
-    if (categoryStore.currentCategoryId !== categoryId) {
-      await selectCategory(categoryId)
+  async function ensureTaskTargetReady(target: ActiveTaskTarget) {
+    if (target.taskListView === 'all') {
+      if (
+        currentMainView.value === 'tasks' &&
+        taskPaneView.value === 'active' &&
+        taskListView.value === 'all'
+      ) {
+        return
+      }
+
+      await selectAllTasksView()
       return
     }
 
-    if (appSessionStore.taskPaneView !== 'active') {
-      appSessionStore.setTaskPaneView('active')
-      await fetchTasks(categoryId)
+    if (
+      currentMainView.value !== 'tasks' ||
+      taskPaneView.value !== 'active' ||
+      taskListView.value !== 'category' ||
+      currentCategoryId.value !== target.categoryId
+    ) {
+      await selectCategory(target.categoryId)
     }
   }
 
@@ -84,6 +174,11 @@ export function useAppFacade() {
       return
     }
 
+    if (appSessionStore.taskListView === 'all') {
+      await fetchAllTasks()
+      return
+    }
+
     if (hasCurrentCategory && categoryStore.currentCategoryId) {
       await fetchTasks(categoryStore.currentCategoryId)
       return
@@ -96,6 +191,7 @@ export function useAppFacade() {
   async function addCategory(name: string) {
     await categoryStore.addCategory(name)
     appSessionStore.setTaskPaneView('active')
+    appSessionStore.setTaskListView('category')
 
     if (categoryStore.currentCategoryId) {
       await fetchTasks(categoryStore.currentCategoryId)
@@ -109,6 +205,11 @@ export function useAppFacade() {
 
     if (appSessionStore.taskPaneView === 'archive') {
       await archiveStore.fetchGroups()
+      return
+    }
+
+    if (appSessionStore.taskListView === 'all') {
+      await fetchAllTasks()
       return
     }
 
@@ -131,10 +232,28 @@ export function useAppFacade() {
   async function selectCategory(id: number) {
     appSessionStore.setCurrentMainView('tasks')
     appSessionStore.setTaskPaneView('active')
+    appSessionStore.setTaskListView('category')
     categoryStore.selectCategory(id)
     archiveStore.clearSelection()
     subTaskStore.reset()
     await fetchTasks(id)
+  }
+
+  async function selectAllTasksView() {
+    if (
+      appSessionStore.currentMainView === 'tasks' &&
+      appSessionStore.taskPaneView === 'active' &&
+      appSessionStore.taskListView === 'all'
+    ) {
+      return
+    }
+
+    appSessionStore.setCurrentMainView('tasks')
+    appSessionStore.setTaskPaneView('active')
+    appSessionStore.setTaskListView('all')
+    archiveStore.clearSelection()
+    subTaskStore.reset()
+    await fetchAllTasks()
   }
 
   async function selectArchivePane() {
@@ -163,11 +282,34 @@ export function useAppFacade() {
     const requestId = ++latestTaskRequestId
     await taskStore.fetchTasks(categoryId)
 
-    if (requestId !== latestTaskRequestId || categoryStore.currentCategoryId !== categoryId) {
+    if (
+      requestId !== latestTaskRequestId ||
+      appSessionStore.currentMainView !== 'tasks' ||
+      appSessionStore.taskPaneView !== 'active' ||
+      appSessionStore.taskListView !== 'category' ||
+      categoryStore.currentCategoryId !== categoryId
+    ) {
       return
     }
 
-    subTaskStore.loadExpandedForCategory(categoryId)
+    subTaskStore.loadExpandedForScope(categoryId)
+    await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
+  }
+
+  async function fetchAllTasks() {
+    const requestId = ++latestTaskRequestId
+    await taskStore.fetchAllTasks()
+
+    if (
+      requestId !== latestTaskRequestId ||
+      appSessionStore.currentMainView !== 'tasks' ||
+      appSessionStore.taskPaneView !== 'active' ||
+      appSessionStore.taskListView !== 'all'
+    ) {
+      return
+    }
+
+    subTaskStore.loadExpandedForScope(ALL_TASKS_VIEW_KEY)
     await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
   }
 
@@ -178,7 +320,7 @@ export function useAppFacade() {
       priority?: TaskPriority
     }
   ) {
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = currentTaskCreateCategoryId.value
     if (!categoryId || appSessionStore.taskPaneView !== 'active') return false
 
     return await taskStore.addTask(
@@ -190,27 +332,27 @@ export function useAppFacade() {
   }
 
   async function toggleTask(id: number) {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') return false
+    if (appSessionStore.taskPaneView !== 'active') return false
 
     return await taskStore.toggleTask(id)
   }
 
   async function deleteTask(id: number) {
-    const viewCategoryId = categoryStore.currentCategoryId
-    if (!viewCategoryId || appSessionStore.taskPaneView !== 'active') return false
+    const activeTarget = getActiveTaskTarget()
+    const scopeKey = currentTaskScopeKey.value
+    if (!activeTarget || scopeKey === null) return false
 
     const deleted = await taskStore.deleteTask(id)
     if (!deleted) return false
 
-    subTaskStore.removeTask(id, viewCategoryId)
-    const persistReorder = !isSystemCategory(viewCategoryId)
+    subTaskStore.removeTask(id, scopeKey)
+    const persistReorder = activeTarget.taskListView !== 'all'
 
     registerUndo('任务已删除', async () => {
-      await ensureCategoryReady(viewCategoryId)
+      await ensureTaskTargetReady(activeTarget)
       await taskStore.restoreDeletedTask(deleted, {
         persistReorder,
-        viewCategoryId
+        viewScopeKey: scopeKey
       })
       return true
     })
@@ -224,23 +366,43 @@ export function useAppFacade() {
   }
 
   async function archiveCompletedTasks() {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') {
+    const activeTarget = getActiveTaskTarget()
+    const scopeKey = currentTaskScopeKey.value
+    if (!activeTarget || scopeKey === null) {
       return undefined
     }
 
-    const archived = await taskStore.archiveCompletedTasks(categoryId)
+    if (activeTarget.taskListView === 'all') {
+      const archived = await taskStore.archiveAllCompletedTasks()
+      if (!archived) {
+        return undefined
+      }
+
+      subTaskStore.removeCompletedTasks(archived.taskIds, scopeKey)
+
+      registerUndo(`已归档 ${archived.taskIds.length} 个已完成任务`, async () => {
+        await archiveStore.restoreTasks(archived.taskIds)
+        await categoryStore.fetchCategories()
+        await taskStore.initPendingCounts()
+        await ensureTaskTargetReady(activeTarget)
+        return true
+      })
+
+      return archived
+    }
+
+    const archived = await taskStore.archiveCompletedTasks(activeTarget.categoryId)
     if (!archived) {
       return undefined
     }
 
-    subTaskStore.removeCompletedTasks(archived.taskIds, categoryId)
+    subTaskStore.removeCompletedTasks(archived.taskIds, scopeKey)
 
     registerUndo(`已归档 ${archived.taskIds.length} 个已完成任务`, async () => {
       await archiveStore.restoreTasks(archived.taskIds)
       await categoryStore.fetchCategories()
       await taskStore.initPendingCounts()
-      await ensureCategoryReady(categoryId)
+      await ensureTaskTargetReady(activeTarget)
       return true
     })
 
@@ -248,8 +410,9 @@ export function useAppFacade() {
   }
 
   async function archiveTask(id: number) {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') {
+    const activeTarget = getActiveTaskTarget()
+    const scopeKey = currentTaskScopeKey.value
+    if (!activeTarget || scopeKey === null) {
       return undefined
     }
 
@@ -258,13 +421,13 @@ export function useAppFacade() {
       return undefined
     }
 
-    subTaskStore.removeTask(id, categoryId)
+    subTaskStore.removeTask(id, scopeKey)
 
     registerUndo('任务已归档', async () => {
       await archiveStore.restoreTasks([id])
       await categoryStore.fetchCategories()
       await taskStore.initPendingCounts()
-      await ensureCategoryReady(categoryId)
+      await ensureTaskTargetReady(activeTarget)
       return true
     })
 
@@ -283,10 +446,7 @@ export function useAppFacade() {
     const restoredCount = await archiveStore.restoreTasks(ids)
     await categoryStore.fetchCategories()
     await taskStore.initPendingCounts()
-
-    if (appSessionStore.taskPaneView === 'active' && categoryStore.currentCategoryId) {
-      await fetchTasks(categoryStore.currentCategoryId)
-    }
+    await fetchCurrentTaskPane()
 
     return restoredCount
   }
@@ -295,8 +455,17 @@ export function useAppFacade() {
     globalSearchStore.markTaskForReveal(taskId)
 
     if (
+      appSessionStore.currentMainView === 'tasks' &&
+      appSessionStore.taskPaneView === 'active' &&
+      appSessionStore.taskListView === 'all'
+    ) {
+      return
+    }
+
+    if (
       appSessionStore.currentMainView !== 'tasks' ||
       appSessionStore.taskPaneView !== 'active' ||
+      appSessionStore.taskListView !== 'category' ||
       categoryStore.currentCategoryId !== categoryId
     ) {
       await selectCategory(categoryId)
@@ -304,19 +473,31 @@ export function useAppFacade() {
   }
 
   async function reorderTasks(previousOrderedIds: number[]) {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') return false
+    const activeTarget = getActiveTaskTarget()
+    if (!activeTarget || appSessionStore.taskPaneView !== 'active') return false
 
     return await taskStore.reorderTasks(previousOrderedIds, {
-      persist: !isSystemCategory(categoryId)
+      persist: activeTarget.taskListView !== 'all'
+    })
+  }
+
+  async function moveTaskToCategory(id: number, targetCategoryId: number) {
+    if (appSessionStore.taskPaneView !== 'active') {
+      return false
+    }
+
+    return await taskStore.moveTaskToCategory(id, targetCategoryId, {
+      taskListView: appSessionStore.taskListView,
+      currentCategoryId: categoryStore.currentCategoryId,
+      scopeKey: currentTaskScopeKey.value
     })
   }
 
   async function toggleExpand(taskId: number) {
-    const categoryId = categoryStore.currentCategoryId
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') return false
+    const scopeKey = currentTaskScopeKey.value
+    if (scopeKey === null || appSessionStore.taskPaneView !== 'active') return false
 
-    return await subTaskStore.toggleExpand(taskId, categoryId)
+    return await subTaskStore.toggleExpand(taskId, scopeKey)
   }
 
   async function addSubTask(content: string, parentId: number) {
@@ -330,22 +511,14 @@ export function useAppFacade() {
   }
 
   async function deleteSubTask(id: number, parentId: number) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    const activeTarget = getActiveTaskTarget()
+    if (!activeTarget || appSessionStore.taskPaneView !== 'active') return false
 
-    const viewCategoryId = categoryStore.currentCategoryId
     const deleted = await subTaskStore.deleteSubTask(id, parentId)
     if (!deleted) return false
 
     registerUndo('子任务已删除', async () => {
-      const categoryId =
-        viewCategoryId ??
-        deleted.parentSnapshot?.category_id ??
-        taskStore.tasks.find((task) => task.id === parentId)?.category_id
-
-      if (categoryId) {
-        await ensureCategoryReady(categoryId)
-      }
-
+      await ensureTaskTargetReady(activeTarget)
       await subTaskStore.restoreDeletedSubTask(deleted)
       return true
     })
@@ -367,8 +540,17 @@ export function useAppFacade() {
     undoStore,
     currentMainView,
     taskPaneView,
+    taskListView,
     categories,
     currentCategoryId,
+    currentCategory,
+    inboxCategory,
+    inboxCategoryId,
+    isAllTasksView,
+    currentTaskScopeKey,
+    currentTaskCreateCategoryId,
+    currentTaskViewLabel,
+    allPendingCount,
     tasks,
     archivedTaskGroups,
     isLoading,
@@ -382,8 +564,10 @@ export function useAppFacade() {
     deleteCategory,
     updateCategory,
     selectCategory,
+    selectAllTasksView,
     selectArchivePane,
     fetchTasks,
+    fetchAllTasks,
     addTask,
     toggleTask,
     deleteTask,
@@ -394,6 +578,7 @@ export function useAppFacade() {
     restoreArchivedTasks,
     revealTask,
     reorderTasks,
+    moveTaskToCategory,
     toggleExpand,
     addSubTask,
     toggleSubTask,

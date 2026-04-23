@@ -11,6 +11,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async getTasks(categoryId) {
       return parseTasks(await api.db.getTasks(categoryId), 'db:get-tasks.response')
     },
+    async getAllTasks() {
+      return parseTasks(await api.db.getAllTasks(), 'db:get-all-tasks.response')
+    },
     async getArchivedTaskGroups() {
       return parseArchivedTaskGroups(
         await api.db.getArchivedTaskGroups(),
@@ -26,6 +29,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async updateTask(id, updates) {
       await api.db.updateTask(id, updates)
     },
+    async moveTaskToCategory(id, targetCategoryId) {
+      await api.db.moveTaskToCategory(id, targetCategoryId)
+    },
     async deleteTask(id) {
       await api.db.deleteTask(id)
     },
@@ -40,6 +46,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     },
     async archiveCompletedTasks(categoryId) {
       return await api.db.archiveCompletedTasks(categoryId)
+    },
+    async archiveAllCompletedTasks() {
+      return await api.db.archiveAllCompletedTasks()
     },
     async archiveTask(id) {
       await api.db.archiveTask(id)
