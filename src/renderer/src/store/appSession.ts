@@ -144,7 +144,9 @@ export const useAppSessionStore = defineStore('appSession', () => {
       taskPaneView: taskPaneView.value,
       taskListView: taskListView.value,
       categoryId:
-        selectedTaskView.value.kind === 'category' ? selectedTaskView.value.categoryId : null
+        selectedTaskView.value.kind === 'category'
+          ? selectedTaskView.value.categoryId
+          : readStoredNumber(CURRENT_CATEGORY_STORAGE_KEY)
     })
   }
 

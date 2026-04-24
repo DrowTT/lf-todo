@@ -16,7 +16,9 @@ const appSessionStore = useAppSessionStore()
 
 const content = ref(appSessionStore.getTaskDraft(app.currentTaskScopeKey.value))
 const dueState = ref(appSessionStore.getTaskDueDraft(app.currentTaskScopeKey.value))
-const priority = ref<TaskPriority>(appSessionStore.getTaskPriorityDraft(app.currentTaskScopeKey.value))
+const priority = ref<TaskPriority>(
+  appSessionStore.getTaskPriorityDraft(app.currentTaskScopeKey.value)
+)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
@@ -126,7 +128,9 @@ watch(priority, (value) => {
       </div>
     </div>
     <p v-if="isAllTasksView" class="todo-input__hint">
-      {{ `“全部”只是聚合浏览视图，这里新建的任务会先进入${SYSTEM_CATEGORY_NAME}，再出现在全部列表中。` }}
+      {{
+        `“全部”只是聚合浏览视图，这里新建的任务会先进入${SYSTEM_CATEGORY_NAME}，再出现在全部列表中。`
+      }}
     </p>
   </div>
 </template>

@@ -140,7 +140,15 @@ export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
   const record = expectRecord(value, label)
   assertAllowedKeys(
     record,
-    ['content', 'description', 'is_completed', 'order_index', 'due_at', 'due_precision', 'priority'],
+    [
+      'content',
+      'description',
+      'is_completed',
+      'order_index',
+      'due_at',
+      'due_precision',
+      'priority'
+    ],
     label
   )
 

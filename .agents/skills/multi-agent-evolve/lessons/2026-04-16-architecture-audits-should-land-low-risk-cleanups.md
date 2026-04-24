@@ -1,9 +1,9 @@
 ---
-date: "2026-04-16"
+date: '2026-04-16'
 task_type: refactor
 change_scope: lesson-only
 verdict: PASS
-title: "全项目架构审查应先落地低风险结构清理，再评估高风险重构"
+title: '全项目架构审查应先落地低风险结构清理，再评估高风险重构'
 ---
 
 ## 任务概况
@@ -11,6 +11,7 @@ title: "全项目架构审查应先落地低风险结构清理，再评估高风
 用户要求对 LF-Todo 做全项目架构审查，评估巨型组件、冗余内容、未使用函数/文件、可提炼公共部分，并在本轮直接做优化。协调器按标准流程先启动 `code_mapper` 和 `reviewer` 做只读勘察，再交给单一 `implementation_worker` 落地一组低风险高收益改动，最后由独立 `verifier` 运行 `pnpm verify:agent:standard`，结果通过。
 
 本轮实际修改集中在：
+
 - `src/renderer/src/components/SettingsPanel.vue`
 - `src/renderer/src/composables/useHotkeyRecorder.ts`
 - `src/shared/contracts/taskFields.ts`

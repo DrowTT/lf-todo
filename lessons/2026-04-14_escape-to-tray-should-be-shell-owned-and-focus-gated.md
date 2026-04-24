@@ -9,6 +9,7 @@ title: 'Escape-to-tray should be shell-owned and gated by non-interactive focus'
 ## 问题描述
 
 为主窗口增加 `Esc` 隐藏到托盘时，应用里已经存在多种 `Esc` 语义：
+
 - 设置页用 `Esc` 返回任务页
 - 搜索框用 `Esc` 清空或收起
 - 确认弹窗用 `Esc` 取消
@@ -19,6 +20,7 @@ title: 'Escape-to-tray should be shell-owned and gated by non-interactive focus'
 ## 根因分析
 
 这类交互横跨了两个边界：
+
 - “隐藏主窗口到托盘”是应用壳能力，应该由主进程窗口桥接统一提供，而不是让渲染层直接复刻关闭逻辑。
 - `Esc` 是否应该命中这个全局行为，取决于当前焦点是不是还在某个局部交互里，不能只看输入框，还要排除按钮、下拉、带角色或 `tabindex` 的可交互元素。
 

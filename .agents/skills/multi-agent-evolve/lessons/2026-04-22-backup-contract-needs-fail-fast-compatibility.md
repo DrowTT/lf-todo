@@ -1,9 +1,9 @@
 ---
-date: "2026-04-22"
+date: '2026-04-22'
 task_type: feature
 change_scope: heuristic-update
 verdict: PARTIAL
-title: "备份合同改动除了 full 构建，还要补 contract 场景验证"
+title: '备份合同改动除了 full 构建，还要补 contract 场景验证'
 ---
 
 ## 任务概况

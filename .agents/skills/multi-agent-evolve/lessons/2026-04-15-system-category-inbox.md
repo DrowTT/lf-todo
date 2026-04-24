@@ -1,9 +1,9 @@
 ---
-date: "2026-04-15"
+date: '2026-04-15'
 task_type: feature
 change_scope: heuristic-update
 verdict: PASS
-title: "固定 Inbox 分类在 LF-Todo 中应优先建模为真实受保护分类"
+title: '固定 Inbox 分类在 LF-Todo 中应优先建模为真实受保护分类'
 ---
 
 ## 任务概况

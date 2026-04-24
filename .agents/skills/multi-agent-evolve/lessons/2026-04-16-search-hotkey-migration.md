@@ -1,9 +1,9 @@
 ---
-date: "2026-04-16"
+date: '2026-04-16'
 task_type: bugfix
 change_scope: lesson-only
 verdict: PASS
-title: "搜索交互拆分后，要把旧热键配置迁移和运行时优先级一起验收"
+title: '搜索交互拆分后，要把旧热键配置迁移和运行时优先级一起验收'
 ---
 
 ## 任务概况

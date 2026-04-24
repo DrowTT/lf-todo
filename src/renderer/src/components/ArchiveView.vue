@@ -37,8 +37,8 @@ const filteredGroups = computed(() => {
   })
 })
 const visibleIds = computed(() => filteredGroups.value.map((group) => group.task.id))
-const selectedVisibleCount = computed(() =>
-  visibleIds.value.filter((id) => archiveStore.isSelected(id)).length
+const selectedVisibleCount = computed(
+  () => visibleIds.value.filter((id) => archiveStore.isSelected(id)).length
 )
 const areAllVisibleSelected = computed(
   () => visibleIds.value.length > 0 && selectedVisibleCount.value === visibleIds.value.length
@@ -79,7 +79,9 @@ async function handleRestore(ids: number[]) {
   }
 
   const restoredGroup =
-    ids.length === 1 ? archiveStore.groups.find((group) => group.task.id === ids[0]) ?? null : null
+    ids.length === 1
+      ? (archiveStore.groups.find((group) => group.task.id === ids[0]) ?? null)
+      : null
   restoringIds.value = [...new Set([...restoringIds.value, ...ids])]
 
   try {
@@ -141,11 +143,7 @@ onUnmounted(() => {
     <header class="archive-panel__header">
       <div class="archive-panel__title-group">
         <h1 class="archive-panel__title">已归档待办</h1>
-        <TodoSearchBar
-          ref="searchBar"
-          v-model="searchQuery"
-          v-model:expanded="isSearchExpanded"
-        />
+        <TodoSearchBar ref="searchBar" v-model="searchQuery" v-model:expanded="isSearchExpanded" />
       </div>
 
       <div class="archive-panel__actions">
@@ -351,7 +349,11 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     border-radius: 20px;
-    background: linear-gradient(135deg, rgba($accent-color, 0.08) 0%, rgba($accent-color, 0.04) 100%);
+    background: linear-gradient(
+      135deg,
+      rgba($accent-color, 0.08) 0%,
+      rgba($accent-color, 0.04) 100%
+    );
     border: 1px solid rgba($accent-color, 0.1);
     color: $accent-color;
   }

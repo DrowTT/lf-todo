@@ -6,7 +6,7 @@ import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useGlobalSearchStore, type GlobalSearchScope } from '../store/globalSearch'
 import { buildSearchHighlightParts, buildSearchSnippet } from '../utils/searchHighlight'
-import { getCategoryDisplayName } from '../utils/taskNavigation'
+import { getCategoryDisplayName, isResolvedCategoryTaskView } from '../utils/taskNavigation'
 import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 
 const SEARCH_DEBOUNCE_MS = 140
@@ -22,7 +22,6 @@ const FOCUSABLE_SELECTOR = [
 const app = useAppFacade()
 const globalSearchStore = useGlobalSearchStore()
 
-const { categories, currentCategoryId } = storeToRefs(app.categoryStore)
 const { isOpen, query, scope, results, isLoading, selectedIndex, selectedTask } =
   storeToRefs(globalSearchStore)
 
@@ -31,15 +30,19 @@ const panelRef = ref<HTMLElement | null>(null)
 const listboxId = 'global-search-listbox'
 const descriptionId = 'global-search-description'
 
-const currentCategory = computed(
-  () => categories.value.find((category) => category.id === currentCategoryId.value) ?? null
+const selectedTaskView = computed(() => app.selectedTaskView.value)
+const currentCategoryId = computed(() =>
+  isResolvedCategoryTaskView(selectedTaskView.value) ? selectedTaskView.value.categoryId : null
 )
-const isAllTasksView = computed(() => app.isAllTasksView.value)
+const currentCategory = computed(
+  () => app.categories.value.find((category) => category.id === currentCategoryId.value) ?? null
+)
+const canSearchCurrentScope = computed(() => isResolvedCategoryTaskView(selectedTaskView.value))
 const currentCategoryLabel = computed(
   () => getCategoryDisplayName(currentCategory.value) || '未选择分类'
 )
 const currentScopeLabel = computed(() =>
-  isAllTasksView.value ? '当前视图（全部）' : `当前分类 · ${currentCategoryLabel.value}`
+  canSearchCurrentScope.value ? `当前分类 · ${currentCategoryLabel.value}` : '当前视图（全部）'
 )
 const activeDescendantId = computed(() =>
   selectedTask.value ? `global-search-option-${selectedTask.value.id}` : undefined
@@ -49,7 +52,7 @@ const scopeOptions = computed<{ value: GlobalSearchScope; label: string; disable
     {
       value: 'current',
       label: currentScopeLabel.value,
-      disabled: currentCategoryId.value === null || isAllTasksView.value
+      disabled: !canSearchCurrentScope.value
     },
     {
       value: 'all',
@@ -64,7 +67,7 @@ const panelHint = computed(() => {
       return `正在“${currentCategoryLabel.value}”中搜索`
     }
 
-    if (isAllTasksView.value) {
+    if (!canSearchCurrentScope.value) {
       return '当前位于“全部”视图，将在所有任务中搜索'
     }
 
@@ -83,7 +86,8 @@ const panelHint = computed(() => {
 })
 
 const getTaskDescription = (task: Task) => task.description?.trim() ?? ''
-const getTaskDescriptionPreview = (task: Task) => buildSearchSnippet(getTaskDescription(task), query.value)
+const getTaskDescriptionPreview = (task: Task) =>
+  buildSearchSnippet(getTaskDescription(task), query.value)
 const shouldShowDescription = (task: Task) => Boolean(getTaskDescription(task))
 const getSubTaskMatchPreviews = (task: Task) =>
   (task.search_subtask_matches ?? []).map((content) => buildSearchSnippet(content, query.value, 28))
@@ -130,10 +134,7 @@ async function runSearch() {
     return
   }
 
-  const categoryId =
-    scope.value === 'current' && currentCategoryId.value !== null && !isAllTasksView.value
-      ? currentCategoryId.value
-      : null
+  const categoryId = scope.value === 'current' ? currentCategoryId.value : null
 
   await globalSearchStore.search({
     query: normalizedQuery,
@@ -169,7 +170,7 @@ function getDueLabel(task: Task): string {
 }
 
 function getTaskCategoryLabel(task: Task): string {
-  const category = categories.value.find((item) => item.id === task.category_id)
+  const category = app.categories.value.find((item) => item.id === task.category_id)
   return getCategoryDisplayName(category) || '未知分类'
 }
 
@@ -254,7 +255,8 @@ function handlePanelKeydown(event: KeyboardEvent) {
 
   const firstElement = focusableElements[0]
   const lastElement = focusableElements[focusableElements.length - 1]
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null
   const isFocusInsidePanel = !!activeElement && !!panelRef.value?.contains(activeElement)
 
   if (event.shiftKey) {
@@ -281,15 +283,15 @@ function handlePanelMouseDown(event: MouseEvent) {
 
 function handleScopeChange(nextScope: GlobalSearchScope) {
   globalSearchStore.setScope(nextScope, {
-    currentCategoryId: currentCategoryId.value,
-    isAllTasksView: isAllTasksView.value
+    taskView: selectedTaskView.value
   })
   focusInput()
 }
 
 watch(isOpen, (opened) => {
   if (opened) {
-    restoreFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    restoreFocusTarget =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     focusInput()
     scheduleSearch()
     return
@@ -298,18 +300,17 @@ watch(isOpen, (opened) => {
   clearSearchTimer()
 })
 
-watch([isOpen, isAllTasksView, currentCategoryId], ([opened, allTasksView, categoryId]) => {
+watch([isOpen, selectedTaskView], ([opened, taskView]) => {
   if (!opened) {
     return
   }
 
   globalSearchStore.setScope(scope.value, {
-    currentCategoryId: categoryId,
-    isAllTasksView: allTasksView
+    taskView
   })
 })
 
-watch([isOpen, query, scope, currentCategoryId, isAllTasksView], () => {
+watch([isOpen, query, scope, selectedTaskView], () => {
   scheduleSearch()
 })
 
@@ -332,7 +333,12 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <Transition name="global-search-backdrop">
-      <div v-if="isOpen" class="global-search__backdrop" aria-hidden="true" @click="closeDialog"></div>
+      <div
+        v-if="isOpen"
+        class="global-search__backdrop"
+        aria-hidden="true"
+        @click="closeDialog"
+      ></div>
     </Transition>
 
     <Transition name="global-search-panel">
@@ -415,7 +421,13 @@ onBeforeUnmount(() => {
               <span>没有找到匹配任务，试试更短的关键词</span>
             </div>
 
-            <ul v-else :id="listboxId" class="global-search__list" role="listbox" aria-label="搜索结果">
+            <ul
+              v-else
+              :id="listboxId"
+              class="global-search__list"
+              role="listbox"
+              aria-label="搜索结果"
+            >
               <li
                 v-for="(task, index) in results"
                 :id="`global-search-option-${task.id}`"
@@ -440,17 +452,17 @@ onBeforeUnmount(() => {
                   </div>
                   <div v-if="shouldShowDescription(task)" class="global-search__option-description">
                     <template
-                      v-for="(part, partIndex) in buildSearchHighlightParts(getTaskDescriptionPreview(task), query)"
+                      v-for="(part, partIndex) in buildSearchHighlightParts(
+                        getTaskDescriptionPreview(task),
+                        query
+                      )"
                       :key="`${task.id}-desc-${partIndex}`"
                     >
                       <mark v-if="part.matched" class="global-search__mark">{{ part.text }}</mark>
                       <span v-else>{{ part.text }}</span>
                     </template>
                   </div>
-                  <div
-                    v-if="shouldShowSubTaskMatches(task)"
-                    class="global-search__option-subtasks"
-                  >
+                  <div v-if="shouldShowSubTaskMatches(task)" class="global-search__option-subtasks">
                     <div
                       v-for="(subTaskPreview, subTaskIndex) in getSubTaskMatchPreviews(task)"
                       :key="`${task.id}-subtask-${subTaskIndex}`"
@@ -459,10 +471,15 @@ onBeforeUnmount(() => {
                       <span class="global-search__subtask-prefix">子</span>
                       <span class="global-search__subtask-text">
                         <template
-                          v-for="(part, partIndex) in buildSearchHighlightParts(subTaskPreview, query)"
+                          v-for="(part, partIndex) in buildSearchHighlightParts(
+                            subTaskPreview,
+                            query
+                          )"
                           :key="`${task.id}-subtask-${subTaskIndex}-${partIndex}`"
                         >
-                          <mark v-if="part.matched" class="global-search__mark">{{ part.text }}</mark>
+                          <mark v-if="part.matched" class="global-search__mark">{{
+                            part.text
+                          }}</mark>
                           <span v-else>{{ part.text }}</span>
                         </template>
                       </span>

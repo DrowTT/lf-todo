@@ -1,5 +1,5 @@
 ---
-name: "multi-agent-evolve"
+name: 'multi-agent-evolve'
 description: "Continuously improve LF-Todo's repository-local multi-agent workflow after non-trivial multi-agent runs. Use whenever a multi-agent task finishes, fails verification, exposes bad routing, shows prompt friction, or produces a notably good coordination pattern worth preserving."
 ---
 
@@ -66,13 +66,14 @@ Judge the run on these dimensions:
 Use the smallest change that captures the lesson.
 
 1. `Lesson only`
-Record the observation in `lessons/` when the signal is useful but not yet strong enough to change prompts or routing.
+   Record the observation in `lessons/` when the signal is useful but not yet strong enough to change prompts or routing.
 
 2. `Heuristic update`
-Update `state/heuristics.md` when the pattern is likely reusable for this repository.
+   Update `state/heuristics.md` when the pattern is likely reusable for this repository.
 
 3. `Prompt or routing update`
-Patch the repository-local system only when at least one of these is true:
+   Patch the repository-local system only when at least one of these is true:
+
 - the miss was severe
 - the same pattern has happened more than once
 - the evidence clearly points to one narrow improvement
@@ -105,7 +106,7 @@ This skill may update only these repository-local files unless the user asks for
 Create lesson files in `lessons/` using:
 
 - filename: `YYYY-MM-DD_short-slug.md`
-- template: [lessons/_TEMPLATE.md](./lessons/_TEMPLATE.md)
+- template: [lessons/\_TEMPLATE.md](./lessons/_TEMPLATE.md)
 
 ## Required Output
 

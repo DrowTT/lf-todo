@@ -1,9 +1,9 @@
 ---
-date: "2026-04-15"
+date: '2026-04-15'
 task_type: feature
 change_scope: lesson-only
 verdict: PARTIAL
-title: "全局搜索这类跨层命令面板功能要优先盯住 Esc、焦点和 writer 失效接管"
+title: '全局搜索这类跨层命令面板功能要优先盯住 Esc、焦点和 writer 失效接管'
 ---
 
 ## 任务概况

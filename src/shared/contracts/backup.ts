@@ -101,7 +101,9 @@ function parseBackupCategory(
     id: expectInteger(record.id, `${label}.id`, { min: 1 }),
     name: expectString(record.name, `${label}.name`, { trim: true, minLength: 1, maxLength: 64 }),
     is_system:
-      record.is_system === undefined ? false : expectBoolean(record.is_system, `${label}.is_system`),
+      record.is_system === undefined
+        ? false
+        : expectBoolean(record.is_system, `${label}.is_system`),
     order_index:
       record.order_index === undefined
         ? 0
@@ -201,7 +203,7 @@ function parseBackupArchivedTask(
         : expectBoolean(record.is_completed, `${label}.is_completed`),
     archived_at:
       record.archived_at === undefined
-        ? base.completed_at ?? base.created_at
+        ? (base.completed_at ?? base.created_at)
         : expectInteger(record.archived_at, `${label}.archived_at`, { min: 0 }),
     archived_category_name: parseOptionalString(
       record.archived_category_name,
@@ -335,11 +337,18 @@ export function parseBackupEnvelope(value: unknown, label = 'backupEnvelope'): B
       minLength: 1,
       maxLength: 64
     }),
-    data: parseBackupDataRecord(expectRecord(record.data, `${label}.data`), `${label}.data`, 'current')
+    data: parseBackupDataRecord(
+      expectRecord(record.data, `${label}.data`),
+      `${label}.data`,
+      'current'
+    )
   }
 }
 
-export function parseBackupImportPayload(value: unknown, label = 'backupImport'): BackupDataPayload {
+export function parseBackupImportPayload(
+  value: unknown,
+  label = 'backupImport'
+): BackupDataPayload {
   const record = expectRecord(value, label)
 
   if ('format' in record || 'version' in record || 'data' in record) {
@@ -349,7 +358,10 @@ export function parseBackupImportPayload(value: unknown, label = 'backupImport')
   return parseBackupDataRecord(record, label, 'legacy')
 }
 
-export function parseBackupImportResult(value: unknown, label = 'backupImportResult'): BackupImportResult {
+export function parseBackupImportResult(
+  value: unknown,
+  label = 'backupImportResult'
+): BackupImportResult {
   const record = expectRecord(value, label)
   const status = expectString(record.status, `${label}.status`, { trim: true, minLength: 1 })
 

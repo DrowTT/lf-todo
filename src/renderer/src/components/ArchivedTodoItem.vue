@@ -61,7 +61,10 @@ function handleSelectionChange(event: Event) {
 
       <div class="archive-card__main">
         <div class="archive-card__title">
-          <template v-for="(part, index) in contentHighlightParts" :key="`${group.task.id}-${index}`">
+          <template
+            v-for="(part, index) in contentHighlightParts"
+            :key="`${group.task.id}-${index}`"
+          >
             <mark v-if="part.matched" class="archive-card__mark">{{ part.text }}</mark>
             <span v-else>{{ part.text }}</span>
           </template>

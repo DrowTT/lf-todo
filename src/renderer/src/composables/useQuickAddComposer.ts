@@ -88,7 +88,9 @@ export function useQuickAddComposer() {
   )
   const categoryQuery = computed(() => leadingCategoryDraft.value?.query ?? '')
   const taskContent = computed(() => draft.value.trim())
-  const defaultCategory = computed(() => categories.value.find((category) => category.is_system) ?? null)
+  const defaultCategory = computed(
+    () => categories.value.find((category) => category.is_system) ?? null
+  )
   const defaultCategoryLabel = computed(() =>
     defaultCategory.value ? getCategoryLabel(defaultCategory.value) : ''
   )

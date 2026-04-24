@@ -15,7 +15,7 @@ function isScrollableY(element: HTMLElement): boolean {
 }
 
 function findScrollableAncestor(start: Element | null): HTMLElement | null {
-  let current = start instanceof HTMLElement ? start : start?.parentElement ?? null
+  let current = start instanceof HTMLElement ? start : (start?.parentElement ?? null)
 
   while (current) {
     if (isScrollableY(current)) {

@@ -1,9 +1,9 @@
 ---
-date: "2026-04-16"
+date: '2026-04-16'
 task_type: bugfix
 change_scope: lesson-only
 verdict: PASS
-title: "归档功能后续修正里，只要补真实单项归档链路，就应保持单写手并升级到 full 验证"
+title: '归档功能后续修正里，只要补真实单项归档链路，就应保持单写手并升级到 full 验证'
 ---
 
 ## 任务概况

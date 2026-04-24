@@ -563,7 +563,9 @@ onUnmounted(() => {
                 <Download :size="14" class="settings-item__inline-icon" />
                 导出备份
               </label>
-              <span class="settings-item__desc">将当前待办、分类和归档数据导出为 JSON 备份文件</span>
+              <span class="settings-item__desc"
+                >将当前待办、分类和归档数据导出为 JSON 备份文件</span
+              >
             </div>
             <button
               class="settings-item__action-btn"

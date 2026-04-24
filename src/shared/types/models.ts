@@ -64,7 +64,16 @@ export interface QuickAddCommittedEvent {
 }
 
 export type TaskUpdate = Partial<
-  Pick<Task, 'content' | 'description' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision' | 'priority'>
+  Pick<
+    Task,
+    | 'content'
+    | 'description'
+    | 'is_completed'
+    | 'order_index'
+    | 'due_at'
+    | 'due_precision'
+    | 'priority'
+  >
 >
 
 export interface AutoCleanupConfig {

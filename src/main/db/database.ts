@@ -272,7 +272,9 @@ export function initDatabase(): void {
   stmts = {
     getAllCategories: db.prepare('SELECT * FROM categories ORDER BY order_index, id'),
     getCategoryById: db.prepare('SELECT * FROM categories WHERE id = ?'),
-    getSystemCategory: db.prepare('SELECT * FROM categories WHERE is_system = 1 ORDER BY id LIMIT 1'),
+    getSystemCategory: db.prepare(
+      'SELECT * FROM categories WHERE is_system = 1 ORDER BY id LIMIT 1'
+    ),
     createCategory: db.prepare(`
       INSERT INTO categories (name, order_index, is_system)
       VALUES (?, COALESCE((SELECT MAX(order_index) + 1 FROM categories), 1), 0)
@@ -284,7 +286,9 @@ export function initDatabase(): void {
     updateCategory: db.prepare('UPDATE categories SET name = ? WHERE id = ?'),
     deleteCategory: db.prepare('DELETE FROM categories WHERE id = ?'),
     clearCategories: db.prepare('DELETE FROM categories'),
-    findCategoryByName: db.prepare('SELECT * FROM categories WHERE LOWER(TRIM(name)) = ? ORDER BY id LIMIT 1'),
+    findCategoryByName: db.prepare(
+      'SELECT * FROM categories WHERE LOWER(TRIM(name)) = ? ORDER BY id LIMIT 1'
+    ),
     getTasksByCategory: db.prepare(`
       SELECT
         t.*,
@@ -673,7 +677,9 @@ function assertTaskRelations<T extends BackupTaskRecord | BackupArchivedTaskReco
 
   for (const record of records) {
     if (!categoryIds.has(record.category_id)) {
-      throw new Error(`${label} contains task ${record.id} with unknown category ${record.category_id}`)
+      throw new Error(
+        `${label} contains task ${record.id} with unknown category ${record.category_id}`
+      )
     }
 
     if (record.parent_id === null) {
@@ -730,10 +736,17 @@ function sortTaskSnapshotsForMerge(records: BackupTaskRecord[]): BackupTaskRecor
   return [...rootTasks, ...subTasks]
 }
 
-function sortTaskSnapshots<T extends BackupTaskRecord | BackupArchivedTaskRecord>(records: T[]): T[] {
+function sortTaskSnapshots<T extends BackupTaskRecord | BackupArchivedTaskRecord>(
+  records: T[]
+): T[] {
   const rootTasks = records
     .filter((record) => record.parent_id === null)
-    .sort((left, right) => left.category_id - right.category_id || left.order_index - right.order_index || left.id - right.id)
+    .sort(
+      (left, right) =>
+        left.category_id - right.category_id ||
+        left.order_index - right.order_index ||
+        left.id - right.id
+    )
   const subTasks = records
     .filter((record) => record.parent_id !== null)
     .sort(
@@ -784,9 +797,10 @@ function insertArchivedTaskSnapshot(task: BackupArchivedTaskRecord): void {
   )
 }
 
-function resolveMergedCategoryIds(
-  categories: BackupCategoryRecord[]
-): { categoryIdMap: Map<number, number>; createdCount: number } {
+function resolveMergedCategoryIds(categories: BackupCategoryRecord[]): {
+  categoryIdMap: Map<number, number>
+  createdCount: number
+} {
   const systemCategory = getSystemCategory()
   if (!systemCategory) {
     throw new Error('System category is missing')
@@ -909,7 +923,9 @@ function assertCategoryNameAllowed(name: string, currentCategoryId?: number): vo
   }
 
   const normalizedName = normalizeCategoryName(trimmedName)
-  const duplicated = getAllCategories().find((category) => normalizeCategoryName(category.name) === normalizedName)
+  const duplicated = getAllCategories().find(
+    (category) => normalizeCategoryName(category.name) === normalizedName
+  )
 
   if (duplicated && duplicated.id !== currentCategoryId) {
     throw new Error('Category name already exists')
@@ -1335,12 +1351,16 @@ export function batchCompleteSubTasks(parentId: number): number {
 
 export function getPendingTaskCounts(): Record<number, number> {
   const rows = getStmts().getPendingTaskCounts.all() as { category_id: number; count: number }[]
-  return Object.fromEntries(rows.map((row) => [row.category_id, row.count])) as Record<number, number>
+  return Object.fromEntries(rows.map((row) => [row.category_id, row.count])) as Record<
+    number,
+    number
+  >
 }
 
 export function archiveCompletedTasks(categoryId: number): number {
   const rows = getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT id
       FROM tasks
       WHERE
@@ -1351,7 +1371,8 @@ export function archiveCompletedTasks(categoryId: number): number {
           SELECT 1 FROM tasks s WHERE s.parent_id = tasks.id AND s.is_completed = 0
         )
       ORDER BY order_index DESC, id DESC
-    `)
+    `
+    )
     .all(categoryId) as { id: number }[]
 
   if (rows.length === 0) {
@@ -1371,7 +1392,8 @@ export function archiveCompletedTasks(categoryId: number): number {
 
 export function archiveAllCompletedTasks(): number {
   const rows = getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT id
       FROM tasks
       WHERE
@@ -1381,7 +1403,8 @@ export function archiveAllCompletedTasks(): number {
           SELECT 1 FROM tasks s WHERE s.parent_id = tasks.id AND s.is_completed = 0
         )
       ORDER BY order_index DESC, id DESC
-    `)
+    `
+    )
     .all() as { id: number }[]
 
   if (rows.length === 0) {
@@ -1410,7 +1433,8 @@ export function archiveTask(id: number): void {
 
 export function archiveCompletedTasksBefore(timestamp: number): number {
   const rows = getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT id
       FROM tasks
       WHERE
@@ -1422,7 +1446,8 @@ export function archiveCompletedTasksBefore(timestamp: number): number {
         AND COALESCE(last_restored_at, completed_at) IS NOT NULL
         AND COALESCE(last_restored_at, completed_at) < ?
       ORDER BY id ASC
-    `)
+    `
+    )
     .all(timestamp) as { id: number }[]
 
   if (rows.length === 0) {
@@ -1587,11 +1612,7 @@ export function importAllData(payload: BackupDataPayload): BackupImportSummary {
     }
 
     syncTaskAutoincrementSequence(
-      Math.max(
-        1,
-        ...tasks.map((task) => task.id + 1),
-        ...archivedTasks.map((task) => task.id + 1)
-      )
+      Math.max(1, ...tasks.map((task) => task.id + 1), ...archivedTasks.map((task) => task.id + 1))
     )
 
     const foreignKeyIssues = getDb().pragma('foreign_key_check') as Array<Record<string, unknown>>

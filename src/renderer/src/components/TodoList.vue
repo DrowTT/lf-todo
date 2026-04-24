@@ -317,7 +317,11 @@ onUnmounted(() => {
             </div>
             <div class="todo-panel__empty-title">暂无任务</div>
             <div class="todo-panel__empty-hint">
-              {{ isAllTasksView ? '这里会聚合展示所有分类中的待办' : '在上方输入框添加你的第一个待办吧' }}
+              {{
+                isAllTasksView
+                  ? '这里会聚合展示所有分类中的待办'
+                  : '在上方输入框添加你的第一个待办吧'
+              }}
             </div>
           </div>
           <div v-else-if="filteredTasks.length === 0" class="todo-panel__empty">

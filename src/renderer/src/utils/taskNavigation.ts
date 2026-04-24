@@ -56,9 +56,7 @@ export function normalizeTaskView(value: unknown, fallback: TaskView): TaskView 
   }
 
   if (record.kind === 'category') {
-    return createCategoryTaskView(
-      typeof record.categoryId === 'number' ? record.categoryId : null
-    )
+    return createCategoryTaskView(typeof record.categoryId === 'number' ? record.categoryId : null)
   }
 
   return fallback

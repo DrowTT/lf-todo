@@ -1,9 +1,9 @@
 ---
-date: "2026-04-22"
+date: '2026-04-22'
 task_type: feature
 change_scope: heuristic-update
 verdict: PASS
-title: "合并导入除了看当前冲突，还要验后续 task 自增 ID 安全"
+title: '合并导入除了看当前冲突，还要验后续 task 自增 ID 安全'
 ---
 
 ## 任务概况

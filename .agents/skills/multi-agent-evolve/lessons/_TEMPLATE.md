@@ -1,9 +1,9 @@
 ---
-date: "YYYY-MM-DD"
+date: 'YYYY-MM-DD'
 task_type: review | bugfix | feature | refactor | incident
 change_scope: lesson-only | heuristic-update | prompt-update | routing-update
 verdict: PASS | PARTIAL | FAIL
-title: "一句话总结这次 multi-agent 教训"
+title: '一句话总结这次 multi-agent 教训'
 ---
 
 ## 任务概况
@@ -28,7 +28,7 @@ title: "一句话总结这次 multi-agent 教训"
 
 ## 相关文件
 
-<!-- 
+<!--
 - `AGENTS.md`
 - `.agents/skills/multi-agent-dev/SKILL.md`
 - `.codex/agents/verifier.md`

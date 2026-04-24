@@ -94,10 +94,7 @@ function loadConfig(): HotkeyConfig {
         }
       }
 
-      if (
-        nextBinding.key !== binding?.key ||
-        nextBinding.label !== binding?.label
-      ) {
+      if (nextBinding.key !== binding?.key || nextBinding.label !== binding?.label) {
         shouldPersist = true
       }
 
@@ -114,27 +111,15 @@ function loadConfig(): HotkeyConfig {
   }
 }
 
-function migrateSearchHotkeys(
-  config: HotkeyConfig,
-  parsed: Partial<HotkeyConfig>
-): boolean {
-  const isUsingLegacyGlobalSearchKey =
-    parsed.openGlobalSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
-  const isUsingCtrlFForGlobalSearch =
-    parsed.openGlobalSearch?.key === CURRENT_FOCUS_SEARCH_KEY
-  const isUsingLegacyFocusSearchKey =
-    parsed.focusSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
-  const shouldNormalizeFocusSearch =
-    isUsingLegacyFocusSearchKey || isUsingCtrlFForGlobalSearch
+function migrateSearchHotkeys(config: HotkeyConfig, parsed: Partial<HotkeyConfig>): boolean {
+  const isUsingLegacyGlobalSearchKey = parsed.openGlobalSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
+  const isUsingCtrlFForGlobalSearch = parsed.openGlobalSearch?.key === CURRENT_FOCUS_SEARCH_KEY
+  const isUsingLegacyFocusSearchKey = parsed.focusSearch?.key === LEGACY_GLOBAL_SEARCH_KEY
+  const shouldNormalizeFocusSearch = isUsingLegacyFocusSearchKey || isUsingCtrlFForGlobalSearch
   const shouldNormalizeGlobalSearch =
-    !parsed.openGlobalSearch?.key ||
-    isUsingLegacyGlobalSearchKey ||
-    isUsingCtrlFForGlobalSearch
+    !parsed.openGlobalSearch?.key || isUsingLegacyGlobalSearchKey || isUsingCtrlFForGlobalSearch
 
-  if (
-    !shouldNormalizeFocusSearch &&
-    !shouldNormalizeGlobalSearch
-  ) {
+  if (!shouldNormalizeFocusSearch && !shouldNormalizeGlobalSearch) {
     return false
   }
 
@@ -437,11 +422,7 @@ export function useHotkeys() {
 
     const action = matchAction(normalizedKey)
     if (!action || isGlobalHotkeyAction(action)) return
-    if (
-      isInputElement(event.target) &&
-      action !== 'focusSearch' &&
-      action !== 'openGlobalSearch'
-    ) {
+    if (isInputElement(event.target) && action !== 'focusSearch' && action !== 'openGlobalSearch') {
       return
     }
 

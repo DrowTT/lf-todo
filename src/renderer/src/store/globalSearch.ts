@@ -3,9 +3,8 @@ import { defineStore } from 'pinia'
 import type { Task } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
 import type { SearchTasksInput } from '../services/repositories/taskRepository'
-import { isAllTasksTaskView } from '../utils/taskNavigation'
+import { isResolvedCategoryTaskView, type TaskView } from '../utils/taskNavigation'
 import { useAppSessionStore } from './appSession'
-import { useCategoryStore } from './category'
 
 export type GlobalSearchScope = 'all' | 'current'
 
@@ -13,8 +12,7 @@ const SEARCH_RESULT_LIMIT = 24
 const TASK_HIGHLIGHT_DURATION_MS = 1800
 
 interface ScopeContext {
-  currentCategoryId: number | null
-  isAllTasksView?: boolean
+  taskView: TaskView
 }
 
 type OpenOptions = Partial<ScopeContext> & {
@@ -25,7 +23,6 @@ type OpenOptions = Partial<ScopeContext> & {
 export const useGlobalSearchStore = defineStore('globalSearch', () => {
   const { repositories, toast } = useAppRuntime()
   const appSessionStore = useAppSessionStore()
-  const categoryStore = useCategoryStore()
 
   const isOpen = ref(false)
   const query = ref('')
@@ -41,19 +38,12 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
   let latestSearchRequestId = 0
   let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
-  function inferIsAllTasksView(): boolean {
-    return (
-      appSessionStore.currentMainView === 'tasks' &&
-      isAllTasksTaskView(appSessionStore.selectedTaskView)
-    )
+  function getCurrentTaskView(): TaskView {
+    return appSessionStore.selectedTaskView
   }
 
-  function normalizeScope(
-    nextScope: GlobalSearchScope,
-    currentCategoryId: number | null,
-    isAllTasksView = false
-  ): GlobalSearchScope {
-    if (nextScope === 'current' && currentCategoryId !== null && !isAllTasksView) {
+  function normalizeScope(nextScope: GlobalSearchScope, taskView: TaskView): GlobalSearchScope {
+    if (nextScope === 'current' && isResolvedCategoryTaskView(taskView)) {
       return 'current'
     }
 
@@ -69,16 +59,14 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
     if (typeof nextScopeOrOptions === 'string') {
       return {
         scope: nextScopeOrOptions,
-        currentCategoryId: options?.currentCategoryId ?? categoryStore.currentCategoryId,
-        isAllTasksView: options?.isAllTasksView ?? inferIsAllTasksView(),
+        taskView: options?.taskView ?? getCurrentTaskView(),
         preserveQuery: options?.preserveQuery ?? false
       }
     }
 
     return {
       scope: nextScopeOrOptions.scope ?? 'all',
-      currentCategoryId: nextScopeOrOptions.currentCategoryId ?? categoryStore.currentCategoryId,
-      isAllTasksView: nextScopeOrOptions.isAllTasksView ?? inferIsAllTasksView(),
+      taskView: nextScopeOrOptions.taskView ?? getCurrentTaskView(),
       preserveQuery: nextScopeOrOptions.preserveQuery ?? false
     }
   }
@@ -90,11 +78,7 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
     }
   ) {
     const resolvedOpenOptions = resolveOpenOptions(nextScopeOrOptions, options)
-    const resolvedScope = normalizeScope(
-      resolvedOpenOptions.scope,
-      resolvedOpenOptions.currentCategoryId,
-      resolvedOpenOptions.isAllTasksView
-    )
+    const resolvedScope = normalizeScope(resolvedOpenOptions.scope, resolvedOpenOptions.taskView)
 
     if (!isOpen.value || !resolvedOpenOptions.preserveQuery) {
       query.value = ''
@@ -120,11 +104,10 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
   function setScope(
     nextScope: GlobalSearchScope,
     options: {
-      currentCategoryId: number | null
-      isAllTasksView?: boolean
+      taskView: TaskView
     }
   ) {
-    scope.value = normalizeScope(nextScope, options.currentCategoryId, options.isAllTasksView)
+    scope.value = normalizeScope(nextScope, options.taskView)
     selectedIndex.value = 0
   }
 

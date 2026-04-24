@@ -94,12 +94,15 @@ export function parseTask(value: unknown, label = 'task'): Task {
   const searchSubtaskMatches =
     record.search_subtask_matches === undefined
       ? undefined
-      : expectArray(record.search_subtask_matches, `${label}.search_subtask_matches`, (item, itemLabel) =>
-          expectString(item, itemLabel, {
-            trim: true,
-            minLength: 1,
-            maxLength: 200
-          })
+      : expectArray(
+          record.search_subtask_matches,
+          `${label}.search_subtask_matches`,
+          (item, itemLabel) =>
+            expectString(item, itemLabel, {
+              trim: true,
+              minLength: 1,
+              maxLength: 200
+            })
         )
   const description =
     record.description === null || record.description === undefined
@@ -147,7 +150,10 @@ export function parseTasks(value: unknown, label = 'tasks'): Task[] {
   return expectArray(value, label, parseTask)
 }
 
-export function parseArchivedTaskGroup(value: unknown, label = 'archivedTaskGroup'): ArchivedTaskGroup {
+export function parseArchivedTaskGroup(
+  value: unknown,
+  label = 'archivedTaskGroup'
+): ArchivedTaskGroup {
   const record = expectRecord(value, label)
   assertAllowedKeys(record, ['task', 'subTasks'], label)
 

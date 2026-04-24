@@ -139,7 +139,9 @@ const isDescriptionEditing = ref(false)
 const descriptionDraft = ref('')
 const { adjustHeight: adjustDescriptionHeight } = useAutoHeight(descriptionInputRef)
 const isInlineEditing = computed(() => isEditing.value || isDescriptionEditing.value)
-const shouldShowDescription = computed(() => isDescriptionEditing.value || Boolean(props.task.description))
+const shouldShowDescription = computed(
+  () => isDescriptionEditing.value || Boolean(props.task.description)
+)
 
 const startDescriptionEdit = () => {
   if (isBusy.value) {
@@ -418,7 +420,12 @@ const onSubTaskDragEnd = async () => {
       >
         {{ task.description }}
       </div>
-      <button v-else class="card__description-placeholder" :disabled="isBusy" @click="startDescriptionEdit">
+      <button
+        v-else
+        class="card__description-placeholder"
+        :disabled="isBusy"
+        @click="startDescriptionEdit"
+      >
         + 添加描述...
       </button>
     </div>
@@ -771,7 +778,6 @@ const onSubTaskDragEnd = async () => {
   min-height: 20px;
   margin-top: 8px;
 }
-
 
 .card__description-inline-button {
   display: inline-flex;

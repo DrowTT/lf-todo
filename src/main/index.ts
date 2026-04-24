@@ -310,11 +310,7 @@ function resolveQuickAddWindowBounds(): Rectangle {
         width: size.width,
         height: size.height,
         x: display.workArea.x + display.workArea.width - size.width - QUICK_ADD_WINDOW_EDGE_MARGIN,
-        y:
-          display.workArea.y +
-          display.workArea.height -
-          size.height -
-          QUICK_ADD_WINDOW_EDGE_MARGIN
+        y: display.workArea.y + display.workArea.height - size.height - QUICK_ADD_WINDOW_EDGE_MARGIN
       },
       display.workArea
     )
@@ -445,9 +441,9 @@ function ensureMainWindow(): BrowserWindow | null {
   return createWindow()
 }
 
-function showMainWindow(
-  options?: { focusEventChannel?: 'window:focus-main-input' | 'window:focus-quick-add-input' }
-): void {
+function showMainWindow(options?: {
+  focusEventChannel?: 'window:focus-main-input' | 'window:focus-quick-add-input'
+}): void {
   const win = ensureMainWindow()
   if (!win) return
 
@@ -879,7 +875,10 @@ async function readBackupFile(filePath: string): Promise<unknown> {
   try {
     fileStat = await stat(filePath)
   } catch {
-    throw createBackupImportErrorResult('FILE_READ_FAILED', '读取备份文件失败，请检查文件权限后重试')
+    throw createBackupImportErrorResult(
+      'FILE_READ_FAILED',
+      '读取备份文件失败，请检查文件权限后重试'
+    )
   }
 
   if (fileStat.size > MAX_BACKUP_IMPORT_FILE_SIZE_BYTES) {
@@ -894,7 +893,10 @@ async function readBackupFile(filePath: string): Promise<unknown> {
   try {
     raw = (await readFile(filePath, 'utf-8')).replace(/^\uFEFF/, '').trim()
   } catch {
-    throw createBackupImportErrorResult('FILE_READ_FAILED', '读取备份文件失败，请检查文件权限后重试')
+    throw createBackupImportErrorResult(
+      'FILE_READ_FAILED',
+      '读取备份文件失败，请检查文件权限后重试'
+    )
   }
 
   if (!raw) {
@@ -921,7 +923,10 @@ function normalizeBackupImportError(error: unknown): BackupImportResult {
 
   if (error instanceof BackupCompatibilityError) {
     if (error.code === 'UNSUPPORTED_BACKUP_FORMAT') {
-      return createBackupImportErrorResult('UNSUPPORTED_BACKUP_FORMAT', '当前文件不是 LF-Todo 备份文件')
+      return createBackupImportErrorResult(
+        'UNSUPPORTED_BACKUP_FORMAT',
+        '当前文件不是 LF-Todo 备份文件'
+      )
     }
 
     return createBackupImportErrorResult(
@@ -931,10 +936,7 @@ function normalizeBackupImportError(error: unknown): BackupImportResult {
   }
 
   if (error instanceof ContractError) {
-    return createBackupImportErrorResult(
-      'INVALID_BACKUP_PAYLOAD',
-      '备份文件结构无效或关键字段缺失'
-    )
+    return createBackupImportErrorResult('INVALID_BACKUP_PAYLOAD', '备份文件结构无效或关键字段缺失')
   }
 
   return createBackupImportErrorResult('IMPORT_FAILED', '处理备份失败，请稍后重试')
@@ -1418,7 +1420,7 @@ function createWindow(): BrowserWindow {
   bindMainWindow(win, { launchedHidden })
   return win
 
-    // 初始化自动更新模块
+  // 初始化自动更新模块
 }
 
 const gotTheLock = app.requestSingleInstanceLock()

@@ -164,10 +164,7 @@ export function useAppFacade() {
 
   async function ensureTaskTargetReady(target: ActiveTaskTarget) {
     if (target.taskListView === 'all') {
-      if (
-        currentMainView.value === 'tasks' &&
-        isAllTasksTaskView(selectedTaskView.value)
-      ) {
+      if (currentMainView.value === 'tasks' && isAllTasksTaskView(selectedTaskView.value)) {
         return
       }
 

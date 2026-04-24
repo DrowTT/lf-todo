@@ -307,7 +307,9 @@ watch(contextMenuRef, (element) => {
             'category-item--drop-target':
               entry.dropCategoryId !== null && hoverCategoryId === entry.dropCategoryId,
             'category-item--drop-disabled':
-              isDraggingTask && entry.dropCategoryId !== null && dragSourceCategoryId === entry.dropCategoryId
+              isDraggingTask &&
+              entry.dropCategoryId !== null &&
+              dragSourceCategoryId === entry.dropCategoryId
           }"
           :data-category-drop-id="entry.dropCategoryId ?? undefined"
           @click="handleSelectSystemEntry(entry.onClick)"
@@ -317,7 +319,12 @@ watch(contextMenuRef, (element) => {
           @drop="handleTaskDrop($event, entry.dropCategoryId)"
         >
           <span class="category-item__icon-shell">
-            <component :is="entry.icon" class="category-item__icon" :size="14" :stroke-width="2.2" />
+            <component
+              :is="entry.icon"
+              class="category-item__icon"
+              :size="14"
+              :stroke-width="2.2"
+            />
           </span>
           <span class="category-item__name">{{ entry.label }}</span>
           <span v-if="entry.badge" class="category-item__badge">
@@ -343,8 +350,7 @@ watch(contextMenuRef, (element) => {
               'category-item--editing': editingCategoryId === category.id,
               'category-item--input-shell': editingCategoryId === category.id,
               'category-item--drop-target': hoverCategoryId === category.id,
-              'category-item--drop-disabled':
-                isDraggingTask && dragSourceCategoryId === category.id
+              'category-item--drop-disabled': isDraggingTask && dragSourceCategoryId === category.id
             }"
             :data-category-drop-id="category.id"
             @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"

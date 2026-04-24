@@ -159,7 +159,9 @@ const api = {
         )
         .then((value) => parseTasks(value, 'db:get-tasks.response')),
     getAllTasks: () =>
-      ipcRenderer.invoke('db:get-all-tasks').then((value) => parseTasks(value, 'db:get-all-tasks.response')),
+      ipcRenderer
+        .invoke('db:get-all-tasks')
+        .then((value) => parseTasks(value, 'db:get-all-tasks.response')),
     getArchivedTaskGroups: () =>
       ipcRenderer
         .invoke('db:get-archived-task-groups')
@@ -210,7 +212,9 @@ const api = {
     archiveAllCompletedTasks: () =>
       ipcRenderer
         .invoke('db:archive-all-completed-tasks')
-        .then((value) => expectInteger(value, 'db:archive-all-completed-tasks.response', { min: 0 })),
+        .then((value) =>
+          expectInteger(value, 'db:archive-all-completed-tasks.response', { min: 0 })
+        ),
     archiveTask: (id: number) =>
       invokeVoidWithPayload('db:archive-task', { id }, parseArchiveTaskRequest),
     restoreArchivedTasks: (ids: number[]) =>

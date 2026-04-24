@@ -1,10 +1,5 @@
 import { ref, type Ref } from 'vue'
-import {
-  HOTKEY_LABELS,
-  keyToLabel,
-  type HotkeyAction,
-  type HotkeyConfig
-} from './useHotkeys'
+import { HOTKEY_LABELS, keyToLabel, type HotkeyAction, type HotkeyConfig } from './useHotkeys'
 
 interface UseHotkeyRecorderOptions {
   hotkeyConfig: HotkeyConfig
@@ -62,10 +57,7 @@ export function useHotkeyRecorder(options: UseHotkeyRecorderOptions) {
       return
     }
 
-    if (
-      options.isGlobalHotkeyAction(recordingAction.value) &&
-      !options.hasAtLeastTwoKeys(newKey)
-    ) {
+    if (options.isGlobalHotkeyAction(recordingAction.value) && !options.hasAtLeastTwoKeys(newKey)) {
       conflictMessage.value = '全局快捷键至少要包含两个键，请至少加一个修饰键'
       return
     }

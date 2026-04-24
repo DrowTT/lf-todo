@@ -1,9 +1,9 @@
 ---
-date: "2026-04-16"
+date: '2026-04-16'
 task_type: feature
 change_scope: heuristic-update
 verdict: PARTIAL
-title: "搜索浮层类需求要把焦点留存、Esc 语义和壳层快捷键冲突一起验收"
+title: '搜索浮层类需求要把焦点留存、Esc 语义和壳层快捷键冲突一起验收'
 ---
 
 ## 任务概况

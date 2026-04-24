@@ -1,6 +1,6 @@
 ---
-name: "multi-agent-dev"
-description: "Run the repository-standard multi-agent delivery workflow when the user explicitly asks for multi-agent collaboration, agent-team delivery, parallel investigation, or the standard multi-agent process."
+name: 'multi-agent-dev'
+description: 'Run the repository-standard multi-agent delivery workflow when the user explicitly asks for multi-agent collaboration, agent-team delivery, parallel investigation, or the standard multi-agent process.'
 ---
 
 # Multi-Agent Dev
@@ -48,16 +48,17 @@ Default topology:
 ## Operating Rules
 
 1. Recon first.
-Launch the read-only agents in parallel. Do not write code until you can explain the likely root cause or implementation plan yourself.
+   Launch the read-only agents in parallel. Do not write code until you can explain the likely root cause or implementation plan yourself.
 
 2. Never delegate understanding.
-Read the investigation results, synthesize them, and then issue a precise task. Do not paste raw findings to a writer and say "fix it."
+   Read the investigation results, synthesize them, and then issue a precise task. Do not paste raw findings to a writer and say "fix it."
 
 3. Prefer many readers, one writer.
-Use a single `implementation_worker` by default. Only use multiple writers when write scopes are clearly disjoint and shared configs, build files, tests, schemas, or public interfaces are not at risk.
+   Use a single `implementation_worker` by default. Only use multiple writers when write scopes are clearly disjoint and shared configs, build files, tests, schemas, or public interfaces are not at risk.
 
 4. Give bounded ownership.
-Every writer prompt must include:
+   Every writer prompt must include:
+
 - the user goal
 - why this subtask matters
 - what is already known
@@ -67,13 +68,13 @@ Every writer prompt must include:
 - a reminder not to revert unrelated changes
 
 5. Keep verification independent.
-Run `verifier` after implementation. The verifier should rerun checks, spot-check behavior, and report `PASS`, `PARTIAL`, or `FAIL`. If verification fails, fix and rerun before reporting success.
+   Run `verifier` after implementation. The verifier should rerun checks, spot-check behavior, and report `PASS`, `PARTIAL`, or `FAIL`. If verification fails, fix and rerun before reporting success.
 
 6. Keep the user informed.
-When agents are launched, briefly tell the user which roles are running and what each one is checking. Do not predict outcomes before they return.
+   When agents are launched, briefly tell the user which roles are running and what each one is checking. Do not predict outcomes before they return.
 
 7. Close the loop.
-After any non-trivial multi-agent task, or whenever routing / delegation / verification quality was notably good or bad, invoke the repository-local `$multi-agent-evolve` skill so the workflow can record lessons and update prompts or routing rules when warranted.
+   After any non-trivial multi-agent task, or whenever routing / delegation / verification quality was notably good or bad, invoke the repository-local `$multi-agent-evolve` skill so the workflow can record lessons and update prompts or routing rules when warranted.
 
 ## Repository Defaults
 

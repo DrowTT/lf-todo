@@ -159,7 +159,9 @@ export const useTaskStore = defineStore('task', () => {
       }
 
       tasks.value = nextTasks
-      const pending = nextTasks.filter((task) => !task.is_completed && task.parent_id === null).length
+      const pending = nextTasks.filter(
+        (task) => !task.is_completed && task.parent_id === null
+      ).length
       pendingCounts.value[categoryId] = pending
     } catch (error) {
       console.error('[taskStore] fetchTasks failed', error)
@@ -433,7 +435,6 @@ export const useTaskStore = defineStore('task', () => {
       logPrefix: '[taskStore] updateTaskContent failed'
     })
   }
-
 
   async function updateTaskDescription(id: number, description: string | null) {
     const task = tasks.value.find((item) => item.id === id)
