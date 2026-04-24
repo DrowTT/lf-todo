@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import draggable from 'vuedraggable'
 import type { Task, TaskDueState } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
@@ -7,6 +7,7 @@ import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useHoverTarget } from '../composables/useHoverTarget'
 import { useInlineEdit } from '../composables/useInlineEdit'
+import { useAutoHeight } from '../composables/useAutoHeight'
 import { useAppSessionStore } from '../store/appSession'
 import { useGlobalSearchStore } from '../store/globalSearch'
 import { usePomodoroStore } from '../store/pomodoro'
@@ -133,6 +134,43 @@ const { isEditing, editContent, adjustHeight, handleDblClick, saveEdit, cancelEd
     }
   )
 
+const descriptionInputRef = ref<HTMLTextAreaElement | null>(null)
+const isDescriptionEditing = ref(false)
+const descriptionDraft = ref('')
+const { adjustHeight: adjustDescriptionHeight } = useAutoHeight(descriptionInputRef)
+const isInlineEditing = computed(() => isEditing.value || isDescriptionEditing.value)
+const shouldShowDescription = computed(() => isDescriptionEditing.value || Boolean(props.task.description))
+
+const startDescriptionEdit = () => {
+  if (isBusy.value) {
+    return
+  }
+
+  isDescriptionEditing.value = true
+  descriptionDraft.value = props.task.description ?? ''
+  void nextTick(() => {
+    adjustDescriptionHeight()
+    descriptionInputRef.value?.focus()
+  })
+}
+
+const cancelDescriptionEdit = () => {
+  isDescriptionEditing.value = false
+  descriptionDraft.value = props.task.description ?? ''
+}
+
+const saveDescriptionEdit = () => {
+  const nextDescription = descriptionDraft.value.trim() || null
+  if (nextDescription !== props.task.description) {
+    void taskStore.updateTaskDescription(props.task.id, nextDescription)
+  }
+  isDescriptionEditing.value = false
+}
+
+const handleDescriptionInput = () => {
+  adjustDescriptionHeight()
+}
+
 const onCardMouseEnter = () => {
   isHovered.value = true
   setHoverTask(props.task.id)
@@ -143,7 +181,7 @@ const onCardMouseLeave = () => {
   clearHover()
 }
 const handleContextMenu = (event: MouseEvent) => {
-  if (isEditing.value) {
+  if (isInlineEditing.value) {
     return
   }
 
@@ -292,6 +330,14 @@ const onSubTaskDragEnd = async () => {
             @apply="handleDueApply"
             @open-change="handleDueOpenChange"
           />
+          <button
+            v-if="!task.description && !isDescriptionEditing"
+            class="card__description-inline-button"
+            :disabled="isBusy"
+            @click="startDescriptionEdit"
+          >
+            + 添加描述
+          </button>
           <span v-if="isSaving" class="card__status">保存中</span>
           <span v-else-if="isDeleting" class="card__status card__status--danger">删除中</span>
         </div>
@@ -310,7 +356,7 @@ const onSubTaskDragEnd = async () => {
         class="card__action card__pomodoro-btn"
         :class="{
           'card__pomodoro-btn--active': isPomodoroRunningForTask,
-          'card__action--hidden': isEditing
+          'card__action--hidden': isInlineEditing
         }"
         :disabled="isBusy || isPomodoroBusy"
         :title="isPomodoroRunningForTask ? '该待办番茄钟进行中' : '开始番茄钟'"
@@ -321,7 +367,7 @@ const onSubTaskDragEnd = async () => {
 
       <button
         class="card__action card__toggle"
-        :class="{ 'card__toggle--on': isExpanded, 'card__action--hidden': isEditing }"
+        :class="{ 'card__toggle--on': isExpanded, 'card__action--hidden': isInlineEditing }"
         :disabled="isBusy"
         title="展开子任务"
         @click="handleToggleExpand"
@@ -332,7 +378,7 @@ const onSubTaskDragEnd = async () => {
       <button
         v-if="canArchiveTask"
         class="card__action card__archive"
-        :class="{ 'card__action--hidden': isEditing }"
+        :class="{ 'card__action--hidden': isInlineEditing }"
         :disabled="isBusy"
         title="归档任务"
         @click.stop="handleArchive"
@@ -342,11 +388,38 @@ const onSubTaskDragEnd = async () => {
 
       <button
         class="card__action card__del"
-        :class="{ 'card__action--hidden': isEditing }"
+        :class="{ 'card__action--hidden': isInlineEditing }"
         :disabled="isBusy"
         @click="handleDelete"
       >
         <Trash2 :size="14" />
+      </button>
+    </div>
+
+    <div v-if="shouldShowDescription" class="card__description">
+      <textarea
+        v-if="isDescriptionEditing"
+        ref="descriptionInputRef"
+        v-model="descriptionDraft"
+        class="card__description-input"
+        maxlength="500"
+        rows="1"
+        placeholder="写一点描述..."
+        @keydown.enter.exact.prevent="saveDescriptionEdit"
+        @keyup.escape="cancelDescriptionEdit"
+        @blur="saveDescriptionEdit"
+        @input="handleDescriptionInput"
+      />
+      <div
+        v-else-if="task.description"
+        class="card__description-text"
+        title="双击编辑描述"
+        @dblclick="startDescriptionEdit"
+      >
+        {{ task.description }}
+      </div>
+      <button v-else class="card__description-placeholder" :disabled="isBusy" @click="startDescriptionEdit">
+        + 添加描述...
       </button>
     </div>
 
@@ -699,6 +772,33 @@ const onSubTaskDragEnd = async () => {
   margin-top: 8px;
 }
 
+
+.card__description-inline-button {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px dashed rgba($border-light, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  color: rgba($text-muted, 0.86);
+  font-size: $font-xs;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: rgba($accent-color, 0.3);
+    color: $accent-color;
+    background: rgba($accent-color, 0.06);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
 .card__progress {
   display: inline-flex;
   align-items: center;
@@ -882,6 +982,42 @@ const onSubTaskDragEnd = async () => {
   &:hover:not(:disabled) {
     color: $accent-color;
     background: rgba($accent-color, 0.08);
+  }
+}
+
+.card__description {
+  margin: -6px 14px 10px 76px;
+}
+
+.card__description-text {
+  color: rgba($text-secondary, 0.82);
+  font-size: $font-sm;
+  line-height: 1.65;
+  white-space: pre-line;
+  word-break: break-word;
+  cursor: text;
+}
+
+.card__description-input {
+  display: block;
+  width: 100%;
+  min-height: 23px;
+  box-sizing: border-box;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: $text-secondary;
+  font-size: $font-sm;
+  font-family: inherit;
+  line-height: 1.65;
+  box-shadow: 0 1.5px 0 0 rgba($accent-color, 0.28);
+
+  &::placeholder {
+    color: rgba($text-muted, 0.78);
   }
 }
 

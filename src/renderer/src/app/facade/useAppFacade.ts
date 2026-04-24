@@ -11,10 +11,15 @@ import { useTaskStore } from '../../store/task'
 import { useUndoStore } from '../../store/undo'
 import {
   ALL_TASKS_VIEW_KEY,
-  ALL_TASKS_VIEW_LABEL,
-  getCategoryDisplayName,
-  getTaskListStorageKey
+  createCategoryTaskView,
+  getTaskViewCreateCategoryId,
+  getTaskViewLabel,
+  getTaskViewScopeKey,
+  isAllTasksTaskView,
+  isArchiveTaskView,
+  isResolvedCategoryTaskView
 } from '../../utils/taskNavigation'
+import type { TaskView } from '../../utils/taskNavigation'
 
 const UNDO_LABEL = '撤销'
 
@@ -37,7 +42,8 @@ export function useAppFacade() {
   const undoStore = useUndoStore()
   let latestTaskRequestId = 0
 
-  const { currentMainView, taskPaneView, taskListView } = storeToRefs(appSessionStore)
+  const { currentMainView, taskPaneView, taskListView, selectedTaskView } =
+    storeToRefs(appSessionStore)
   const { categories, currentCategoryId } = storeToRefs(categoryStore)
   const { tasks, isLoading, pendingCounts } = storeToRefs(taskStore)
   const { groups: archivedTaskGroups, isLoading: isArchiveLoading } = storeToRefs(archiveStore)
@@ -47,40 +53,27 @@ export function useAppFacade() {
     () => categories.value.find((category) => category.is_system) ?? null
   )
   const inboxCategoryId = computed(() => inboxCategory.value?.id ?? null)
+  const activeTaskCategoryId = computed(() =>
+    selectedTaskView.value.kind === 'category' ? selectedTaskView.value.categoryId : null
+  )
   const currentCategory = computed(
-    () => categories.value.find((category) => category.id === currentCategoryId.value) ?? null
+    () => categories.value.find((category) => category.id === activeTaskCategoryId.value) ?? null
+  )
+  const isArchiveTaskViewActive = computed(
+    () => currentMainView.value === 'tasks' && isArchiveTaskView(selectedTaskView.value)
   )
   const isAllTasksView = computed(
-    () =>
-      currentMainView.value === 'tasks' &&
-      taskPaneView.value === 'active' &&
-      taskListView.value === 'all'
+    () => currentMainView.value === 'tasks' && isAllTasksTaskView(selectedTaskView.value)
   )
-  const currentTaskScopeKey = computed(() =>
-    getTaskListStorageKey(taskListView.value, currentCategoryId.value)
+  const currentTaskScopeKey = computed(() => getTaskViewScopeKey(selectedTaskView.value))
+  const currentTaskCreateCategoryId = computed(() =>
+    getTaskViewCreateCategoryId(selectedTaskView.value, inboxCategoryId.value)
   )
-  const currentTaskCreateCategoryId = computed(() => {
-    if (taskPaneView.value !== 'active') {
-      return null
-    }
-
-    if (taskListView.value === 'all') {
-      return inboxCategoryId.value
-    }
-
-    return currentCategoryId.value
-  })
-  const currentTaskViewLabel = computed(() => {
-    if (taskPaneView.value === 'archive') {
-      return '已归档待办'
-    }
-
-    if (taskListView.value === 'all') {
-      return ALL_TASKS_VIEW_LABEL
-    }
-
-    return getCategoryDisplayName(currentCategory.value) || '未选择分类'
-  })
+  const currentTaskViewLabel = computed(() =>
+    getTaskViewLabel(selectedTaskView.value, {
+      category: currentCategory.value
+    })
+  )
   const allPendingCount = computed(() =>
     categories.value.reduce((sum, category) => sum + (pendingCounts.value[category.id] ?? 0), 0)
   )
@@ -93,39 +86,73 @@ export function useAppFacade() {
     })
   }
 
+  function isCurrentActiveTaskView(view: TaskView = appSessionStore.selectedTaskView): boolean {
+    return !isArchiveTaskView(view)
+  }
+
+  function selectTaskView(view: TaskView) {
+    appSessionStore.setCurrentMainView('tasks')
+    appSessionStore.setSelectedTaskView(view)
+  }
+
+  function reconcileCategoryTaskViewAfterCategoryLoad() {
+    const view = appSessionStore.selectedTaskView
+    if (view.kind !== 'category') {
+      return
+    }
+
+    const selectedCategoryId = view.categoryId
+    const selectedCategoryExists =
+      selectedCategoryId !== null &&
+      categories.value.some((category) => category.id === selectedCategoryId)
+
+    if (selectedCategoryExists) {
+      if (categoryStore.currentCategoryId !== selectedCategoryId) {
+        categoryStore.selectCategory(selectedCategoryId)
+      }
+      appSessionStore.syncSelectedTaskViewCategoryId(selectedCategoryId)
+      return
+    }
+
+    appSessionStore.syncSelectedTaskViewCategoryId(categoryStore.currentCategoryId)
+  }
+
   function getActiveTaskTarget(): ActiveTaskTarget | null {
-    if (appSessionStore.taskPaneView !== 'active') {
+    const view = appSessionStore.selectedTaskView
+    if (!isCurrentActiveTaskView(view)) {
       return null
     }
 
-    if (appSessionStore.taskListView === 'all') {
+    if (isAllTasksTaskView(view)) {
       return { taskListView: 'all' }
     }
 
-    if (categoryStore.currentCategoryId === null) {
+    if (!isResolvedCategoryTaskView(view)) {
       return null
     }
 
     return {
       taskListView: 'category',
-      categoryId: categoryStore.currentCategoryId
+      categoryId: view.categoryId
     }
   }
 
   async function fetchCurrentTaskPane() {
-    if (appSessionStore.taskPaneView === 'archive') {
+    const view = appSessionStore.selectedTaskView
+
+    if (isArchiveTaskView(view)) {
       taskStore.clearTasks()
       subTaskStore.reset()
       await archiveStore.fetchGroups()
       return
     }
 
-    if (appSessionStore.taskListView === 'all') {
+    if (isAllTasksTaskView(view)) {
       await fetchAllTasks()
       return
     }
 
-    const categoryId = categoryStore.currentCategoryId
+    const categoryId = view.categoryId
     if (!categoryId) {
       taskStore.clearTasks()
       subTaskStore.reset()
@@ -139,8 +166,7 @@ export function useAppFacade() {
     if (target.taskListView === 'all') {
       if (
         currentMainView.value === 'tasks' &&
-        taskPaneView.value === 'active' &&
-        taskListView.value === 'all'
+        isAllTasksTaskView(selectedTaskView.value)
       ) {
         return
       }
@@ -151,36 +177,38 @@ export function useAppFacade() {
 
     if (
       currentMainView.value !== 'tasks' ||
-      taskPaneView.value !== 'active' ||
-      taskListView.value !== 'category' ||
-      currentCategoryId.value !== target.categoryId
+      !isResolvedCategoryTaskView(selectedTaskView.value) ||
+      selectedTaskView.value.categoryId !== target.categoryId
     ) {
       await selectCategory(target.categoryId)
     }
   }
 
   async function fetchCategories() {
-    const hasCurrentCategory = await categoryStore.fetchCategories()
+    await categoryStore.fetchCategories()
     await taskStore.initPendingCounts()
+    reconcileCategoryTaskViewAfterCategoryLoad()
 
     if (appSessionStore.currentMainView !== 'tasks') {
       return
     }
 
-    if (appSessionStore.taskPaneView === 'archive') {
+    const view = appSessionStore.selectedTaskView
+
+    if (isArchiveTaskView(view)) {
       taskStore.clearTasks()
       subTaskStore.reset()
       await archiveStore.fetchGroups()
       return
     }
 
-    if (appSessionStore.taskListView === 'all') {
+    if (isAllTasksTaskView(view)) {
       await fetchAllTasks()
       return
     }
 
-    if (hasCurrentCategory && categoryStore.currentCategoryId) {
-      await fetchTasks(categoryStore.currentCategoryId)
+    if (isResolvedCategoryTaskView(view)) {
+      await fetchTasks(view.categoryId)
       return
     }
 
@@ -190,8 +218,7 @@ export function useAppFacade() {
 
   async function addCategory(name: string) {
     await categoryStore.addCategory(name)
-    appSessionStore.setTaskPaneView('active')
-    appSessionStore.setTaskListView('category')
+    selectTaskView(createCategoryTaskView(categoryStore.currentCategoryId))
 
     if (categoryStore.currentCategoryId) {
       await fetchTasks(categoryStore.currentCategoryId)
@@ -202,19 +229,22 @@ export function useAppFacade() {
     taskStore.removePendingCount(id)
     await categoryStore.deleteCategory(id)
     await taskStore.initPendingCounts()
+    reconcileCategoryTaskViewAfterCategoryLoad()
 
-    if (appSessionStore.taskPaneView === 'archive') {
+    const view = appSessionStore.selectedTaskView
+
+    if (isArchiveTaskView(view)) {
       await archiveStore.fetchGroups()
       return
     }
 
-    if (appSessionStore.taskListView === 'all') {
+    if (isAllTasksTaskView(view)) {
       await fetchAllTasks()
       return
     }
 
-    if (categoryStore.currentCategoryId) {
-      await fetchTasks(categoryStore.currentCategoryId)
+    if (isResolvedCategoryTaskView(view)) {
+      await fetchTasks(view.categoryId)
       return
     }
 
@@ -224,16 +254,14 @@ export function useAppFacade() {
 
   async function updateCategory(id: number, name: string) {
     await categoryStore.updateCategory(id, name)
-    if (appSessionStore.taskPaneView === 'archive') {
+    if (isArchiveTaskView(appSessionStore.selectedTaskView)) {
       await archiveStore.fetchGroups()
     }
   }
 
   async function selectCategory(id: number) {
-    appSessionStore.setCurrentMainView('tasks')
-    appSessionStore.setTaskPaneView('active')
-    appSessionStore.setTaskListView('category')
     categoryStore.selectCategory(id)
+    selectTaskView(createCategoryTaskView(id))
     archiveStore.clearSelection()
     subTaskStore.reset()
     await fetchTasks(id)
@@ -242,15 +270,12 @@ export function useAppFacade() {
   async function selectAllTasksView() {
     if (
       appSessionStore.currentMainView === 'tasks' &&
-      appSessionStore.taskPaneView === 'active' &&
-      appSessionStore.taskListView === 'all'
+      isAllTasksTaskView(appSessionStore.selectedTaskView)
     ) {
       return
     }
 
-    appSessionStore.setCurrentMainView('tasks')
-    appSessionStore.setTaskPaneView('active')
-    appSessionStore.setTaskListView('all')
+    selectTaskView({ kind: 'system', view: 'all' })
     archiveStore.clearSelection()
     subTaskStore.reset()
     await fetchAllTasks()
@@ -259,13 +284,12 @@ export function useAppFacade() {
   async function selectArchivePane() {
     if (
       appSessionStore.currentMainView === 'tasks' &&
-      appSessionStore.taskPaneView === 'archive'
+      isArchiveTaskView(appSessionStore.selectedTaskView)
     ) {
       return
     }
 
-    appSessionStore.setCurrentMainView('tasks')
-    appSessionStore.setTaskPaneView('archive')
+    selectTaskView({ kind: 'history', view: 'archive' })
     taskStore.clearTasks()
     subTaskStore.reset()
     archiveStore.clearSelection()
@@ -285,9 +309,8 @@ export function useAppFacade() {
     if (
       requestId !== latestTaskRequestId ||
       appSessionStore.currentMainView !== 'tasks' ||
-      appSessionStore.taskPaneView !== 'active' ||
-      appSessionStore.taskListView !== 'category' ||
-      categoryStore.currentCategoryId !== categoryId
+      !isResolvedCategoryTaskView(appSessionStore.selectedTaskView) ||
+      appSessionStore.selectedTaskView.categoryId !== categoryId
     ) {
       return
     }
@@ -303,8 +326,7 @@ export function useAppFacade() {
     if (
       requestId !== latestTaskRequestId ||
       appSessionStore.currentMainView !== 'tasks' ||
-      appSessionStore.taskPaneView !== 'active' ||
-      appSessionStore.taskListView !== 'all'
+      !isAllTasksTaskView(appSessionStore.selectedTaskView)
     ) {
       return
     }
@@ -321,7 +343,7 @@ export function useAppFacade() {
     }
   ) {
     const categoryId = currentTaskCreateCategoryId.value
-    if (!categoryId || appSessionStore.taskPaneView !== 'active') return false
+    if (!categoryId || !isCurrentActiveTaskView()) return false
 
     return await taskStore.addTask(
       content,
@@ -332,7 +354,7 @@ export function useAppFacade() {
   }
 
   async function toggleTask(id: number) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    if (!isCurrentActiveTaskView()) return false
 
     return await taskStore.toggleTask(id)
   }
@@ -361,7 +383,7 @@ export function useAppFacade() {
   }
 
   async function updateTaskContent(id: number, content: string) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    if (!isCurrentActiveTaskView()) return false
     return await taskStore.updateTaskContent(id, content)
   }
 
@@ -456,17 +478,15 @@ export function useAppFacade() {
 
     if (
       appSessionStore.currentMainView === 'tasks' &&
-      appSessionStore.taskPaneView === 'active' &&
-      appSessionStore.taskListView === 'all'
+      isAllTasksTaskView(appSessionStore.selectedTaskView)
     ) {
       return
     }
 
     if (
       appSessionStore.currentMainView !== 'tasks' ||
-      appSessionStore.taskPaneView !== 'active' ||
-      appSessionStore.taskListView !== 'category' ||
-      categoryStore.currentCategoryId !== categoryId
+      !isResolvedCategoryTaskView(appSessionStore.selectedTaskView) ||
+      appSessionStore.selectedTaskView.categoryId !== categoryId
     ) {
       await selectCategory(categoryId)
     }
@@ -474,7 +494,7 @@ export function useAppFacade() {
 
   async function reorderTasks(previousOrderedIds: number[]) {
     const activeTarget = getActiveTaskTarget()
-    if (!activeTarget || appSessionStore.taskPaneView !== 'active') return false
+    if (!activeTarget || !isCurrentActiveTaskView()) return false
 
     return await taskStore.reorderTasks(previousOrderedIds, {
       persist: activeTarget.taskListView !== 'all'
@@ -482,37 +502,36 @@ export function useAppFacade() {
   }
 
   async function moveTaskToCategory(id: number, targetCategoryId: number) {
-    if (appSessionStore.taskPaneView !== 'active') {
+    if (!isCurrentActiveTaskView()) {
       return false
     }
 
     return await taskStore.moveTaskToCategory(id, targetCategoryId, {
-      taskListView: appSessionStore.taskListView,
-      currentCategoryId: categoryStore.currentCategoryId,
+      taskView: appSessionStore.selectedTaskView,
       scopeKey: currentTaskScopeKey.value
     })
   }
 
   async function toggleExpand(taskId: number) {
     const scopeKey = currentTaskScopeKey.value
-    if (scopeKey === null || appSessionStore.taskPaneView !== 'active') return false
+    if (scopeKey === null || !isCurrentActiveTaskView()) return false
 
     return await subTaskStore.toggleExpand(taskId, scopeKey)
   }
 
   async function addSubTask(content: string, parentId: number) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    if (!isCurrentActiveTaskView()) return false
     return await subTaskStore.addSubTask(content, parentId)
   }
 
   async function toggleSubTask(id: number, parentId: number) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    if (!isCurrentActiveTaskView()) return false
     return await subTaskStore.toggleSubTask(id, parentId)
   }
 
   async function deleteSubTask(id: number, parentId: number) {
     const activeTarget = getActiveTaskTarget()
-    if (!activeTarget || appSessionStore.taskPaneView !== 'active') return false
+    if (!activeTarget || !isCurrentActiveTaskView()) return false
 
     const deleted = await subTaskStore.deleteSubTask(id, parentId)
     if (!deleted) return false
@@ -527,7 +546,7 @@ export function useAppFacade() {
   }
 
   async function updateSubTaskContent(id: number, parentId: number, content: string) {
-    if (appSessionStore.taskPaneView !== 'active') return false
+    if (!isCurrentActiveTaskView()) return false
     return await subTaskStore.updateSubTaskContent(id, parentId, content)
   }
 
@@ -541,11 +560,14 @@ export function useAppFacade() {
     currentMainView,
     taskPaneView,
     taskListView,
+    selectedTaskView,
     categories,
     currentCategoryId,
+    activeTaskCategoryId,
     currentCategory,
     inboxCategory,
     inboxCategoryId,
+    isArchiveTaskViewActive,
     isAllTasksView,
     currentTaskScopeKey,
     currentTaskCreateCategoryId,

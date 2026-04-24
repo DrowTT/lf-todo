@@ -17,6 +17,7 @@ export interface TaskDueState {
 export interface Task {
   id: number
   content: string
+  description: string | null
   is_completed: boolean
   category_id: number
   order_index: number
@@ -31,6 +32,7 @@ export interface Task {
   archived_category_name?: string | null
   subtask_total: number
   subtask_done: number
+  search_subtask_matches?: string[]
 }
 
 export interface ArchivedTaskGroup {
@@ -62,7 +64,7 @@ export interface QuickAddCommittedEvent {
 }
 
 export type TaskUpdate = Partial<
-  Pick<Task, 'content' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision' | 'priority'>
+  Pick<Task, 'content' | 'description' | 'is_completed' | 'order_index' | 'due_at' | 'due_precision' | 'priority'>
 >
 
 export interface AutoCleanupConfig {

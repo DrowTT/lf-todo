@@ -9,6 +9,7 @@ import {
   pendingOperations,
   runAsyncAction
 } from '../services/runAsyncAction'
+import { isResolvedCategoryTaskView, type TaskView } from '../utils/taskNavigation'
 import { useSubTaskStore } from './subtask'
 
 const TASK_OPERATION_TYPES = {
@@ -433,6 +434,32 @@ export const useTaskStore = defineStore('task', () => {
     })
   }
 
+
+  async function updateTaskDescription(id: number, description: string | null) {
+    const task = tasks.value.find((item) => item.id === id)
+    if (!task) return false
+
+    const previousDescription = task.description
+    if (previousDescription === description) {
+      return true
+    }
+
+    return runTaskAction({
+      key: buildPendingOperationKey(TASK_OPERATION_TYPES.update, id),
+      type: TASK_OPERATION_TYPES.update,
+      entityId: id,
+      before: () => {
+        task.description = description
+      },
+      execute: () => taskRepository.updateTask(id, { description }),
+      rollback: () => {
+        task.description = previousDescription
+      },
+      errorMessage: '????????????',
+      logPrefix: '[taskStore] updateTaskDescription failed'
+    })
+  }
+
   async function updateTaskDue(id: number, dueState: TaskDueState) {
     const task = tasks.value.find((item) => item.id === id)
     if (!task) return false
@@ -495,8 +522,7 @@ export const useTaskStore = defineStore('task', () => {
     id: number,
     targetCategoryId: number,
     options: {
-      taskListView: 'all' | 'category'
-      currentCategoryId: number | null
+      taskView: TaskView
       scopeKey: string | number | null
     }
   ) {
@@ -515,7 +541,8 @@ export const useTaskStore = defineStore('task', () => {
       subTaskStore.subTasksMap[id]?.map((subTask) => ({ ...subTask })) ?? null
     const hadSubTasks = id in subTaskStore.subTasksMap
     const shouldRemoveFromCurrentList =
-      options.taskListView === 'category' && options.currentCategoryId === sourceCategoryId
+      isResolvedCategoryTaskView(options.taskView) &&
+      options.taskView.categoryId === sourceCategoryId
 
     return runTaskAction({
       key: buildPendingOperationKey(TASK_OPERATION_TYPES.move, id),
@@ -735,6 +762,7 @@ export const useTaskStore = defineStore('task', () => {
     deleteTask,
     restoreDeletedTask,
     updateTaskContent,
+    updateTaskDescription,
     updateTaskDue,
     updateTaskPriority,
     moveTaskToCategory,

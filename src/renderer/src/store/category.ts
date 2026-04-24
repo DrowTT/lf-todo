@@ -6,12 +6,12 @@ import { clearStoredValue, readStoredNumber, writeStoredNumber } from '../utils/
 
 // ─── localStorage 持久化封装 ──────────────────────────────────────
 // 统一使用 lf-todo: 前缀（与 useSidebarResize.ts、subtask store 保持一致的命名规范）
-const STORAGE_KEY = 'lf-todo:current-category-id'
+export const CURRENT_CATEGORY_STORAGE_KEY = 'lf-todo:current-category-id'
 
 const persistence = {
-  get: () => readStoredNumber(STORAGE_KEY),
-  set: (id: number) => writeStoredNumber(STORAGE_KEY, id),
-  clear: () => clearStoredValue(STORAGE_KEY)
+  get: () => readStoredNumber(CURRENT_CATEGORY_STORAGE_KEY),
+  set: (id: number) => writeStoredNumber(CURRENT_CATEGORY_STORAGE_KEY, id),
+  clear: () => clearStoredValue(CURRENT_CATEGORY_STORAGE_KEY)
 }
 // ─────────────────────────────────────────────────────────────────
 

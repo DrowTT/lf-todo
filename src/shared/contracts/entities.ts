@@ -46,6 +46,7 @@ export function parseTask(value: unknown, label = 'task'): Task {
     [
       'id',
       'content',
+      'description',
       'is_completed',
       'category_id',
       'order_index',
@@ -59,7 +60,8 @@ export function parseTask(value: unknown, label = 'task'): Task {
       'archived_at',
       'archived_category_name',
       'subtask_total',
-      'subtask_done'
+      'subtask_done',
+      'search_subtask_matches'
     ],
     label
   )
@@ -89,6 +91,24 @@ export function parseTask(value: unknown, label = 'task'): Task {
           maxLength: 64
         })
   const duePrecision = parseNullableTaskDuePrecision(record.due_precision, `${label}.due_precision`)
+  const searchSubtaskMatches =
+    record.search_subtask_matches === undefined
+      ? undefined
+      : expectArray(record.search_subtask_matches, `${label}.search_subtask_matches`, (item, itemLabel) =>
+          expectString(item, itemLabel, {
+            trim: true,
+            minLength: 1,
+            maxLength: 200
+          })
+        )
+  const description =
+    record.description === null || record.description === undefined
+      ? null
+      : expectString(record.description, `${label}.description`, {
+          trim: true,
+          minLength: 1,
+          maxLength: 500
+        })
 
   if ((dueAt === null) !== (duePrecision === null)) {
     throw new Error(`${label} must include due_at and due_precision together`)
@@ -101,6 +121,7 @@ export function parseTask(value: unknown, label = 'task'): Task {
       minLength: 1,
       maxLength: 200
     }),
+    description,
     is_completed: expectBoolean(record.is_completed, `${label}.is_completed`),
     category_id: expectInteger(record.category_id, `${label}.category_id`, { min: 1 }),
     order_index: expectInteger(record.order_index, `${label}.order_index`, { min: 0 }),
@@ -117,7 +138,8 @@ export function parseTask(value: unknown, label = 'task'): Task {
     archived_at: archivedAt,
     archived_category_name: archivedCategoryName,
     subtask_total: expectInteger(record.subtask_total, `${label}.subtask_total`, { min: 0 }),
-    subtask_done: expectInteger(record.subtask_done, `${label}.subtask_done`, { min: 0 })
+    subtask_done: expectInteger(record.subtask_done, `${label}.subtask_done`, { min: 0 }),
+    search_subtask_matches: searchSubtaskMatches
   }
 }
 

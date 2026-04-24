@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { computed, markRaw, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { Archive, Inbox, ListTodo } from 'lucide-vue-next'
 import { SYSTEM_CATEGORY_NAME } from '../../../shared/constants/category'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useTaskMoveDrag } from '../composables/useTaskMoveDrag'
-import { useAppSessionStore } from '../store/appSession'
 import { ALL_TASKS_VIEW_LABEL, getCategoryDisplayName } from '../utils/taskNavigation'
 
 const app = useAppFacade()
-const { categories, currentCategoryId, pendingCounts, inboxCategory, taskListView } = app
+const {
+  categories,
+  activeTaskCategoryId,
+  currentMainView,
+  pendingCounts,
+  inboxCategory,
+  isAllTasksView,
+  isArchiveTaskViewActive
+} = app
 const { confirm } = useAppRuntime().confirm
-const appSessionStore = useAppSessionStore()
 const {
   menu: contextMenu,
   menuRef: contextMenuRef,
@@ -39,9 +46,12 @@ const setEditInputRef = (element: Element | ComponentPublicInstance | null) => {
   editInputRef.value = element instanceof HTMLInputElement ? element : null
 }
 
-const isArchiveActive = computed(
-  () => appSessionStore.currentMainView === 'tasks' && appSessionStore.taskPaneView === 'archive'
-)
+const isArchiveActive = computed(() => isArchiveTaskViewActive.value)
+const systemEntryIcons = {
+  all: markRaw(ListTodo),
+  inbox: markRaw(Inbox),
+  archive: markRaw(Archive)
+}
 
 const customCategories = computed(() => categories.value.filter((category) => !category.is_system))
 
@@ -52,12 +62,10 @@ const systemEntries = computed(() => {
     {
       key: 'all',
       label: ALL_TASKS_VIEW_LABEL,
+      icon: systemEntryIcons.all,
       badge: app.allPendingCount.value,
       dropCategoryId: null,
-      active:
-        appSessionStore.currentMainView === 'tasks' &&
-        appSessionStore.taskPaneView === 'active' &&
-        taskListView.value === 'all',
+      active: isAllTasksView.value,
       onClick: () => {
         void app.selectAllTasksView()
       }
@@ -65,13 +73,10 @@ const systemEntries = computed(() => {
     {
       key: 'inbox',
       label: getCategoryDisplayName(inboxCategory.value) || SYSTEM_CATEGORY_NAME,
+      icon: systemEntryIcons.inbox,
       badge: inboxId === null ? 0 : (pendingCounts.value[inboxId] ?? 0),
       dropCategoryId: inboxId,
-      active:
-        appSessionStore.currentMainView === 'tasks' &&
-        appSessionStore.taskPaneView === 'active' &&
-        taskListView.value === 'category' &&
-        currentCategoryId.value === inboxId,
+      active: currentMainView.value === 'tasks' && activeTaskCategoryId.value === inboxId,
       onClick: () => {
         if (inboxId !== null) {
           void app.selectCategory(inboxId)
@@ -81,6 +86,7 @@ const systemEntries = computed(() => {
     {
       key: 'archive',
       label: '已归档',
+      icon: systemEntryIcons.archive,
       badge: 0,
       dropCategoryId: null,
       active: isArchiveActive.value,
@@ -310,6 +316,9 @@ watch(contextMenuRef, (element) => {
           @dragleave="handleTaskDragLeave($event, entry.dropCategoryId)"
           @drop="handleTaskDrop($event, entry.dropCategoryId)"
         >
+          <span class="category-item__icon-shell">
+            <component :is="entry.icon" class="category-item__icon" :size="14" :stroke-width="2.2" />
+          </span>
           <span class="category-item__name">{{ entry.label }}</span>
           <span v-if="entry.badge" class="category-item__badge">
             {{ entry.badge }}
@@ -328,10 +337,8 @@ watch(contextMenuRef, (element) => {
             class="category-item category-item--category-entry"
             :class="{
               'category-item--active':
-                appSessionStore.currentMainView === 'tasks' &&
-                appSessionStore.taskPaneView === 'active' &&
-                taskListView === 'category' &&
-                currentCategoryId === category.id &&
+                currentMainView === 'tasks' &&
+                activeTaskCategoryId === category.id &&
                 editingCategoryId !== category.id,
               'category-item--editing': editingCategoryId === category.id,
               'category-item--input-shell': editingCategoryId === category.id,
@@ -440,7 +447,7 @@ watch(contextMenuRef, (element) => {
 
 .category-section {
   &__label {
-    margin: 0 10px 8px;
+    margin: 0 10px 6px;
     font-size: 11px;
     font-weight: 700;
     color: rgba(71, 85, 105, 0.72);
@@ -449,10 +456,10 @@ watch(contextMenuRef, (element) => {
 
   &__list {
     margin: 0;
-    padding: 10px 8px;
+    padding: 8px 7px;
     list-style: none;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.42);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.34);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.58),
       0 8px 18px rgba(148, 163, 184, 0.08);
@@ -520,7 +527,24 @@ watch(contextMenuRef, (element) => {
   }
 
   &--system-entry .category-item__name {
+    padding-left: 0;
     font-weight: 600;
+  }
+
+  &--system-entry {
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 12px;
+    gap: 8px;
+
+    &.category-item--active::before {
+      content: none;
+    }
+
+    &.category-item--active .category-item__icon-shell {
+      background: $accent-soft;
+      color: $accent-color;
+    }
   }
 
   &--category-entry .category-item__name {
@@ -595,8 +619,25 @@ watch(contextMenuRef, (element) => {
     opacity: 0.74;
   }
 
+  &__icon-shell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+    background: rgba(37, 99, 235, 0.08);
+    color: rgba(37, 99, 235, 0.78);
+  }
+
+  &__icon {
+    display: block;
+  }
+
   &__name {
     flex: 1;
+    min-width: 0;
     display: block;
     box-sizing: border-box;
     padding-left: 12px;
@@ -626,6 +667,7 @@ watch(contextMenuRef, (element) => {
     font-size: $font-xs;
     font-weight: 600;
     line-height: 1;
+    align-self: center;
   }
 
   &__edit-input {

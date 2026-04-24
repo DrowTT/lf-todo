@@ -140,7 +140,7 @@ export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
   const record = expectRecord(value, label)
   assertAllowedKeys(
     record,
-    ['content', 'is_completed', 'order_index', 'due_at', 'due_precision', 'priority'],
+    ['content', 'description', 'is_completed', 'order_index', 'due_at', 'due_precision', 'priority'],
     label
   )
 
@@ -156,6 +156,17 @@ export function parseTaskUpdate(value: unknown, label = 'updates'): TaskUpdate {
 
   if ('is_completed' in record) {
     updates.is_completed = expectBoolean(record.is_completed, `${label}.is_completed`)
+  }
+
+  if ('description' in record) {
+    updates.description =
+      record.description === null
+        ? null
+        : expectString(record.description, `${label}.description`, {
+            trim: true,
+            minLength: 1,
+            maxLength: 500
+          })
   }
 
   if ('order_index' in record) {

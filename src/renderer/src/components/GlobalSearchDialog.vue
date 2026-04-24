@@ -5,7 +5,7 @@ import { CheckCircle2, Command, FolderSearch, Loader2, Search } from 'lucide-vue
 import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useGlobalSearchStore, type GlobalSearchScope } from '../store/globalSearch'
-import { buildSearchHighlightParts } from '../utils/searchHighlight'
+import { buildSearchHighlightParts, buildSearchSnippet } from '../utils/searchHighlight'
 import { getCategoryDisplayName } from '../utils/taskNavigation'
 import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 
@@ -81,6 +81,13 @@ const panelHint = computed(() => {
 
   return `找到 ${results.value.length} 条结果`
 })
+
+const getTaskDescription = (task: Task) => task.description?.trim() ?? ''
+const getTaskDescriptionPreview = (task: Task) => buildSearchSnippet(getTaskDescription(task), query.value)
+const shouldShowDescription = (task: Task) => Boolean(getTaskDescription(task))
+const getSubTaskMatchPreviews = (task: Task) =>
+  (task.search_subtask_matches ?? []).map((content) => buildSearchSnippet(content, query.value, 28))
+const shouldShowSubTaskMatches = (task: Task) => getSubTaskMatchPreviews(task).length > 0
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let restoreFocusTarget: HTMLElement | null = null
@@ -431,6 +438,36 @@ onBeforeUnmount(() => {
                       <span v-else>{{ part.text }}</span>
                     </template>
                   </div>
+                  <div v-if="shouldShowDescription(task)" class="global-search__option-description">
+                    <template
+                      v-for="(part, partIndex) in buildSearchHighlightParts(getTaskDescriptionPreview(task), query)"
+                      :key="`${task.id}-desc-${partIndex}`"
+                    >
+                      <mark v-if="part.matched" class="global-search__mark">{{ part.text }}</mark>
+                      <span v-else>{{ part.text }}</span>
+                    </template>
+                  </div>
+                  <div
+                    v-if="shouldShowSubTaskMatches(task)"
+                    class="global-search__option-subtasks"
+                  >
+                    <div
+                      v-for="(subTaskPreview, subTaskIndex) in getSubTaskMatchPreviews(task)"
+                      :key="`${task.id}-subtask-${subTaskIndex}`"
+                      class="global-search__option-subtask"
+                    >
+                      <span class="global-search__subtask-prefix">子</span>
+                      <span class="global-search__subtask-text">
+                        <template
+                          v-for="(part, partIndex) in buildSearchHighlightParts(subTaskPreview, query)"
+                          :key="`${task.id}-subtask-${subTaskIndex}-${partIndex}`"
+                        >
+                          <mark v-if="part.matched" class="global-search__mark">{{ part.text }}</mark>
+                          <span v-else>{{ part.text }}</span>
+                        </template>
+                      </span>
+                    </div>
+                  </div>
                   <div class="global-search__option-meta">
                     <span class="global-search__meta-chip">
                       {{ getTaskCategoryLabel(task) }}
@@ -660,6 +697,54 @@ onBeforeUnmount(() => {
   font-size: $font-md;
   line-height: 1.6;
   word-break: break-word;
+}
+
+.global-search__option-description {
+  display: -webkit-box;
+  margin-top: 3px;
+  color: rgba($text-secondary, 0.78);
+  font-size: $font-sm;
+  line-height: 1.55;
+  word-break: break-word;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.global-search__option-subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.global-search__option-subtask {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: rgba($text-secondary, 0.76);
+  font-size: $font-sm;
+  line-height: 1.5;
+}
+
+.global-search__subtask-prefix {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba($accent-color, 0.08);
+  color: rgba($accent-color, 0.82);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.global-search__subtask-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .global-search__option-meta {

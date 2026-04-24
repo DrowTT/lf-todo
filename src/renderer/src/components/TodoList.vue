@@ -21,7 +21,7 @@ import TodoItem from './TodoItem.vue'
 import TodoSearchBar from './TodoSearchBar.vue'
 
 const app = useAppFacade()
-const { currentCategoryId, tasks, isLoading, taskPaneView, taskListView } = app
+const { tasks, isLoading, selectedTaskView, isArchiveTaskViewActive } = app
 const { confirm } = useAppRuntime().confirm
 const taskStore = useTaskStore()
 const globalSearchStore = useGlobalSearchStore()
@@ -42,7 +42,7 @@ const {
 const { dragTaskId, dropHandled, dropCategoryId, startTaskMoveDrag, clearTaskMoveDrag } =
   useTaskMoveDrag()
 
-const isArchivePane = computed(() => taskPaneView.value === 'archive')
+const isArchivePane = computed(() => isArchiveTaskViewActive.value)
 const currentViewTitle = computed(() => app.currentTaskViewLabel.value)
 const isAllTasksView = computed(() => app.isAllTasksView.value)
 const hasTaskScope = computed(() => app.currentTaskScopeKey.value !== null)
@@ -183,7 +183,7 @@ async function handleMoveTaskToCategory(targetCategoryId: number) {
   await app.moveTaskToCategory(taskId, targetCategoryId)
 }
 
-watch([currentCategoryId, taskPaneView, taskListView], () => {
+watch(selectedTaskView, () => {
   searchQuery.value = ''
   isSearchExpanded.value = false
   closeTaskContextMenu()
@@ -202,9 +202,9 @@ watch(taskContextMenuRef, (element) => {
 })
 
 watch(
-  [() => globalSearchStore.pendingRevealTaskId, tasks, taskPaneView],
-  async ([pendingRevealTaskId, , paneView]) => {
-    if (paneView === 'archive') return
+  [() => globalSearchStore.pendingRevealTaskId, tasks, isArchiveTaskViewActive],
+  async ([pendingRevealTaskId, , archivePaneActive]) => {
+    if (archivePaneActive) return
     if (!pendingRevealTaskId) return
     if (!tasks.value.some((task) => task.id === pendingRevealTaskId)) return
 

@@ -147,6 +147,11 @@ function parseBackupTaskRecord(
       minLength: 1,
       maxLength: 200
     }),
+    description: parseOptionalString(record.description, `${label}.description`, {
+      trim: true,
+      minLength: 1,
+      maxLength: 500
+    }),
     is_completed:
       record.is_completed === undefined
         ? false

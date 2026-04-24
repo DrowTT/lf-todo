@@ -53,6 +53,7 @@ const migrations: Migration[] = [
       CREATE TABLE IF NOT EXISTS tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
+        description TEXT,
         is_completed INTEGER DEFAULT 0,
         category_id INTEGER NOT NULL,
         order_index INTEGER DEFAULT 0,
@@ -139,6 +140,7 @@ const migrations: Migration[] = [
       CREATE TABLE IF NOT EXISTS archived_tasks (
         id INTEGER PRIMARY KEY,
         content TEXT NOT NULL,
+        description TEXT,
         is_completed INTEGER NOT NULL DEFAULT 1,
         category_id INTEGER NOT NULL,
         order_index INTEGER DEFAULT 0,
@@ -200,6 +202,14 @@ const migrations: Migration[] = [
       UPDATE categories
       SET order_index = ${SYSTEM_CATEGORY_ORDER_INDEX}
       WHERE is_system = 1;
+    `
+  },
+  {
+    version: 13,
+    description: 'add task description columns',
+    up: `
+      ALTER TABLE tasks ADD COLUMN description TEXT;
+      ALTER TABLE archived_tasks ADD COLUMN description TEXT;
     `
   }
 ]
@@ -330,6 +340,7 @@ export function initDatabase(): void {
       )
     `),
     updateContent: db.prepare('UPDATE tasks SET content = ? WHERE id = ?'),
+    updateDescription: db.prepare('UPDATE tasks SET description = ? WHERE id = ?'),
     updateCompleted: db.prepare(`
       UPDATE tasks
       SET
@@ -390,6 +401,7 @@ export function initDatabase(): void {
       INSERT INTO archived_tasks (
         id,
         content,
+        description,
         is_completed,
         category_id,
         order_index,
@@ -402,12 +414,13 @@ export function initDatabase(): void {
         due_at,
         due_precision,
         priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertTaskSnapshot: db.prepare(`
       INSERT INTO tasks (
         id,
         content,
+        description,
         is_completed,
         category_id,
         order_index,
@@ -418,12 +431,13 @@ export function initDatabase(): void {
         due_at,
         due_precision,
         priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertArchivedTaskSnapshot: db.prepare(`
       INSERT INTO archived_tasks (
         id,
         content,
+        description,
         is_completed,
         category_id,
         order_index,
@@ -436,7 +450,7 @@ export function initDatabase(): void {
         due_at,
         due_precision,
         priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     getArchivedRootTasks: db.prepare(`
       SELECT
@@ -464,6 +478,7 @@ export function initDatabase(): void {
       INSERT INTO tasks (
         id,
         content,
+        description,
         is_completed,
         category_id,
         order_index,
@@ -474,7 +489,7 @@ export function initDatabase(): void {
         due_at,
         due_precision,
         priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
   }
 
@@ -500,6 +515,7 @@ export interface Category {
 export interface Task extends TaskDueState {
   id: number
   content: string
+  description: string | null
   is_completed: boolean
   category_id: number
   order_index: number
@@ -512,6 +528,7 @@ export interface Task extends TaskDueState {
   archived_category_name?: string | null
   subtask_total: number
   subtask_done: number
+  search_subtask_matches?: string[]
 }
 
 export interface DueReminderTask {
@@ -537,6 +554,7 @@ function mapTask(raw: Record<string, unknown>): Task {
   return {
     id: raw.id as number,
     content: raw.content as string,
+    description: typeof raw.description === 'string' ? raw.description : null,
     is_completed: raw.is_completed === 1 || raw.is_completed === true,
     category_id: raw.category_id as number,
     order_index: raw.order_index as number,
@@ -551,7 +569,10 @@ function mapTask(raw: Record<string, unknown>): Task {
     archived_category_name:
       typeof raw.archived_category_name === 'string' ? raw.archived_category_name : null,
     subtask_total: typeof raw.subtask_total === 'number' ? raw.subtask_total : 0,
-    subtask_done: typeof raw.subtask_done === 'number' ? raw.subtask_done : 0
+    subtask_done: typeof raw.subtask_done === 'number' ? raw.subtask_done : 0,
+    search_subtask_matches: Array.isArray(raw.search_subtask_matches)
+      ? raw.search_subtask_matches.filter((item): item is string => typeof item === 'string')
+      : undefined
   }
 }
 
@@ -729,6 +750,7 @@ function insertTaskSnapshot(task: BackupTaskRecord): void {
   getStmts().insertTaskSnapshot.run(
     task.id,
     task.content,
+    task.description,
     task.is_completed,
     task.category_id,
     task.order_index,
@@ -746,6 +768,7 @@ function insertArchivedTaskSnapshot(task: BackupArchivedTaskRecord): void {
   getStmts().insertArchivedTaskSnapshot.run(
     task.id,
     task.content,
+    task.description,
     task.is_completed,
     task.category_id,
     task.order_index,
@@ -845,6 +868,7 @@ function syncTaskAutoincrementSequence(nextTaskId: number): void {
   insertTaskSnapshot({
     id: targetMaxId,
     content: '__lf_todo_sequence__',
+    description: null,
     is_completed: false,
     category_id: systemCategory.id,
     order_index: 0,
@@ -938,6 +962,7 @@ function archiveTaskTree(parentId: number, archivedAt: number): void {
     getStmts().insertArchivedTask.run(
       row.id,
       row.content,
+      row.description ?? null,
       row.is_completed,
       row.category_id,
       row.order_index,
@@ -1037,6 +1062,7 @@ function restoreArchivedTaskTree(parentId: number, restoredAt: number): void {
     getStmts().insertRestoredTask.run(
       row.id,
       row.content,
+      row.description ?? null,
       row.is_completed,
       targetCategoryId,
       row.order_index,
@@ -1109,12 +1135,32 @@ export function searchTasks(request: SearchTasksRequest): Task[] {
     LEFT JOIN tasks s ON s.parent_id = t.id
     WHERE
       t.parent_id IS NULL
-      AND LOWER(t.content) LIKE @likePattern ESCAPE '\\'
+      AND (
+        LOWER(t.content) LIKE @likePattern ESCAPE '\\'
+        OR LOWER(COALESCE(t.description, '')) LIKE @likePattern ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM tasks matched_subtask
+          WHERE
+            matched_subtask.parent_id = t.id
+            AND LOWER(matched_subtask.content) LIKE @likePattern ESCAPE '\\'
+        )
+      )
       ${categoryId === null ? '' : 'AND t.category_id = @categoryId'}
     GROUP BY t.id
     ORDER BY
       CASE WHEN LOWER(TRIM(t.content)) = @exactQuery THEN 0 ELSE 1 END ASC,
       CASE WHEN LOWER(t.content) LIKE @prefixPattern ESCAPE '\\' THEN 0 ELSE 1 END ASC,
+      CASE WHEN LOWER(TRIM(COALESCE(t.description, ''))) = @exactQuery THEN 0 ELSE 1 END ASC,
+      CASE WHEN LOWER(COALESCE(t.description, '')) LIKE @prefixPattern ESCAPE '\\' THEN 0 ELSE 1 END ASC,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM tasks exact_subtask
+        WHERE exact_subtask.parent_id = t.id AND LOWER(TRIM(exact_subtask.content)) = @exactQuery
+      ) THEN 0 ELSE 1 END ASC,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM tasks prefix_subtask
+        WHERE prefix_subtask.parent_id = t.id AND LOWER(prefix_subtask.content) LIKE @prefixPattern ESCAPE '\\'
+      ) THEN 0 ELSE 1 END ASC,
       CASE WHEN t.is_completed = 0 THEN 0 ELSE 1 END ASC,
       CASE
         WHEN t.priority = 'high' THEN 0
@@ -1134,8 +1180,22 @@ export function searchTasks(request: SearchTasksRequest): Task[] {
     categoryId,
     limit: request.limit
   }) as Record<string, unknown>[]
+  const subtaskMatchStatement = getDb().prepare(`
+    SELECT content
+    FROM tasks
+    WHERE parent_id = @parentId AND LOWER(content) LIKE @likePattern ESCAPE '\\'
+    ORDER BY order_index ASC, id ASC
+    LIMIT 3
+  `)
+  const rowsWithSearchContext = rows.map((row) => ({
+    ...row,
+    search_subtask_matches: subtaskMatchStatement
+      .all({ parentId: row.id, likePattern })
+      .map((item) => (item as Record<string, unknown>).content)
+      .filter((content): content is string => typeof content === 'string')
+  }))
 
-  return mapRows(rows)
+  return mapRows(rowsWithSearchContext)
 }
 
 export function getSubTasks(parentId: number): Task[] {
@@ -1197,6 +1257,10 @@ export function updateTask(id: number, updates: TaskUpdate): void {
 
   if (updates.content !== undefined) {
     s.updateContent.run(updates.content, id)
+  }
+
+  if (updates.description !== undefined) {
+    s.updateDescription.run(updates.description, id)
   }
 
   if (updates.is_completed !== undefined) {
@@ -1446,6 +1510,7 @@ export function exportAllData(): BackupDataPayload {
   ).map((task) => ({
     id: task.id,
     content: task.content,
+    description: task.description,
     is_completed: task.is_completed,
     category_id: task.category_id,
     order_index: task.order_index,
@@ -1464,6 +1529,7 @@ export function exportAllData(): BackupDataPayload {
   ).map((task) => ({
     id: task.id,
     content: task.content,
+    description: task.description,
     is_completed: task.is_completed,
     category_id: task.category_id,
     order_index: task.order_index,

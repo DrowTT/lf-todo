@@ -2,17 +2,26 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_VALUES } from '../../../shared/constants/task'
 import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
-import { readStoredJson, writeStoredJson } from '../utils/localStorage'
+import { readStoredJson, readStoredNumber, writeStoredJson } from '../utils/localStorage'
+import { CURRENT_CATEGORY_STORAGE_KEY } from './category'
+import {
+  buildTaskViewFromLegacyState,
+  getTaskListView,
+  getTaskPaneView,
+  normalizeTaskView,
+  type TaskListView,
+  type TaskPaneView,
+  type TaskView
+} from '../utils/taskNavigation'
 
 export type MainView = 'tasks' | 'pomodoro' | 'settings'
-export type TaskPaneView = 'active' | 'archive'
-export type TaskListView = 'category' | 'all'
 type TaskDraftScopeKey = string | number | null
 
 interface SessionSnapshot {
   currentMainView: MainView
   taskPaneView: TaskPaneView
   taskListView: TaskListView
+  selectedTaskView: TaskView
   taskDrafts: Record<string, string>
   taskDueDrafts: Record<string, TaskDueState>
   taskPriorityDrafts: Record<string, TaskPriority>
@@ -23,6 +32,14 @@ const STORAGE_KEY = 'lf-todo:app-session'
 
 function loadSnapshot(): SessionSnapshot {
   const parsed = readStoredJson<Partial<SessionSnapshot>>(STORAGE_KEY, {})
+  const taskPaneView = parsed.taskPaneView === 'archive' ? 'archive' : 'active'
+  const taskListView = parsed.taskListView === 'all' ? 'all' : 'category'
+  const legacyTaskView = buildTaskViewFromLegacyState({
+    taskPaneView,
+    taskListView,
+    categoryId: readStoredNumber(CURRENT_CATEGORY_STORAGE_KEY)
+  })
+  const selectedTaskView = normalizeTaskView(parsed.selectedTaskView, legacyTaskView)
 
   return {
     currentMainView:
@@ -31,8 +48,9 @@ function loadSnapshot(): SessionSnapshot {
         : parsed.currentMainView === 'settings'
           ? 'settings'
           : 'tasks',
-    taskPaneView: parsed.taskPaneView === 'archive' ? 'archive' : 'active',
-    taskListView: parsed.taskListView === 'all' ? 'all' : 'category',
+    taskPaneView: getTaskPaneView(selectedTaskView),
+    taskListView: getTaskListView(selectedTaskView),
+    selectedTaskView,
     taskDrafts: parsed.taskDrafts ?? {},
     taskDueDrafts: normalizeTaskDueDrafts(parsed.taskDueDrafts),
     taskPriorityDrafts: normalizeTaskPriorityDrafts(parsed.taskPriorityDrafts),
@@ -104,16 +122,38 @@ export const useAppSessionStore = defineStore('appSession', () => {
   const currentMainView = ref<MainView>('tasks')
   const taskPaneView = ref<TaskPaneView>('active')
   const taskListView = ref<TaskListView>('category')
+  const selectedTaskView = ref<TaskView>(
+    buildTaskViewFromLegacyState({
+      taskPaneView: 'active',
+      taskListView: 'category',
+      categoryId: null
+    })
+  )
   const taskDrafts = ref<Record<string, string>>({})
   const taskDueDrafts = ref<Record<string, TaskDueState>>({})
   const taskPriorityDrafts = ref<Record<string, TaskPriority>>({})
   const subTaskDrafts = ref<Record<string, string>>({})
+
+  function syncLegacyTaskViewFields(view: TaskView) {
+    taskPaneView.value = getTaskPaneView(view)
+    taskListView.value = getTaskListView(view)
+  }
+
+  function buildTaskViewFromCurrentLegacyState() {
+    return buildTaskViewFromLegacyState({
+      taskPaneView: taskPaneView.value,
+      taskListView: taskListView.value,
+      categoryId:
+        selectedTaskView.value.kind === 'category' ? selectedTaskView.value.categoryId : null
+    })
+  }
 
   function persist() {
     const snapshot: SessionSnapshot = {
       currentMainView: currentMainView.value,
       taskPaneView: taskPaneView.value,
       taskListView: taskListView.value,
+      selectedTaskView: selectedTaskView.value,
       taskDrafts: taskDrafts.value,
       taskDueDrafts: taskDueDrafts.value,
       taskPriorityDrafts: taskPriorityDrafts.value,
@@ -127,8 +167,8 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
     const snapshot = loadSnapshot()
     currentMainView.value = snapshot.currentMainView
-    taskPaneView.value = snapshot.taskPaneView
-    taskListView.value = snapshot.taskListView
+    selectedTaskView.value = snapshot.selectedTaskView
+    syncLegacyTaskViewFields(snapshot.selectedTaskView)
     taskDrafts.value = snapshot.taskDrafts
     taskDueDrafts.value = snapshot.taskDueDrafts
     taskPriorityDrafts.value = snapshot.taskPriorityDrafts
@@ -143,11 +183,39 @@ export const useAppSessionStore = defineStore('appSession', () => {
 
   function setTaskPaneView(view: TaskPaneView) {
     taskPaneView.value = view
+    selectedTaskView.value = buildTaskViewFromCurrentLegacyState()
+    syncLegacyTaskViewFields(selectedTaskView.value)
     persist()
   }
 
   function setTaskListView(view: TaskListView) {
     taskListView.value = view
+    selectedTaskView.value = buildTaskViewFromCurrentLegacyState()
+    syncLegacyTaskViewFields(selectedTaskView.value)
+    persist()
+  }
+
+  function setSelectedTaskView(view: TaskView) {
+    selectedTaskView.value = view
+    syncLegacyTaskViewFields(view)
+    persist()
+  }
+
+  function syncSelectedTaskViewCategoryId(categoryId: number | null) {
+    if (selectedTaskView.value.kind !== 'category') {
+      return
+    }
+
+    if (selectedTaskView.value.categoryId === categoryId) {
+      return
+    }
+
+    selectedTaskView.value = buildTaskViewFromLegacyState({
+      taskPaneView: 'active',
+      taskListView: 'category',
+      categoryId
+    })
+    syncLegacyTaskViewFields(selectedTaskView.value)
     persist()
   }
 
@@ -266,6 +334,7 @@ export const useAppSessionStore = defineStore('appSession', () => {
     currentMainView,
     taskPaneView,
     taskListView,
+    selectedTaskView,
     taskDrafts,
     taskDueDrafts,
     taskPriorityDrafts,
@@ -274,6 +343,8 @@ export const useAppSessionStore = defineStore('appSession', () => {
     setCurrentMainView,
     setTaskPaneView,
     setTaskListView,
+    setSelectedTaskView,
+    syncSelectedTaskViewCategoryId,
     getTaskDraft,
     setTaskDraft,
     clearTaskDraft,

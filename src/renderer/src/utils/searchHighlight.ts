@@ -39,3 +39,29 @@ export function buildSearchHighlightParts(content: string, query: string): Searc
 
   return parts.filter((part) => part.text.length > 0)
 }
+
+export function buildSearchSnippet(content: string, query: string, radius = 36): string {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const normalizedContent = content.toLocaleLowerCase()
+  if (!normalizedQuery) {
+    return content
+  }
+
+  const matchIndex = normalizedContent.indexOf(normalizedQuery)
+  if (matchIndex === -1) {
+    return content
+  }
+
+  const matchEnd = matchIndex + normalizedQuery.length
+  const start = Math.max(0, matchIndex - radius)
+  const end = Math.min(content.length, matchEnd + radius)
+  const prefix = start > 0 ? '…' : ''
+  const suffix = end < content.length ? '…' : ''
+  const snippet = content
+    .slice(start, end)
+    .replace(/\s*\r?\n\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return `${prefix}${snippet}${suffix}`
+}

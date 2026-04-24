@@ -15,6 +15,7 @@ export interface BackupCategoryRecord {
 export interface BackupTaskRecord {
   id: number
   content: string
+  description: string | null
   is_completed: boolean
   category_id: number
   order_index: number

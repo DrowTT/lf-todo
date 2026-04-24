@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { Task } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
 import type { SearchTasksInput } from '../services/repositories/taskRepository'
+import { isAllTasksTaskView } from '../utils/taskNavigation'
 import { useAppSessionStore } from './appSession'
 import { useCategoryStore } from './category'
 
@@ -43,8 +44,7 @@ export const useGlobalSearchStore = defineStore('globalSearch', () => {
   function inferIsAllTasksView(): boolean {
     return (
       appSessionStore.currentMainView === 'tasks' &&
-      appSessionStore.taskPaneView === 'active' &&
-      appSessionStore.taskListView === 'all'
+      isAllTasksTaskView(appSessionStore.selectedTaskView)
     )
   }
 

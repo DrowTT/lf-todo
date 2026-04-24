@@ -297,8 +297,7 @@ export function useHotkeys() {
   const { confirm } = useAppRuntime().confirm
 
   async function executeAction(action: HotkeyAction) {
-    const isArchivePane =
-      appSessionStore.currentMainView === 'tasks' && appSessionStore.taskPaneView === 'archive'
+    const isArchivePane = app.isArchiveTaskViewActive.value
 
     switch (action) {
       case 'toggleComplete': {
@@ -391,11 +390,10 @@ export function useHotkeys() {
 
     event.preventDefault()
     event.stopPropagation()
-    appSessionStore.setCurrentMainView('tasks')
 
     if (
-      categories[index].id === app.currentCategoryId.value &&
-      appSessionStore.taskPaneView === 'active'
+      categories[index].id === app.activeTaskCategoryId.value &&
+      !app.isArchiveTaskViewActive.value
     ) {
       return true
     }
