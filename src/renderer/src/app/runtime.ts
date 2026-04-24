@@ -1,5 +1,5 @@
 import type { App, InjectionKey } from 'vue'
-import { inject } from 'vue'
+import { hasInjectionContext, inject } from 'vue'
 import { useConfirm } from '../composables/useConfirm'
 import { useToast } from '../composables/useToast'
 import { createElectronCategoryRepository } from '../services/repositories/electron/electronCategoryRepository'
@@ -125,7 +125,7 @@ export function installAppRuntime(app: App, runtime: AppRuntime): void {
 }
 
 export function useAppRuntime(): AppRuntime {
-  const runtime = inject(appRuntimeKey, activeRuntime)
+  const runtime = hasInjectionContext() ? inject(appRuntimeKey, activeRuntime) : activeRuntime
 
   if (!runtime) {
     throw new Error('App runtime has not been installed')
