@@ -998,7 +998,8 @@ const onSubTaskDragEnd = async () => {
 .card__description-text {
   color: rgba($text-secondary, 0.82);
   font-size: $font-sm;
-  line-height: 1.65;
+  line-height: 22px;
+  min-height: 22px;
   white-space: pre-line;
   word-break: break-word;
   cursor: text;
@@ -1007,19 +1008,21 @@ const onSubTaskDragEnd = async () => {
 .card__description-input {
   display: block;
   width: 100%;
-  min-height: 23px;
+  min-height: 22px;
   box-sizing: border-box;
+  margin: 0;
   padding: 0;
   border: none;
   border-radius: 0;
   outline: none;
+  appearance: none;
   resize: none;
   overflow: hidden;
   background: transparent;
   color: $text-secondary;
   font-size: $font-sm;
   font-family: inherit;
-  line-height: 1.65;
+  line-height: 22px;
   box-shadow: 0 1.5px 0 0 rgba($accent-color, 0.28);
 
   &::placeholder {
