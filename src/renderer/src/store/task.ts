@@ -594,7 +594,9 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function archiveCompletedTasks(categoryId: number) {
-    const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
+    const completedIds = tasks.value
+      .filter((task) => task.parent_id === null && task.is_completed)
+      .map((task) => task.id)
     if (completedIds.length === 0) {
       return undefined
     }
@@ -635,7 +637,9 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function archiveAllCompletedTasks() {
-    const completedIds = tasks.value.filter((task) => task.is_completed).map((task) => task.id)
+    const completedIds = tasks.value
+      .filter((task) => task.parent_id === null && task.is_completed)
+      .map((task) => task.id)
     if (completedIds.length === 0) {
       return undefined
     }
@@ -651,7 +655,7 @@ export const useTaskStore = defineStore('task', () => {
         tasks.value = tasks.value.filter((task) => !completedIdSet.has(task.id))
       },
       execute: async () => {
-        const archivedCount = await taskRepository.archiveAllCompletedTasks()
+        const archivedCount = await taskRepository.archiveCompletedTaskIds(completedIds)
         if (archivedCount !== completedIds.length) {
           throw new Error(
             `[taskStore] archiveAllCompletedTasks mismatch: expected ${completedIds.length}, got ${archivedCount}`

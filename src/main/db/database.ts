@@ -1422,6 +1422,24 @@ export function archiveAllCompletedTasks(): number {
   return rows.length
 }
 
+export function archiveCompletedTaskIds(ids: number[]): number {
+  if (ids.length === 0) {
+    return 0
+  }
+
+  const uniqueIds = [...new Set(ids)]
+  const archivedAt = Math.floor(Date.now() / 1000)
+
+  getDb().transaction(() => {
+    for (const id of uniqueIds) {
+      assertTaskTreeArchivable(id)
+      archiveTaskTree(id, archivedAt)
+    }
+  })()
+
+  return uniqueIds.length
+}
+
 export function archiveTask(id: number): void {
   assertTaskTreeArchivable(id)
 

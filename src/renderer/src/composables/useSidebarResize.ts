@@ -16,6 +16,7 @@ export function useSidebarResize() {
 
   const applyConstraints = (width: number): number => {
     const max = getMaxSidebarWidth()
+    if (max < MIN_SIDEBAR_WIDTH) return Math.max(0, max)
     if (width < MIN_SIDEBAR_WIDTH) return MIN_SIDEBAR_WIDTH
     if (width > max) return max
     return width

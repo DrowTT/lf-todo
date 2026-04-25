@@ -189,23 +189,6 @@ const handleContextMenu = (event: MouseEvent) => {
 
   emit('taskContextmenu', event, props.task)
 }
-const hasDueDate = computed(() => props.task.due_at !== null && props.task.due_precision !== null)
-const shouldShowDuePicker = computed(
-  () => isEditing.value || hasDueDate.value || isHovered.value || isDuePickerOpen.value
-)
-const shouldAlwaysShowEmptyDuePicker = computed(
-  () => !subTaskProgress.value && !hasDueDate.value && !isSaving.value && !isDeleting.value
-)
-const shouldRenderDuePicker = computed(
-  () => shouldShowDuePicker.value || shouldAlwaysShowEmptyDuePicker.value
-)
-const hasMetaContent = computed(
-  () =>
-    shouldShowDuePicker.value ||
-    Boolean(subTaskProgress.value) ||
-    isSaving.value ||
-    isDeleting.value
-)
 const cardClasses = computed(() => ({
   'card--open': isExpanded.value,
   'card--done': props.task.is_completed,
@@ -318,31 +301,6 @@ const onSubTaskDragEnd = async () => {
             </template>
           </div>
         </div>
-        <div v-if="hasMetaContent || shouldAlwaysShowEmptyDuePicker" class="card__meta">
-          <span v-if="subTaskProgress" class="card__progress">
-            {{ subTaskProgress.done }}/{{ subTaskProgress.total }}
-          </span>
-          <TaskDueDatePicker
-            v-if="shouldRenderDuePicker"
-            :due-state="{ due_at: task.due_at, due_precision: task.due_precision }"
-            :completed="task.is_completed"
-            variant="meta"
-            empty-label="+ 截止日期"
-            :disabled="isBusy"
-            @apply="handleDueApply"
-            @open-change="handleDueOpenChange"
-          />
-          <button
-            v-if="!task.description && !isDescriptionEditing"
-            class="card__description-inline-button"
-            :disabled="isBusy"
-            @click="startDescriptionEdit"
-          >
-            + 添加描述
-          </button>
-          <span v-if="isSaving" class="card__status">保存中</span>
-          <span v-else-if="isDeleting" class="card__status card__status--danger">删除中</span>
-        </div>
       </div>
 
       <span
@@ -396,6 +354,31 @@ const onSubTaskDragEnd = async () => {
       >
         <Trash2 :size="14" />
       </button>
+
+      <div class="card__meta">
+        <span v-if="subTaskProgress" class="card__progress">
+          {{ subTaskProgress.done }}/{{ subTaskProgress.total }}
+        </span>
+        <TaskDueDatePicker
+          :due-state="{ due_at: task.due_at, due_precision: task.due_precision }"
+          :completed="task.is_completed"
+          variant="meta"
+          empty-label="+ 截止日期"
+          :disabled="isBusy"
+          @apply="handleDueApply"
+          @open-change="handleDueOpenChange"
+        />
+        <button
+          v-if="!task.description && !isDescriptionEditing"
+          class="card__description-inline-button"
+          :disabled="isBusy"
+          @click="startDescriptionEdit"
+        >
+          + 添加描述
+        </button>
+        <span v-if="isSaving" class="card__status">保存中</span>
+        <span v-else-if="isDeleting" class="card__status card__status--danger">删除中</span>
+      </div>
     </div>
 
     <div v-if="shouldShowDescription" class="card__description">
@@ -638,6 +621,7 @@ const onSubTaskDragEnd = async () => {
 .card__row {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 14px 16px;
   transition: background-color 0.15s ease;
@@ -774,9 +758,10 @@ const onSubTaskDragEnd = async () => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  flex: 0 0 calc(100% - 64px);
   gap: 8px;
   min-height: 20px;
-  margin-top: 8px;
+  margin: -4px 0 0 64px;
 }
 
 .card__description-inline-button {

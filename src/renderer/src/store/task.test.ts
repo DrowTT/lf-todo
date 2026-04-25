@@ -75,4 +75,26 @@ describe('task store 自动化主链', () => {
     expect(taskRepository.archiveTask).toHaveBeenCalledWith(1)
     expect(store.tasks.map((task) => task.id)).toEqual([2])
   })
+
+  it('系统视图批量归档时只提交当前列表中的已完成根任务', async () => {
+    const taskRepository = createTaskRepository({
+      archiveCompletedTaskIds: vi.fn().mockResolvedValue(2)
+    })
+    installTestRuntime({ taskRepository })
+
+    const store = useTaskStore()
+    store.tasks = [
+      createTask({ id: 1, is_completed: true, parent_id: null }),
+      createTask({ id: 2, is_completed: true, parent_id: null }),
+      createTask({ id: 3, is_completed: true, parent_id: 1 }),
+      createTask({ id: 4, is_completed: false, parent_id: null })
+    ]
+
+    const result = await store.archiveAllCompletedTasks()
+
+    expect(result).toEqual({ taskIds: [1, 2] })
+    expect(taskRepository.archiveCompletedTaskIds).toHaveBeenCalledWith([1, 2])
+    expect(taskRepository.archiveAllCompletedTasks).not.toHaveBeenCalled()
+    expect(store.tasks.map((task) => task.id)).toEqual([3, 4])
+  })
 })

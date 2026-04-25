@@ -20,6 +20,8 @@ import {
   isResolvedCategoryTaskView
 } from '../../utils/taskNavigation'
 import type { TaskView } from '../../utils/taskNavigation'
+import type { SystemTaskViewKey } from '../../utils/taskNavigation'
+import { filterTasksForSystemView } from '../../utils/systemTaskViews'
 
 const UNDO_LABEL = '撤销'
 
@@ -64,6 +66,9 @@ export function useAppFacade() {
   )
   const isAllTasksView = computed(
     () => currentMainView.value === 'tasks' && isAllTasksTaskView(selectedTaskView.value)
+  )
+  const isSystemTaskViewActive = computed(
+    () => currentMainView.value === 'tasks' && selectedTaskView.value.kind === 'system'
   )
   const currentTaskScopeKey = computed(() => getTaskViewScopeKey(selectedTaskView.value))
   const currentTaskCreateCategoryId = computed(() =>
@@ -123,7 +128,7 @@ export function useAppFacade() {
       return null
     }
 
-    if (isAllTasksTaskView(view)) {
+    if (view.kind === 'system') {
       return { taskListView: 'all' }
     }
 
@@ -147,8 +152,8 @@ export function useAppFacade() {
       return
     }
 
-    if (isAllTasksTaskView(view)) {
-      await fetchAllTasks()
+    if (view.kind === 'system') {
+      await fetchSystemTaskView(view.view)
       return
     }
 
@@ -199,8 +204,8 @@ export function useAppFacade() {
       return
     }
 
-    if (isAllTasksTaskView(view)) {
-      await fetchAllTasks()
+    if (view.kind === 'system') {
+      await fetchSystemTaskView(view.view)
       return
     }
 
@@ -235,8 +240,8 @@ export function useAppFacade() {
       return
     }
 
-    if (isAllTasksTaskView(view)) {
-      await fetchAllTasks()
+    if (view.kind === 'system') {
+      await fetchSystemTaskView(view.view)
       return
     }
 
@@ -317,19 +322,41 @@ export function useAppFacade() {
   }
 
   async function fetchAllTasks() {
+    await fetchSystemTaskView('all')
+  }
+
+  async function fetchSystemTaskView(view: SystemTaskViewKey) {
     const requestId = ++latestTaskRequestId
     await taskStore.fetchAllTasks()
 
     if (
       requestId !== latestTaskRequestId ||
       appSessionStore.currentMainView !== 'tasks' ||
-      !isAllTasksTaskView(appSessionStore.selectedTaskView)
+      appSessionStore.selectedTaskView.kind !== 'system' ||
+      appSessionStore.selectedTaskView.view !== view
     ) {
       return
     }
 
-    subTaskStore.loadExpandedForScope(ALL_TASKS_VIEW_KEY)
+    taskStore.tasks = filterTasksForSystemView(taskStore.tasks, view)
+
+    subTaskStore.loadExpandedForScope(view === 'all' ? ALL_TASKS_VIEW_KEY : view)
     await subTaskStore.fetchExpandedSubTasks(subTaskStore.expandedTaskIds)
+  }
+
+  async function selectSystemTaskView(view: SystemTaskViewKey) {
+    if (
+      appSessionStore.currentMainView === 'tasks' &&
+      appSessionStore.selectedTaskView.kind === 'system' &&
+      appSessionStore.selectedTaskView.view === view
+    ) {
+      return
+    }
+
+    selectTaskView({ kind: 'system', view })
+    archiveStore.clearSelection()
+    subTaskStore.reset()
+    await fetchSystemTaskView(view)
   }
 
   async function addTask(
@@ -475,7 +502,7 @@ export function useAppFacade() {
 
     if (
       appSessionStore.currentMainView === 'tasks' &&
-      isAllTasksTaskView(appSessionStore.selectedTaskView)
+      appSessionStore.selectedTaskView.kind === 'system'
     ) {
       return
     }
@@ -566,6 +593,7 @@ export function useAppFacade() {
     inboxCategoryId,
     isArchiveTaskViewActive,
     isAllTasksView,
+    isSystemTaskViewActive,
     currentTaskScopeKey,
     currentTaskCreateCategoryId,
     currentTaskViewLabel,
@@ -583,6 +611,7 @@ export function useAppFacade() {
     deleteCategory,
     updateCategory,
     selectCategory,
+    selectSystemTaskView,
     selectAllTasksView,
     selectArchivePane,
     fetchTasks,

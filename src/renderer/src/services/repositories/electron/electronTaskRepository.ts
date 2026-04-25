@@ -50,6 +50,9 @@ export function createElectronTaskRepository(api: Window['api']): TaskRepository
     async archiveAllCompletedTasks() {
       return await api.db.archiveAllCompletedTasks()
     },
+    async archiveCompletedTaskIds(ids) {
+      return await api.db.archiveCompletedTaskIds(ids)
+    },
     async archiveTask(id) {
       await api.db.archiveTask(id)
     },

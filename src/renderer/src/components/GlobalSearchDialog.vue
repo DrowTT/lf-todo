@@ -6,7 +6,12 @@ import type { Task } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useGlobalSearchStore, type GlobalSearchScope } from '../store/globalSearch'
 import { buildSearchHighlightParts, buildSearchSnippet } from '../utils/searchHighlight'
-import { getCategoryDisplayName, isResolvedCategoryTaskView } from '../utils/taskNavigation'
+import {
+  ALL_TASKS_VIEW_LABEL,
+  getCategoryDisplayName,
+  isAllTasksTaskView,
+  isResolvedCategoryTaskView
+} from '../utils/taskNavigation'
 import { formatTaskDueLabel, hasTaskDue } from '../utils/taskDue'
 
 const SEARCH_DEBOUNCE_MS = 140
@@ -41,8 +46,13 @@ const canSearchCurrentScope = computed(() => isResolvedCategoryTaskView(selected
 const currentCategoryLabel = computed(
   () => getCategoryDisplayName(currentCategory.value) || '未选择分类'
 )
+const currentSystemViewLabel = computed(() =>
+  isAllTasksTaskView(selectedTaskView.value) ? ALL_TASKS_VIEW_LABEL : '当前视图'
+)
 const currentScopeLabel = computed(() =>
-  canSearchCurrentScope.value ? `当前分类 · ${currentCategoryLabel.value}` : '当前视图（全部）'
+  canSearchCurrentScope.value
+    ? `当前分类 · ${currentCategoryLabel.value}`
+    : `当前视图 · ${currentSystemViewLabel.value}`
 )
 const activeDescendantId = computed(() =>
   selectedTask.value ? `global-search-option-${selectedTask.value.id}` : undefined
@@ -56,7 +66,7 @@ const scopeOptions = computed<{ value: GlobalSearchScope; label: string; disable
     },
     {
       value: 'all',
-      label: '全部任务',
+      label: '全部任务库',
       disabled: false
     }
   ]
@@ -68,10 +78,10 @@ const panelHint = computed(() => {
     }
 
     if (!canSearchCurrentScope.value) {
-      return '当前位于“全部”视图，将在所有任务中搜索'
+      return `当前位于“${currentSystemViewLabel.value}”视图，将在全部任务库中搜索`
     }
 
-    return '正在全部任务中搜索'
+    return '正在全部任务库中搜索'
   }
 
   if (isLoading.value) {

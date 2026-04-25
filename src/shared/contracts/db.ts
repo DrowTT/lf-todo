@@ -46,6 +46,10 @@ export interface RestoreArchivedTasksRequest {
   ids: number[]
 }
 
+export interface ArchiveCompletedTaskIdsRequest {
+  ids: number[]
+}
+
 export interface ArchiveTaskRequest {
   id: number
 }
@@ -260,6 +264,18 @@ export function parseRestoreArchivedTasksRequest(
   value: unknown,
   label = 'payload'
 ): RestoreArchivedTasksRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['ids'], label)
+
+  return {
+    ids: parseOrderedIds(record.ids, `${label}.ids`)
+  }
+}
+
+export function parseArchiveCompletedTaskIdsRequest(
+  value: unknown,
+  label = 'payload'
+): ArchiveCompletedTaskIdsRequest {
   const record = expectRecord(value, label)
   assertAllowedKeys(record, ['ids'], label)
 

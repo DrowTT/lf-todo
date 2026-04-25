@@ -24,6 +24,7 @@ export interface TaskRepository {
   getPendingTaskCounts(): Promise<Record<number, number>>
   archiveCompletedTasks(categoryId: number): Promise<number>
   archiveAllCompletedTasks(): Promise<number>
+  archiveCompletedTaskIds(ids: number[]): Promise<number>
   archiveTask?(id: number): Promise<void>
   restoreArchivedTasks(ids: number[]): Promise<number>
   reorderTasks(orderedIds: number[]): Promise<void>

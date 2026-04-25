@@ -23,6 +23,7 @@ import {
   parseUpdateStatusData
 } from '../shared/contracts/entities'
 import {
+  parseArchiveCompletedTaskIdsRequest,
   parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
@@ -214,6 +215,15 @@ const api = {
         .invoke('db:archive-all-completed-tasks')
         .then((value) =>
           expectInteger(value, 'db:archive-all-completed-tasks.response', { min: 0 })
+        ),
+    archiveCompletedTaskIds: (ids: number[]) =>
+      ipcRenderer
+        .invoke(
+          'db:archive-completed-task-ids',
+          parseArchiveCompletedTaskIdsRequest({ ids }, 'db:archive-completed-task-ids.request')
+        )
+        .then((value) =>
+          expectInteger(value, 'db:archive-completed-task-ids.response', { min: 0 })
         ),
     archiveTask: (id: number) =>
       invokeVoidWithPayload('db:archive-task', { id }, parseArchiveTaskRequest),

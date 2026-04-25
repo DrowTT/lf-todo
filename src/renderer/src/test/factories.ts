@@ -81,6 +81,7 @@ export function createTaskRepository(overrides: Partial<TaskRepository> = {}): T
     getPendingTaskCounts: vi.fn().mockResolvedValue({}),
     archiveCompletedTasks: vi.fn().mockResolvedValue(0),
     archiveAllCompletedTasks: vi.fn().mockResolvedValue(0),
+    archiveCompletedTaskIds: vi.fn().mockResolvedValue(0),
     archiveTask: vi.fn().mockResolvedValue(undefined),
     restoreArchivedTasks: vi.fn().mockResolvedValue(0),
     reorderTasks: vi.fn().mockResolvedValue(undefined),

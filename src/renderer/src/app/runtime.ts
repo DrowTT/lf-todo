@@ -92,6 +92,9 @@ function createUnavailableTaskRepository(): TaskRepository {
     archiveAllCompletedTasks: createUnavailableAction<[], number>(
       'taskRepository.archiveAllCompletedTasks'
     ),
+    archiveCompletedTaskIds: createUnavailableAction<[number[]], number>(
+      'taskRepository.archiveCompletedTaskIds'
+    ),
     restoreArchivedTasks: createUnavailableAction<[number[]], number>(
       'taskRepository.restoreArchivedTasks'
     ),

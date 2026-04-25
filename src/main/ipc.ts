@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import * as db from './db/database'
 import {
+  parseArchiveCompletedTaskIdsRequest,
   parseArchiveTaskRequest,
   parseCreateSubTaskRequest,
   parseCreateTaskRequest,
@@ -118,6 +119,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
     )
   )
   ipcMain.handle('db:archive-all-completed-tasks', () => db.archiveAllCompletedTasks())
+  ipcMain.handle('db:archive-completed-task-ids', (_event, payload: unknown) => {
+    const request = parseArchiveCompletedTaskIdsRequest(
+      payload,
+      'db:archive-completed-task-ids.request'
+    )
+    return db.archiveCompletedTaskIds(request.ids)
+  })
   ipcMain.handle('db:archive-task', (_event, payload: unknown) => {
     const request = parseArchiveTaskRequest(payload, 'db:archive-task.request')
     return db.archiveTask(request.id)

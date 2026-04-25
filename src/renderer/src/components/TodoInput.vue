@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { SendHorizonal } from 'lucide-vue-next'
-import { SYSTEM_CATEGORY_NAME } from '../../../shared/constants/category'
 import { DEFAULT_TASK_PRIORITY } from '../../../shared/constants/task'
 import type { TaskDueState, TaskPriority } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAutoHeight } from '../composables/useAutoHeight'
 import { useAppSessionStore } from '../store/appSession'
+import { INBOX_CAPTURE_LABEL } from '../utils/taskNavigation'
 import TaskDueDatePicker from './TaskDueDatePicker.vue'
 import TaskPriorityPicker from './TaskPriorityPicker.vue'
 import { cloneTaskDueState, EMPTY_TASK_DUE_STATE } from '../utils/taskDue'
@@ -22,10 +22,10 @@ const priority = ref<TaskPriority>(
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { adjustHeight, resetHeight } = useAutoHeight(textareaRef)
 
-const isAllTasksView = computed(() => app.isAllTasksView.value)
+const isSystemTaskView = computed(() => app.isSystemTaskViewActive.value)
 const placeholderText = computed(() =>
-  isAllTasksView.value
-    ? `这是聚合视图，直接输入后会先进入${SYSTEM_CATEGORY_NAME}`
+  isSystemTaskView.value
+    ? `这是智能视图，直接输入后会先进入${INBOX_CAPTURE_LABEL}`
     : '添加新的待办事项...'
 )
 const hasContent = computed(() => content.value.trim().length > 0)
@@ -127,9 +127,9 @@ watch(priority, (value) => {
         </button>
       </div>
     </div>
-    <p v-if="isAllTasksView" class="todo-input__hint">
+    <p v-if="isSystemTaskView" class="todo-input__hint">
       {{
-        `“全部”只是聚合浏览视图，这里新建的任务会先进入${SYSTEM_CATEGORY_NAME}，再出现在全部列表中。`
+        `“${app.currentTaskViewLabel.value}”是智能浏览视图，这里新建的任务会先进入${INBOX_CAPTURE_LABEL}。`
       }}
     </p>
   </div>
