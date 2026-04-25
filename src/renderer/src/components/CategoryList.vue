@@ -578,8 +578,15 @@ watch(contextMenuRef, (element) => {
   }
 
   &--create {
+    justify-content: center;
     border: 1px dashed rgba($border-light, 0.95);
     background: rgba(255, 255, 255, 0.3);
+
+    .category-item__name {
+      flex: 0 1 auto;
+      padding-left: 0;
+      text-align: center;
+    }
 
     &:hover {
       border-color: rgba($accent-color, 0.4);
