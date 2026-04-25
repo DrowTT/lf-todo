@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { ClipboardList, Sparkles } from 'lucide-vue-next'
@@ -45,9 +45,11 @@ const { dragTaskId, dropHandled, dropCategoryId, startTaskMoveDrag, clearTaskMov
 const isArchivePane = computed(() => isArchiveTaskViewActive.value)
 const currentViewTitle = computed(() => app.currentTaskViewLabel.value)
 const isAllTasksView = computed(() => app.isAllTasksView.value)
+const isSystemTaskView = computed(() => app.isSystemTaskViewActive.value)
 const hasTaskScope = computed(() => app.currentTaskScopeKey.value !== null)
 const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
 const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0)
+const canDragSortTasks = computed(() => !hasActiveSearch.value && !isSystemTaskView.value)
 const currentPendingCount = computed(() => {
   if (isAllTasksView.value) {
     return app.allPendingCount.value
@@ -87,16 +89,16 @@ const taskMoveTargets = computed(() => {
     }))
 })
 const archiveCompletedTitle = computed(() =>
-  isAllTasksView.value ? '归档“全部”视图中的已完成任务' : '归档当前分类中的已完成任务'
+  isSystemTaskView.value ? `归档“${currentViewTitle.value}”视图中的已完成任务` : '归档当前分类中的已完成任务'
 )
 const archiveCompletedLabel = computed(() =>
-  isAllTasksView.value
+  isSystemTaskView.value
     ? `归档全部已完成 (${completedCount.value})`
     : `归档已完成 (${completedCount.value})`
 )
 const archiveCompletedConfirmText = computed(() =>
-  isAllTasksView.value
-    ? `确认归档“全部”视图中的 ${completedCount.value} 个已完成待办吗？`
+  isSystemTaskView.value
+    ? `确认归档“${currentViewTitle.value}”视图中的 ${completedCount.value} 个已完成待办吗？`
     : `确认归档当前分类中的 ${completedCount.value} 个已完成待办吗？`
 )
 const taskContextMenuStyle = computed(() => ({
@@ -147,7 +149,7 @@ const onDragEnd = async () => {
   const draggedTaskId = dragTaskId.value
   const targetCategoryId = dropCategoryId.value
 
-  if (!wasDroppedToCategory && !isAllTasksView.value) {
+  if (!wasDroppedToCategory && !isSystemTaskView.value) {
     await app.reorderTasks(dragStartOrder.value)
   }
 
@@ -278,9 +280,9 @@ onUnmounted(() => {
             <span class="todo-panel__badge-num">
               {{ currentPendingCount }}
             </span>
-            <span class="todo-panel__badge-label">待办</span>
+            <span class="todo-panel__badge-label">寰呭姙</span>
           </span>
-          <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">排序保存中...</span>
+          <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">鎺掑簭淇濆瓨涓?..</span>
           <button
             v-if="hasTaskScope"
             :disabled="completedCount === 0 || taskStore.isArchivingCompleted"
@@ -309,7 +311,7 @@ onUnmounted(() => {
               <ClipboardList class="todo-panel__empty-svg" :size="32" />
             </div>
             <div class="todo-panel__empty-title">请选择暂存区、全部或一个分类</div>
-            <div class="todo-panel__empty-hint">左侧导航会把系统视图、分类和归档明确分开</div>
+            <div class="todo-panel__empty-hint">左侧导航会把视图、分类和归档明确分开</div>
           </div>
           <div v-else-if="tasks.length === 0" class="todo-panel__empty">
             <div class="todo-panel__empty-glow todo-panel__empty-glow--spark">
@@ -318,8 +320,8 @@ onUnmounted(() => {
             <div class="todo-panel__empty-title">暂无任务</div>
             <div class="todo-panel__empty-hint">
               {{
-                isAllTasksView
-                  ? '这里会聚合展示所有分类中的待办'
+                isSystemTaskView
+                  ? `这里会展示符合“${currentViewTitle}”条件的待办`
                   : '在上方输入框添加你的第一个待办吧'
               }}
             </div>
@@ -333,7 +335,7 @@ onUnmounted(() => {
           </div>
 
           <draggable
-            v-else-if="!hasActiveSearch"
+            v-else-if="canDragSortTasks"
             v-model="draggableTasks"
             item-key="id"
             handle=".card__drag-handle"
@@ -341,7 +343,7 @@ onUnmounted(() => {
             drag-class="card--dragging"
             :animation="200"
             :disabled="taskStore.isReorderingTasks"
-            :sort="!isAllTasksView"
+            :sort="true"
             :set-data="handleTaskDragSetData"
             class="todo-panel__cards"
             @start="onDragStart"

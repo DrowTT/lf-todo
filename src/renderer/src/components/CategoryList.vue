@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, markRaw, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import { Archive, Inbox, ListTodo } from 'lucide-vue-next'
-import { SYSTEM_CATEGORY_NAME } from '../../../shared/constants/category'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useTaskMoveDrag } from '../composables/useTaskMoveDrag'
-import { ALL_TASKS_VIEW_LABEL, getCategoryDisplayName } from '../utils/taskNavigation'
+import {
+  ARCHIVE_TASK_VIEW_DESCRIPTION,
+  ARCHIVE_TASK_VIEW_LABEL,
+  INBOX_CAPTURE_DESCRIPTION,
+  INBOX_CAPTURE_LABEL,
+  ALL_TASKS_VIEW_DESCRIPTION,
+  ALL_TASKS_VIEW_LABEL
+} from '../utils/taskNavigation'
 
 const app = useAppFacade()
 const {
@@ -15,8 +21,8 @@ const {
   currentMainView,
   pendingCounts,
   inboxCategory,
-  isAllTasksView,
-  isArchiveTaskViewActive
+  isArchiveTaskViewActive,
+  isAllTasksView
 } = app
 const { confirm } = useAppRuntime().confirm
 const {
@@ -55,47 +61,52 @@ const systemEntryIcons = {
 
 const customCategories = computed(() => categories.value.filter((category) => !category.is_system))
 
-const systemEntries = computed(() => {
+const inboxEntry = computed(() => {
   const inboxId = inboxCategory.value?.id ?? null
 
-  return [
-    {
-      key: 'all',
-      label: ALL_TASKS_VIEW_LABEL,
-      icon: systemEntryIcons.all,
-      badge: app.allPendingCount.value,
-      dropCategoryId: null,
-      active: isAllTasksView.value,
-      onClick: () => {
-        void app.selectAllTasksView()
-      }
-    },
-    {
-      key: 'inbox',
-      label: getCategoryDisplayName(inboxCategory.value) || SYSTEM_CATEGORY_NAME,
-      icon: systemEntryIcons.inbox,
-      badge: inboxId === null ? 0 : (pendingCounts.value[inboxId] ?? 0),
-      dropCategoryId: inboxId,
-      active: currentMainView.value === 'tasks' && activeTaskCategoryId.value === inboxId,
-      onClick: () => {
-        if (inboxId !== null) {
-          void app.selectCategory(inboxId)
-        }
-      }
-    },
-    {
-      key: 'archive',
-      label: '已归档',
-      icon: systemEntryIcons.archive,
-      badge: 0,
-      dropCategoryId: null,
-      active: isArchiveActive.value,
-      onClick: () => {
-        void handleSelectArchive()
+  return {
+    key: 'inbox',
+    label: INBOX_CAPTURE_LABEL,
+    description: INBOX_CAPTURE_DESCRIPTION,
+    icon: systemEntryIcons.inbox,
+    badge: inboxId === null ? 0 : (pendingCounts.value[inboxId] ?? 0),
+    dropCategoryId: inboxId,
+    active: currentMainView.value === 'tasks' && activeTaskCategoryId.value === inboxId,
+    onClick: () => {
+      if (inboxId !== null) {
+        void app.selectCategory(inboxId)
       }
     }
-  ]
+  }
 })
+
+const systemEntries = computed(() => [
+  {
+    key: 'all',
+    label: ALL_TASKS_VIEW_LABEL,
+    description: ALL_TASKS_VIEW_DESCRIPTION,
+    icon: systemEntryIcons.all,
+    badge: app.allPendingCount.value,
+    dropCategoryId: null,
+    active: isAllTasksView.value,
+    onClick: () => {
+      void app.selectAllTasksView()
+    }
+  },
+  inboxEntry.value,
+  {
+    key: 'archive',
+    label: ARCHIVE_TASK_VIEW_LABEL,
+    description: ARCHIVE_TASK_VIEW_DESCRIPTION,
+    icon: systemEntryIcons.archive,
+    badge: 0,
+    dropCategoryId: null,
+    active: isArchiveActive.value,
+    onClick: () => {
+      void handleSelectArchive()
+    }
+  }
+])
 const contextMenuStyle = computed(() => ({
   left: `${contextMenu.value.x}px`,
   top: `${contextMenu.value.y}px`,
@@ -296,8 +307,8 @@ watch(contextMenuRef, (element) => {
 <template>
   <div class="category-list">
     <section class="category-list__system">
-      <div class="category-section__label">系统视图</div>
-      <ul class="category-section__list">
+      <div class="category-section__label">视图</div>
+      <ul class="category-section__list category-section__list--system">
         <li
           v-for="entry in systemEntries"
           :key="entry.key"
@@ -326,7 +337,7 @@ watch(contextMenuRef, (element) => {
               :stroke-width="2.2"
             />
           </span>
-          <span class="category-item__name">{{ entry.label }}</span>
+          <span class="category-item__name" :title="entry.description">{{ entry.label }}</span>
           <span v-if="entry.badge" class="category-item__badge">
             {{ entry.badge }}
           </span>
@@ -424,9 +435,13 @@ watch(contextMenuRef, (element) => {
 .category-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   height: 100%;
-  padding: 12px 10px 14px;
+  min-height: 0;
+  gap: 8px;
+  padding: 10px 10px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   background: linear-gradient(180deg, #edf3f5 0%, #e8eef3 100%);
   border-right: 1px solid rgba(19, 78, 74, 0.07);
   box-sizing: border-box;
@@ -436,24 +451,20 @@ watch(contextMenuRef, (element) => {
   }
 
   &__categories {
-    min-height: 0;
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
   }
 
   &__categories-scroll {
-    min-height: 0;
-    flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
 }
 
 .category-section {
   &__label {
-    margin: 0 10px 6px;
+    margin: 8px 10px 5px;
     font-size: 11px;
     font-weight: 700;
     color: rgba(71, 85, 105, 0.72);
@@ -462,7 +473,7 @@ watch(contextMenuRef, (element) => {
 
   &__list {
     margin: 0;
-    padding: 8px 7px;
+    padding: 6px;
     list-style: none;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.34);
@@ -473,12 +484,12 @@ watch(contextMenuRef, (element) => {
     -webkit-backdrop-filter: blur(12px);
     box-sizing: border-box;
 
+    &--system {
+      padding: 4px 6px;
+    }
+
     &--categories {
-      min-height: 0;
-      flex: 1;
       padding-bottom: 8px;
-      overflow-y: auto;
-      scrollbar-gutter: stable;
     }
   }
 }
@@ -538,10 +549,10 @@ watch(contextMenuRef, (element) => {
   }
 
   &--system-entry {
-    min-height: 34px;
-    padding: 7px 12px;
-    border-radius: 12px;
-    gap: 8px;
+    min-height: 30px;
+    padding: 5px 10px;
+    border-radius: 11px;
+    gap: 7px;
 
     &.category-item--active::before {
       content: none;
@@ -630,9 +641,9 @@ watch(contextMenuRef, (element) => {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    border-radius: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 7px;
     background: rgba(37, 99, 235, 0.08);
     color: rgba(37, 99, 235, 0.78);
   }
