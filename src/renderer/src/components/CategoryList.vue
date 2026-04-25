@@ -748,7 +748,7 @@ watch(contextMenuRef, (element) => {
 
 .context-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: $z-context-menu;
   min-width: 140px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
@@ -761,7 +761,7 @@ watch(contextMenuRef, (element) => {
   background: $glass-bg;
   backdrop-filter: $glass-blur;
   -webkit-backdrop-filter: $glass-blur;
-  box-shadow: $shadow-lg;
+  box-shadow: $shadow-popover;
 
   &__item {
     display: block;

@@ -35,7 +35,7 @@ const { message, hide, triggerAction } = useAppRuntime().toast
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 9999;
+  z-index: $z-toast;
   display: flex;
   align-items: center;
   gap: $spacing-md;
@@ -51,7 +51,7 @@ const { message, hide, triggerAction } = useAppRuntime().toast
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: $shadow-lg;
+  box-shadow: $shadow-popover;
 
   &--error {
     background: rgba(239, 68, 68, 0.85);

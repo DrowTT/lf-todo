@@ -174,7 +174,10 @@ onUnmounted(() => {
   background: rgba($bg-elevated, 0.84);
   color: $text-secondary;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition:
+    border-color $transition-fast,
+    background-color $transition-fast,
+    color $transition-fast;
 
   &:hover {
     border-color: rgba($accent-color, 0.24);
@@ -214,7 +217,9 @@ onUnmounted(() => {
   color: $text-muted;
   font-size: $font-sm;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition:
+    background-color $transition-fast,
+    color $transition-fast;
 
   &:hover {
     background: rgba(0, 0, 0, 0.06);

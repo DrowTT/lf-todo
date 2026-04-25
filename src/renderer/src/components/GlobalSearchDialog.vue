@@ -523,7 +523,7 @@ onBeforeUnmount(() => {
 .global-search {
   position: fixed;
   inset: 0;
-  z-index: 401;
+  z-index: $z-modal;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -533,7 +533,7 @@ onBeforeUnmount(() => {
 .global-search__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  z-index: $z-modal;
   background: rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -548,9 +548,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba($border-light, 0.75);
   border-radius: 22px;
   background: rgba($bg-elevated, 0.96);
-  box-shadow:
-    0 28px 60px rgba(15, 23, 42, 0.18),
-    0 8px 18px rgba(15, 23, 42, 0.08);
+  box-shadow: $shadow-popover;
 
   &:focus {
     outline: none;
@@ -615,7 +613,11 @@ onBeforeUnmount(() => {
   font-size: $font-xs;
   font-weight: 600;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition:
+    border-color $transition-fast,
+    background-color $transition-fast,
+    color $transition-fast,
+    opacity $transition-fast;
 
   &:hover:not(:disabled) {
     border-color: rgba($accent-color, 0.3);

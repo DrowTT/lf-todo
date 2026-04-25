@@ -16,9 +16,10 @@ import type { Task } from '../../../shared/types/models'
 import { getCategoryDisplayName } from '../utils/taskNavigation'
 import ArchiveView from './ArchiveView.vue'
 import CategoryList from './CategoryList.vue'
+import TaskMoveContextMenu from './TaskMoveContextMenu.vue'
+import TaskPanelHeader from './TaskPanelHeader.vue'
 import TodoInput from './TodoInput.vue'
 import TodoItem from './TodoItem.vue'
-import TodoSearchBar from './TodoSearchBar.vue'
 
 const app = useAppFacade()
 const { tasks, isLoading, selectedTaskView, isArchiveTaskViewActive } = app
@@ -31,7 +32,7 @@ useTaskDragAutoScroll()
 const dragStartOrder = ref<number[]>([])
 const searchQuery = ref('')
 const isSearchExpanded = ref(false)
-const searchBar = ref<{ focusSearch: () => void } | null>(null)
+const taskPanelHeader = ref<{ focusSearch: () => void } | null>(null)
 const {
   menu: taskContextMenu,
   menuRef: taskContextMenuRef,
@@ -167,7 +168,7 @@ function handleTaskDragSetData(dataTransfer: DataTransfer) {
 }
 
 function handleFocusSearchRequested() {
-  searchBar.value?.focusSearch()
+  taskPanelHeader.value?.focusSearch()
 }
 
 function handleTaskContextMenu(event: MouseEvent, task: Task) {
@@ -263,37 +264,20 @@ onUnmounted(() => {
     <ArchiveView v-if="isArchivePane" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }" />
 
     <div v-else class="todo-panel" :style="{ minWidth: `${MIN_TODO_WIDTH}px` }">
-      <header class="todo-panel__header">
-        <div class="todo-panel__title-group">
-          <h1 class="todo-panel__title">
-            {{ currentViewTitle }}
-          </h1>
-          <TodoSearchBar
-            v-if="hasTaskScope"
-            ref="searchBar"
-            v-model="searchQuery"
-            v-model:expanded="isSearchExpanded"
-          />
-        </div>
-        <div class="todo-panel__actions">
-          <span v-if="hasTaskScope" class="todo-panel__badge">
-            <span class="todo-panel__badge-num">
-              {{ currentPendingCount }}
-            </span>
-            <span class="todo-panel__badge-label">寰呭姙</span>
-          </span>
-          <span v-if="taskStore.isReorderingTasks" class="todo-panel__status">鎺掑簭淇濆瓨涓?..</span>
-          <button
-            v-if="hasTaskScope"
-            :disabled="completedCount === 0 || taskStore.isArchivingCompleted"
-            class="todo-panel__clear-btn"
-            :title="archiveCompletedTitle"
-            @click="handleArchiveCompleted"
-          >
-            {{ taskStore.isArchivingCompleted ? '归档中...' : archiveCompletedLabel }}
-          </button>
-        </div>
-      </header>
+      <TaskPanelHeader
+        ref="taskPanelHeader"
+        v-model:search-query="searchQuery"
+        v-model:search-expanded="isSearchExpanded"
+        :title="currentViewTitle"
+        :has-task-scope="hasTaskScope"
+        :pending-count="currentPendingCount"
+        :is-reordering="taskStore.isReorderingTasks"
+        :completed-count="completedCount"
+        :is-archiving-completed="taskStore.isArchivingCompleted"
+        :archive-title="archiveCompletedTitle"
+        :archive-label="archiveCompletedLabel"
+        @archive-completed="handleArchiveCompleted"
+      />
 
       <TodoInput v-if="hasTaskScope" />
 
@@ -370,26 +354,13 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="taskContextMenu.visible"
-        ref="taskContextMenuRef"
-        class="context-menu"
-        :style="taskContextMenuStyle"
-        @click.stop
-      >
-        <div class="context-menu__label">移动到</div>
-        <button
-          v-for="target in taskMoveTargets"
-          :key="target.id"
-          class="context-menu__item"
-          @click="handleMoveTaskToCategory(target.id)"
-        >
-          {{ target.label }}
-        </button>
-        <div v-if="taskMoveTargets.length === 0" class="context-menu__empty">没有可移动的分类</div>
-      </div>
-    </Teleport>
+    <TaskMoveContextMenu
+      v-model:menu-ref="taskContextMenuRef"
+      :visible="taskContextMenu.visible"
+      :targets="taskMoveTargets"
+      :menu-style="taskContextMenuStyle"
+      @move="handleMoveTaskToCategory"
+    />
   </div>
 </template>
 
@@ -442,88 +413,6 @@ onUnmounted(() => {
   flex: 1;
   background: $bg-primary;
   overflow: hidden;
-}
-
-.todo-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-lg;
-  padding: $spacing-lg $spacing-xl;
-  background: linear-gradient(135deg, rgba($bg-sidebar, 0.35) 0%, rgba($bg-sidebar, 0.15) 100%);
-  border-bottom: 1px solid $border-subtle;
-}
-
-.todo-panel__title-group {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.todo-panel__title {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: $font-xl;
-  font-weight: 700;
-  color: $text-primary;
-  white-space: nowrap;
-}
-
-.todo-panel__actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: $spacing-md;
-}
-
-.todo-panel__badge {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
-  padding: $spacing-xs $spacing-md;
-  background: $accent-soft;
-  border-radius: 20px;
-}
-
-.todo-panel__badge-num {
-  font-size: $font-lg;
-  font-weight: 700;
-  color: $accent-color;
-}
-
-.todo-panel__badge-label {
-  font-size: $font-xs;
-  color: $text-muted;
-}
-
-.todo-panel__status {
-  font-size: $font-xs;
-  color: $text-muted;
-}
-
-.todo-panel__clear-btn {
-  padding: $spacing-xs $spacing-md;
-  background: transparent;
-  border: 1px solid $border-light;
-  border-radius: $radius-md;
-  font-size: $font-xs;
-  color: $text-muted;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    border-color: $accent-color;
-    color: $accent-color;
-    background: rgba($accent-color, 0.06);
-  }
-
-  &:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
 }
 
 .todo-panel__body {
@@ -612,62 +501,6 @@ onUnmounted(() => {
   &:nth-child(3) {
     animation-delay: 0.2s;
   }
-}
-
-.context-menu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 168px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px);
-  padding: $spacing-xs;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  border: $glass-border;
-  border-radius: $radius-lg;
-  background: $glass-bg;
-  backdrop-filter: $glass-blur;
-  -webkit-backdrop-filter: $glass-blur;
-  box-shadow: $shadow-lg;
-}
-
-.context-menu__label {
-  position: sticky;
-  top: 0;
-  padding: 6px 10px 4px;
-  font-size: 11px;
-  font-weight: 700;
-  background: $glass-bg;
-  color: $text-muted;
-  letter-spacing: 0.04em;
-}
-
-.context-menu__item {
-  display: block;
-  width: 100%;
-  padding: $spacing-sm $spacing-md;
-  border: none;
-  border-radius: $radius-sm;
-  background: transparent;
-  color: $text-primary;
-  font-size: $font-sm;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color $transition-fast,
-    color $transition-fast;
-
-  &:hover {
-    background: rgba($accent-color, 0.08);
-    color: $accent-color;
-  }
-}
-
-.context-menu__empty {
-  padding: $spacing-sm $spacing-md;
-  color: $text-muted;
-  font-size: $font-sm;
 }
 
 @keyframes pulse {

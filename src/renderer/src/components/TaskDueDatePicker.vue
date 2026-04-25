@@ -575,12 +575,12 @@ function unbindGlobalListeners() {
 
 .due-panel {
   position: fixed;
-  z-index: 260;
+  z-index: $z-dropdown;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid $border-color;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: $shadow-lg;
+  box-shadow: $shadow-popover;
   display: flex;
   flex-direction: column;
   gap: 12px;

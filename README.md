@@ -2,6 +2,10 @@
 
 > 🧊 轻量级本地桌面待办事项管理工具，基于 Electron + Vue 3
 
+当前版本：`v1.4.0 Stable`
+
+`v1.4.0 Stable` 是 LF-Todo 的个人使用封版稳定版。项目后续进入低维护模式，优先保障数据安全、启动安装、备份恢复和严重阻断问题，不再默认扩张大型新功能。
+
 ## 📦 下载安装
 
 **[👉 点击下载最新版](https://github.com/DrowTT/lf-todo/releases/latest)**
@@ -26,6 +30,26 @@
 
 Arctic Blue 主题 · 无边框窗口 · 玻璃态设计
 
+## 💾 数据与备份
+
+- LF-Todo 是本地优先应用，不需要注册登录，不上传待办数据。
+- 主数据库保存在系统用户数据目录下，数据库文件名为 `lite-todo.db`。
+- 推荐在迁移到新电脑前，通过设置页的“导出备份”生成 JSON 备份文件。
+- “恢复备份”会覆盖当前待办、分类和归档数据；“合并导入”会保留当前数据，但可能产生重复任务。
+
+## 📌 Stable 维护策略
+
+`v1.4.0 Stable` 后，仅优先维护以下事项：
+
+- 数据丢失、备份失败、恢复失败
+- 应用无法启动、安装或打包失败
+- 托盘、置顶、关闭到托盘等严重系统集成问题
+- 自动更新阻断
+- 明显 UI 阻断或文案乱码
+- 依赖安全升级
+
+封版计划见 `docs/FINAL_RELEASE_PLAN.md`，发布说明见 `docs/RELEASE_NOTES_v1.4.0.md`。
+
 ## 开发
 
 ```bash
@@ -34,6 +58,12 @@ pnpm install
 
 # 开发
 pnpm dev
+
+# 标准验证
+pnpm verify:agent:standard
+
+# 发版前完整验证
+pnpm verify:agent:full
 
 # 打包
 pnpm build:win

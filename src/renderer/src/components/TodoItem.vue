@@ -193,6 +193,7 @@ const cardClasses = computed(() => ({
   'card--open': isExpanded.value,
   'card--done': props.task.is_completed,
   'card--busy': isBusy.value,
+  'card--drag-disabled': isAllTasksView.value,
   'card--search-highlight': globalSearchStore.activeHighlightTaskId === props.task.id,
   'card--priority-high': props.task.priority === 'high',
   'card--priority-medium': props.task.priority === 'medium',
@@ -449,13 +450,10 @@ const onSubTaskDragEnd = async () => {
   border-left-width: 4px;
   border-left-color: var(--card-priority-accent);
   border-radius: 14px;
-  box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.06),
-    0 6px 16px rgba(15, 23, 42, 0.04);
+  box-shadow: $shadow-card;
   transition:
     box-shadow 0.25s ease,
     border-color 0.25s ease,
-    transform 0.25s ease,
     opacity 0.25s ease;
   overflow: hidden;
   cursor: default;
@@ -473,8 +471,7 @@ const onSubTaskDragEnd = async () => {
     border-color: $border-light;
     border-left-color: var(--card-priority-accent);
     box-shadow:
-      0 2px 6px rgba(15, 23, 42, 0.08),
-      0 8px 20px rgba(15, 23, 42, 0.06),
+      $shadow-card-hover,
       0 0 0 1px var(--card-priority-glow);
   }
 
@@ -489,7 +486,6 @@ const onSubTaskDragEnd = async () => {
     &:hover {
       border-color: rgba($accent-color, 0.35);
       border-left-color: var(--card-priority-accent);
-      transform: none;
     }
   }
 
@@ -563,34 +559,28 @@ const onSubTaskDragEnd = async () => {
   width: 18px;
   height: 22px;
   margin-top: 1px;
-  color: $text-muted;
-  opacity: 0;
+  color: rgba($text-secondary, 0.72);
+  opacity: 0.48;
   cursor: grab;
-  transition: all $transition-normal;
+  transition:
+    color $transition-normal,
+    opacity $transition-normal;
   border-radius: $radius-sm;
   margin-left: 0;
-
-  &:hover {
-    color: $accent-color;
-    opacity: 1 !important;
-  }
 
   &:active {
     cursor: grabbing;
   }
 }
 
-.card:hover .card__drag-handle {
-  opacity: 0.45;
-}
-
-.card--drag-disabled:hover .card__drag-handle {
-  opacity: 0.18;
-}
-
-.card__drag-handle--disabled {
+.card--drag-disabled .card__drag-handle {
+  color: rgba($text-muted, 0.78);
+  opacity: 0.38;
   cursor: not-allowed;
-  opacity: 0.18 !important;
+
+  &:active {
+    cursor: not-allowed;
+  }
 }
 
 .card--dragging {
@@ -882,13 +872,16 @@ const onSubTaskDragEnd = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 0.38;
   padding: 4px;
   background: transparent;
   border: none;
   color: $text-muted;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    color $transition-fast,
+    background-color $transition-fast,
+    opacity $transition-fast;
   border-radius: 6px;
   line-height: 0;
   vertical-align: middle;
@@ -902,6 +895,11 @@ const onSubTaskDragEnd = async () => {
     visibility: hidden;
     pointer-events: none;
   }
+}
+
+.card:hover .card__action,
+.card:focus-within .card__action {
+  opacity: 0.86;
 }
 
 .card__toggle {

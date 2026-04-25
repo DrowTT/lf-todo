@@ -5,5 +5,9 @@ out
 .eslintcache
 *.tsbuildinfo
 *.log*
-docs
+docs/*
+!docs/FINAL_RELEASE_PLAN.md
+!docs/PROJECT_DOCS_SUMMARY.md
+!docs/RELEASE_NOTES_v1.4.0.md
+!docs/UI_UX_REFACTOR_PLAN.md
 .agent

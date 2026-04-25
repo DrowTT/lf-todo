@@ -1109,7 +1109,7 @@ onUnmounted(() => {
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 260;
+    z-index: $z-dropdown;
   }
 
   &__option {

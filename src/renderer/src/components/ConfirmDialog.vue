@@ -71,7 +71,7 @@ watch(
   background-color: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  z-index: 9998;
+  z-index: $z-modal;
 }
 
 /* 弹窗外层定位容器 — 不对 opacity 动画，所以不影响子元素的 backdrop-filter */
@@ -84,7 +84,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: $z-modal;
 }
 
 /* 弹窗本体 — 毛玻璃效果 */
@@ -96,7 +96,7 @@ watch(
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: $radius-xl;
-  box-shadow: $shadow-lg;
+  box-shadow: $shadow-popover;
   padding: $spacing-2xl;
   outline: none;
 }
@@ -121,7 +121,11 @@ watch(
   font-size: $font-sm;
   font-weight: 500;
   cursor: pointer;
-  transition: all $transition-normal;
+  transition:
+    background-color $transition-normal,
+    border-color $transition-normal,
+    color $transition-normal,
+    box-shadow $transition-normal;
   border: none;
 
   &--cancel {

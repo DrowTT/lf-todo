@@ -34,6 +34,7 @@
 - [2026-04-16_archive-follow-ups-should-separate-entry-style-from-real-actions.md](./2026-04-16_archive-follow-ups-should-separate-entry-style-from-real-actions.md)
 - [2026-04-23_context-menus-should-measure-real-size-and-teleport-before-clamping.md](./2026-04-23_context-menus-should-measure-real-size-and-teleport-before-clamping.md)
 - [2026-04-23_native-dragging-should-use-edge-auto-scroll-not-wheel.md](./2026-04-23_native-dragging-should-use-edge-auto-scroll-not-wheel.md)
+- [2026-04-25_ui-refactor-should-start-from-design-tokens-and-layer-scale.md](./2026-04-25_ui-refactor-should-start-from-design-tokens-and-layer-scale.md)
 
 ## Tooling
 

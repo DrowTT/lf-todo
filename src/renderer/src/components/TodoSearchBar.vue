@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<Props>(), {
 const query = defineModel<string>({ default: '' })
 const expanded = defineModel<boolean>('expanded', { default: false })
 
-const SEARCH_EXPAND_FOCUS_DELAY_MS = 240
+const SEARCH_EXPAND_FOCUS_DELAY_MS = 120
 
 const searchInput = ref<HTMLInputElement | null>(null)
 const hasQuery = computed(() => query.value.trim().length > 0)
@@ -149,7 +149,7 @@ defineExpose({
 .todo-search {
   --collapsed-size: 36px;
   --expanded-max-size: 320px;
-  --expand-duration: 0.34s;
+  --expand-duration: 0.22s;
 
   position: relative;
   display: inline-flex;
@@ -259,7 +259,7 @@ defineExpose({
   transform: translateX(6px);
   transition:
     margin-left var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.22s ease,
+    opacity $transition-snappy,
     transform var(--expand-duration) cubic-bezier(0.22, 1, 0.36, 1);
 
   &::placeholder {
