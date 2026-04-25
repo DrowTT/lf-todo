@@ -544,15 +544,15 @@ watch(contextMenuRef, (element) => {
   }
 
   &--system-entry .category-item__name {
-    padding-left: 0;
+    padding-left: 10px;
     font-weight: 600;
   }
 
   &--system-entry {
-    min-height: 30px;
-    padding: 5px 10px;
-    border-radius: 11px;
-    gap: 7px;
+    min-height: 40px;
+    padding: 10px 16px;
+    border-radius: 14px;
+    gap: 0;
 
     &.category-item--active::before {
       content: none;
