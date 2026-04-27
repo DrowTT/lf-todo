@@ -331,8 +331,18 @@ export function initDatabase(): void {
       ORDER BY CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END ASC, order_index ASC, id ASC
     `),
     createTask: db.prepare(`
-      INSERT INTO tasks (content, category_id, due_at, due_precision, priority)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO tasks (content, category_id, order_index, due_at, due_precision, priority)
+      VALUES (
+        ?,
+        ?,
+        COALESCE(
+          (SELECT MAX(order_index) + 1 FROM tasks WHERE category_id = ? AND parent_id IS NULL),
+          1
+        ),
+        ?,
+        ?,
+        ?
+      )
     `),
     createSubTask: db.prepare(`
       INSERT INTO tasks (content, category_id, parent_id, order_index)
@@ -1246,6 +1256,7 @@ export function createSubTask(content: string, parentId: number): Task {
 export function createTask(input: TaskCreateInput): Task {
   const info = getStmts().createTask.run(
     input.content,
+    input.categoryId,
     input.categoryId,
     input.due_at,
     input.due_precision,
