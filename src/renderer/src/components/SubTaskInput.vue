@@ -6,6 +6,7 @@ import { useSubTaskStore } from '../store/subtask'
 
 const props = defineProps<{
   parentId: number
+  hasExistingSubTasks?: boolean
 }>()
 
 const subTaskStore = useSubTaskStore()
@@ -40,7 +41,7 @@ watch(content, (value) => {
 </script>
 
 <template>
-  <div class="sub-add">
+  <div class="sub-add" :class="{ 'sub-add--after-list': hasExistingSubTasks }">
     <div class="sub-add__drag-spacer" aria-hidden="true"></div>
     <span
       class="sub-add__prompt"
@@ -74,6 +75,10 @@ watch(content, (value) => {
   align-items: flex-start;
   gap: 3px;
   padding: 5px 6px 5px 5px;
+}
+
+.sub-add--after-list {
+  margin-top: 2px;
 }
 
 .sub-add__drag-spacer {
@@ -113,6 +118,7 @@ watch(content, (value) => {
 .sub-add__input {
   flex: 1;
   display: block;
+  min-height: 19px;
   background: transparent;
   border: none;
   outline: none;
@@ -121,10 +127,9 @@ watch(content, (value) => {
   color: $text-secondary;
   font-size: $font-sm;
   font-family: inherit;
+  line-height: 19px;
   padding: 0;
-  position: relative;
-  top: 2px;
-  line-height: 1.55;
+  margin: 0;
   transition: color 0.15s ease;
 
   &::placeholder {

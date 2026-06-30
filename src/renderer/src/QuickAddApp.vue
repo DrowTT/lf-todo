@@ -342,10 +342,8 @@ onUnmounted(() => {
     -webkit-app-region: no-drag;
 
     &:focus-within {
-      border-color: rgba($accent-color, 0.5);
-      box-shadow:
-        0 0 0 3px rgba($accent-color, 0.08),
-        0 10px 26px rgba(15, 23, 42, 0.06);
+      border-color: rgba(15, 23, 42, 0.1);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
       background: #fff;
     }
 

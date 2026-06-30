@@ -3,9 +3,6 @@
  */
 @use './variables' as *;
 
-/* Google Fonts 引入 — DM Sans: 有个性的 geometric sans */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
-
 /* 全局重置 */
 *,
 *::before,
@@ -24,11 +21,14 @@ body {
 
 body {
   font-family:
-    'DM Sans',
-    'Noto Sans SC',
     -apple-system,
     BlinkMacSystemFont,
+    'SF Pro Text',
+    'PingFang SC',
     'Segoe UI',
+    'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    'Source Han Sans SC',
     sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-optical-sizing: auto;
@@ -51,10 +51,9 @@ body {
   color: $text-primary;
 }
 
-/* Focus-visible 全局高亮 */
+/* 屏蔽浏览器焦点描边 */
 :focus-visible {
-  outline: 2px solid $accent-color;
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* 全局滚动条样式 */

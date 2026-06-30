@@ -8,12 +8,14 @@ import {
   dialog,
   screen,
   globalShortcut,
+  nativeImage,
   Notification
 } from 'electron'
 import type { Display, Rectangle } from 'electron'
 import { appendFileSync } from 'fs'
 import { readFile, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
+import { execFile } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
 import * as db from './db/database'
@@ -348,7 +350,7 @@ function createQuickAddWindow(): BrowserWindow {
   quickAddWindow = win
   quickAddWindowReady = false
   shouldShowQuickAddWhenReady = false
-  attachWindowDiagnostics(win)
+  attachWindowDiagnostics(win, 'quick-add')
 
   win.on('close', (event) => {
     if (isAppQuitting) {
@@ -797,6 +799,60 @@ function showDueReminderNotification(task: db.DueReminderTask): void {
   notification.show()
 }
 
+function showMacSystemNotification(title: string, subtitle: string, body: string): void {
+  execFile(
+    'osascript',
+    [
+      '-e',
+      'on run argv\n' +
+        'display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv) sound name "Glass"\n' +
+        'end run',
+      title,
+      subtitle,
+      body
+    ],
+    (error) => {
+      if (!error) return
+
+      writeStartupLog('notification', 'mac system notification failed', {
+        error: error.message,
+        stack: error.stack
+      })
+    }
+  )
+}
+
+function showPomodoroCompletedNotification(durationSeconds: number): void {
+  const title = '番茄钟完成'
+  const body = createPomodoroCompletionMessage(durationSeconds)
+
+  if (process.platform === 'darwin') {
+    showMacSystemNotification('极简待办', title, body)
+    return
+  }
+
+  if (!Notification.isSupported()) {
+    writeStartupLog('notification', 'native notification is not supported', {
+      type: 'pomodoro-completed',
+      platform: process.platform
+    })
+    return
+  }
+
+  const notification = new Notification({
+    title,
+    body,
+    silent: false
+  })
+
+  notification.on('click', () => {
+    if (!mainWindow) return
+    bringWindowToFront(mainWindow)
+  })
+
+  notification.show()
+}
+
 function syncDueReminderNotifications(): void {
   if (!Notification.isSupported()) return
 
@@ -854,6 +910,23 @@ function resolveRuntimeAsset(fileName: string): string {
   return is.dev
     ? join(app.getAppPath(), 'resources', fileName)
     : join(process.resourcesPath, fileName)
+}
+
+function resolveTrayIcon(): Electron.NativeImage | string {
+  const trayIconPath = resolveRuntimeAsset('tray-icon.png')
+
+  if (process.platform !== 'darwin') {
+    return trayIconPath
+  }
+
+  const image = nativeImage.createFromPath(trayIconPath).resize({
+    width: 18,
+    height: 18,
+    quality: 'best'
+  })
+  image.setTemplateImage(true)
+
+  return image
 }
 
 function createBackupImportErrorResult(
@@ -1120,18 +1193,12 @@ function registerSettingsHandlers(): void {
   })
 
   ipcMain.handle('settings:notify-pomodoro-completed', (_event, durationSecondsRaw: unknown) => {
-    if (!Notification.isSupported()) return
-
     const durationSeconds = parseNotifyPomodoroCompletedRequest(
       durationSecondsRaw,
       'settings:notify-pomodoro-completed.request'
     )
 
-    new Notification({
-      title: '番茄钟完成',
-      body: createPomodoroCompletionMessage(durationSeconds),
-      silent: false
-    }).show()
+    showPomodoroCompletedNotification(durationSeconds)
   })
 }
 
@@ -1252,11 +1319,12 @@ function registerMainWindowIpcHandlers(): void {
   })
 }
 
-function attachWindowDiagnostics(win: BrowserWindow): void {
+function attachWindowDiagnostics(win: BrowserWindow, label: 'main' | 'quick-add'): void {
   win.webContents.on(
     'did-fail-load',
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       writeStartupLog('main', 'renderer did-fail-load', {
+        label,
         errorCode,
         errorDescription,
         validatedURL,
@@ -1266,11 +1334,12 @@ function attachWindowDiagnostics(win: BrowserWindow): void {
   )
 
   win.webContents.on('render-process-gone', (_event, details) => {
-    writeStartupLog('main', 'renderer render-process-gone', details)
+    writeStartupLog('main', 'renderer render-process-gone', { label, ...details })
   })
 
   win.webContents.on('preload-error', (_event, preloadPath, error) => {
     writeStartupLog('main', 'renderer preload-error', {
+      label,
       preloadPath,
       error: error.message,
       stack: error.stack
@@ -1284,7 +1353,8 @@ function ensureTray(): void {
   }
 
   try {
-    tray = new Tray(resolveRuntimeAsset('tray-icon.png'))
+    const trayIcon = new Tray(resolveTrayIcon())
+    tray = trayIcon
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -1309,11 +1379,19 @@ function ensureTray(): void {
       }
     ])
 
-    tray.setToolTip('极简待办')
-    tray.setContextMenu(contextMenu)
-    tray.on('click', () => {
+    trayIcon.setToolTip('极简待办')
+    trayIcon.on('click', () => {
       showMainWindow()
     })
+
+    if (process.platform === 'darwin') {
+      trayIcon.on('right-click', () => {
+        trayIcon.popUpContextMenu(contextMenu)
+      })
+      return
+    }
+
+    trayIcon.setContextMenu(contextMenu)
   } catch (error) {
     tray = null
     writeStartupLog('main', 'tray initialization failed', error)
@@ -1335,7 +1413,7 @@ function hideMainWindowToTray(win: BrowserWindow): void {
 }
 
 function bindMainWindow(win: BrowserWindow, options: { launchedHidden: boolean }): void {
-  attachWindowDiagnostics(win)
+  attachWindowDiagnostics(win, 'main')
 
   win.on('ready-to-show', () => {
     const savedOnTop = store.get('alwaysOnTop', false)
@@ -1361,10 +1439,16 @@ function bindMainWindow(win: BrowserWindow, options: { launchedHidden: boolean }
   })
 
   win.on('close', (event) => {
-    const closeToTray = store.get('closeToTray', true)
-    if (!isAppQuitting && closeToTray && tray) {
+    if (!isAppQuitting) {
       event.preventDefault()
-      hideMainWindowToTray(win)
+      const closeToTray = store.get('closeToTray', true)
+
+      if (closeToTray && tray) {
+        hideMainWindowToTray(win)
+        return
+      }
+
+      win.webContents.send('window:quit-requested')
       return
     }
 
@@ -1398,6 +1482,13 @@ function createWindow(): BrowserWindow {
   const launchedHidden = isHiddenLaunch()
   const targetDisplay = screen.getDisplayMatching(bounds)
   const minWindowSize = getScaledMinWindowSize(targetDisplay)
+  const macWindowChrome =
+    process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 16, y: 12 }
+        }
+      : {}
 
   const win = new BrowserWindow({
     width: bounds.width,
@@ -1407,7 +1498,8 @@ function createWindow(): BrowserWindow {
     minWidth: minWindowSize.width,
     minHeight: minWindowSize.height,
     show: false,
-    frame: false,
+    frame: process.platform === 'darwin',
+    ...macWindowChrome,
     autoHideMenuBar: true,
     icon: resolveRuntimeAsset('icon.png'),
     webPreferences: {

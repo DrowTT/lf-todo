@@ -432,7 +432,7 @@ const onSubTaskDragEnd = async () => {
             <SubTaskItem :task="element" :parent-id="task.id" :reordering="isSubTaskReordering" />
           </template>
         </draggable>
-        <SubTaskInput :parent-id="task.id" />
+        <SubTaskInput :parent-id="task.id" :has-existing-sub-tasks="subTasks.length > 0" />
       </div>
     </Transition>
   </div>
@@ -458,14 +458,6 @@ const onSubTaskDragEnd = async () => {
   overflow: hidden;
   cursor: default;
   position: relative;
-
-  &:focus-visible {
-    outline: none;
-    box-shadow:
-      0 0 0 2px rgba(255, 255, 255, 0.92),
-      0 0 0 4px rgba($accent-color, 0.14),
-      0 16px 36px rgba($accent-color, 0.1);
-  }
 
   &:hover {
     border-color: $border-light;
@@ -544,9 +536,7 @@ const onSubTaskDragEnd = async () => {
 
   &:focus-visible {
     outline: none;
-    box-shadow:
-      0 0 0 2px rgba(255, 255, 255, 0.92),
-      0 0 0 4px rgba(15, 23, 42, 0.08);
+    box-shadow: none;
   }
 }
 

@@ -621,9 +621,7 @@ watch(contextMenuRef, (element) => {
 
     &:focus-within {
       border-color: rgba($accent-color, 0.18);
-      box-shadow:
-        0 0 0 3px rgba($accent-color, 0.08),
-        0 10px 22px rgba(148, 163, 184, 0.1);
+      box-shadow: 0 10px 22px rgba(148, 163, 184, 0.1);
     }
   }
 
@@ -706,8 +704,8 @@ watch(contextMenuRef, (element) => {
     outline: none;
 
     &:focus {
-      border-color: $accent-color;
-      box-shadow: 0 0 0 3px $accent-soft;
+      border-color: $border-light;
+      box-shadow: none;
     }
 
     &--embedded {

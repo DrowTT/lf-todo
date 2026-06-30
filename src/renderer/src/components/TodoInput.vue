@@ -157,10 +157,8 @@ watch(priority, (value) => {
     overflow: hidden;
 
     &:focus-within {
-      border-color: $accent-color;
-      box-shadow:
-        0 0 0 3px $accent-soft,
-        $shadow-glow;
+      border-color: $border-light;
+      box-shadow: none;
       background: rgba($bg-input, 0.8);
     }
   }

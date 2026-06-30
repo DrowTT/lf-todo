@@ -235,9 +235,10 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
 
 .sub__text {
   flex: 1;
+  min-height: 19px;
   font-size: $font-sm;
   color: $text-secondary;
-  line-height: 1.55;
+  line-height: 19px;
   word-break: break-word;
   white-space: pre-line;
   user-select: text;
@@ -256,10 +257,11 @@ const onSubMouseLeave = () => setHoverTask(props.parentId)
 
 .sub__edit-area {
   flex: 1;
+  min-height: 19px;
   background: transparent;
   color: $text-primary;
   font-size: $font-sm;
-  line-height: 1.55;
+  line-height: 19px;
   padding: 0;
   margin: 0;
   display: block;

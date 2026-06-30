@@ -657,8 +657,8 @@ function unbindGlobalListeners() {
   outline: none;
 
   &:focus {
-    border-color: $accent-color;
-    box-shadow: $shadow-glow;
+    border-color: $border-light;
+    box-shadow: none;
   }
 }
 

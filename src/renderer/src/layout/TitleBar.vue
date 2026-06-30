@@ -1,5 +1,5 @@
 <template>
-  <div class="title-bar">
+  <div class="title-bar" :class="{ 'title-bar--mac': isMac }">
     <div class="title-bar__drag-area">
       <div class="title-bar__title">
         <span class="title-bar__dot"></span>
@@ -17,6 +17,7 @@
         <span class="title-bar__search-key">{{ globalSearchShortcutLabel }}</span>
       </button>
       <button
+        v-if="!isMac"
         class="title-bar__btn title-bar__btn--pin"
         :class="{ 'is-active': isAlwaysOnTop }"
         title="置顶"
@@ -24,24 +25,26 @@
       >
         <Pin :size="15" style="transform: rotate(45deg)" />
       </button>
-      <button
-        class="title-bar__btn title-bar__btn--minimize"
-        title="最小化"
-        @click="handleMinimize"
-      >
-        <Minus :size="14" />
-      </button>
-      <button
-        class="title-bar__btn title-bar__btn--maximize"
-        :title="isMaximized ? '还原' : '最大化'"
-        @click="handleToggleMaximize"
-      >
-        <IconRestore v-if="isMaximized" />
-        <Square v-else :size="13" :stroke-width="1.4" />
-      </button>
-      <button class="title-bar__btn title-bar__btn--close" title="关闭" @click="handleClose">
-        <X :size="14" />
-      </button>
+      <template v-if="!isMac">
+        <button
+          class="title-bar__btn title-bar__btn--minimize"
+          title="最小化"
+          @click="handleMinimize"
+        >
+          <Minus :size="14" />
+        </button>
+        <button
+          class="title-bar__btn title-bar__btn--maximize"
+          :title="isMaximized ? '还原' : '最大化'"
+          @click="handleToggleMaximize"
+        >
+          <IconRestore v-if="isMaximized" />
+          <Square v-else :size="13" :stroke-width="1.4" />
+        </button>
+        <button class="title-bar__btn title-bar__btn--close" title="关闭" @click="handleClose">
+          <X :size="14" />
+        </button>
+      </template>
     </div>
   </div>
 </template>
@@ -65,6 +68,7 @@ const { hotkeyConfig } = useHotkeys()
 const globalSearchStore = useGlobalSearchStore()
 const stopAlwaysOnTopListener = ref<(() => void) | null>(null)
 const stopMaximizedListener = ref<(() => void) | null>(null)
+const isMac = computed(() => navigator.platform.toLowerCase().includes('mac'))
 const globalSearchShortcutLabel = computed(() => hotkeyConfig.openGlobalSearch.label)
 
 const handleTogglePin = () => {
@@ -116,6 +120,7 @@ onUnmounted(() => {
 @use '../styles/variables' as *;
 
 .title-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -124,6 +129,26 @@ onUnmounted(() => {
   color: $text-primary;
   user-select: none;
   border-bottom: 1px solid $border-color;
+}
+
+.title-bar--mac {
+  padding-left: 70px;
+}
+
+.title-bar--mac .title-bar__title {
+  display: none;
+}
+
+.title-bar--mac .title-bar__controls {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: auto;
+  transform: translate(-50%, -50%);
+}
+
+.title-bar--mac .title-bar__search {
+  margin-right: 0;
 }
 
 .title-bar__drag-area {
@@ -174,6 +199,7 @@ onUnmounted(() => {
   background: rgba($bg-elevated, 0.84);
   color: $text-secondary;
   cursor: pointer;
+  outline: none;
   transition:
     border-color $transition-fast,
     background-color $transition-fast,
@@ -217,6 +243,7 @@ onUnmounted(() => {
   color: $text-muted;
   font-size: $font-sm;
   cursor: pointer;
+  outline: none;
   transition:
     background-color $transition-fast,
     color $transition-fast;

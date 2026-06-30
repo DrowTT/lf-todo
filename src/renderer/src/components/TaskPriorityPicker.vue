@@ -93,7 +93,7 @@ function handleClick() {
     outline: none;
     background: var(--priority-soft-hover);
     border-color: var(--priority-border);
-    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05);
+    box-shadow: none;
   }
 
   &:disabled {
