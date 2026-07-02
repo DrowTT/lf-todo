@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
 import path from 'path'
 import {
   LEGACY_SYSTEM_CATEGORY_NAME,
@@ -260,9 +259,12 @@ function runMigrations(database: Database.Database): void {
 }
 
 export function initDatabase(): void {
-  const userDataPath = app.getPath('userData')
-  const dbPath = path.join(userDataPath, 'lite-todo.db')
+  const dbPath = path.join(process.cwd(), 'lite-todo.db')
 
+  initDatabaseAtPath(dbPath)
+}
+
+export function initDatabaseAtPath(dbPath: string): void {
   db = new Database(dbPath)
   db.pragma('foreign_keys = ON')
   db.pragma('journal_mode = WAL')
@@ -286,6 +288,9 @@ export function initDatabase(): void {
     updateCategory: db.prepare('UPDATE categories SET name = ? WHERE id = ?'),
     deleteCategory: db.prepare('DELETE FROM categories WHERE id = ?'),
     clearCategories: db.prepare('DELETE FROM categories'),
+    updateCategoryOrderIndex: db.prepare(
+      'UPDATE categories SET order_index = ? WHERE id = ? AND is_system = 0'
+    ),
     findCategoryByName: db.prepare(
       'SELECT * FROM categories WHERE LOWER(TRIM(name)) = ? ORDER BY id LIMIT 1'
     ),
@@ -508,6 +513,14 @@ export function initDatabase(): void {
   }
 
   console.log('database initialized:', dbPath)
+}
+
+export function backupDatabase(destinationPath: string): Promise<Database.BackupMetadata> {
+  return getDb().backup(destinationPath)
+}
+
+export function runTransaction<T>(callback: () => T): T {
+  return getDb().transaction(callback)()
 }
 
 export function closeDatabase(): void {
@@ -1522,6 +1535,18 @@ export function reorderTasks(orderedIds: number[]): void {
 
 export function reorderSubTasks(orderedIds: number[]): void {
   reorderTaskIds(orderedIds, (index) => index)
+}
+
+export function reorderCategories(orderedIds: number[]): void {
+  if (orderedIds.length === 0) {
+    return
+  }
+
+  getDb().transaction(() => {
+    for (let index = 0; index < orderedIds.length; index += 1) {
+      getStmts().updateCategoryOrderIndex.run(index + 1, orderedIds[index])
+    }
+  })()
 }
 
 function reorderTaskIds(

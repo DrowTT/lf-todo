@@ -2,12 +2,7 @@ import { vi } from 'vitest'
 import type { App } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { installAppRuntime, type AppRuntime } from '../app/runtime'
-import type {
-  ArchivedTaskGroup,
-  Category,
-  Task,
-  TaskPriority
-} from '../../../shared/types/models'
+import type { ArchivedTaskGroup, Category, Task, TaskPriority } from '../../../shared/types/models'
 import type { CategoryRepository } from '../services/repositories/categoryRepository'
 import type { TaskRepository } from '../services/repositories/taskRepository'
 import type {
@@ -87,9 +82,11 @@ export function createTaskRepository(overrides: Partial<TaskRepository> = {}): T
     reorderTasks: vi.fn().mockResolvedValue(undefined),
     reorderSubTasks: vi.fn().mockResolvedValue(undefined),
     getSubTasks: vi.fn().mockResolvedValue([]),
-    createSubTask: vi.fn().mockImplementation(async (content, parentId) =>
-      createTask({ id: 200, content, parent_id: parentId })
-    ),
+    createSubTask: vi
+      .fn()
+      .mockImplementation(async (content, parentId) =>
+        createTask({ id: 200, content, parent_id: parentId })
+      ),
     batchCompleteSubTasks: vi.fn().mockResolvedValue(0),
     ...overrides
   }
@@ -103,14 +100,17 @@ export function createCategoryRepository(
     createCategory: vi.fn().mockImplementation(async (name) => createCategory({ id: 2, name })),
     updateCategory: vi.fn().mockResolvedValue(undefined),
     deleteCategory: vi.fn().mockResolvedValue(undefined),
+    reorderCategories: vi.fn().mockResolvedValue(undefined),
     ...overrides
   }
 }
 
-export function installTestRuntime(options: {
-  taskRepository?: TaskRepository
-  categoryRepository?: CategoryRepository
-} = {}) {
+export function installTestRuntime(
+  options: {
+    taskRepository?: TaskRepository
+    categoryRepository?: CategoryRepository
+  } = {}
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
 
@@ -122,7 +122,12 @@ export function installTestRuntime(options: {
       category: categoryRepository,
       settings: createSettingsRepository()
     },
-    toast: { message: null, show: vi.fn(), hide: vi.fn(), triggerAction: vi.fn() } as unknown as AppRuntime['toast'],
+    toast: {
+      message: null,
+      show: vi.fn(),
+      hide: vi.fn(),
+      triggerAction: vi.fn()
+    } as unknown as AppRuntime['toast'],
     confirm: {
       current: null,
       confirm: vi.fn(),
@@ -177,6 +182,8 @@ function createWindowService(): WindowService {
     toggleMaximize: vi.fn(),
     onQuitRequested: vi.fn(),
     onQuickAddCommitted: vi.fn(),
+    onExternalDataChanged: vi.fn(),
+    onCodexControlStatusChanged: vi.fn(),
     onAlwaysOnTopChanged: vi.fn(),
     onMaximizedChanged: vi.fn()
   }

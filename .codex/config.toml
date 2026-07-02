@@ -1,0 +1,4 @@
+[mcp_servers.lf_todo]
+command = "pnpm"
+args = ["--filter", "lf-todo-mcp", "dev"]
+startup_timeout_sec = 60

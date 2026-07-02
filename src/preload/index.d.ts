@@ -4,6 +4,7 @@ import type {
   AppInfo,
   AutoCleanupConfig,
   Category,
+  CodexControlStatusEvent,
   PomodoroData,
   PomodoroSessionState,
   QuickAddCommittedEvent,
@@ -31,6 +32,10 @@ interface API {
     onFocusQuickAddInputRequested: (callback: () => void) => () => void
     onQuickAddSessionRequested: (callback: () => void) => () => void
     onQuickAddCommitted: (callback: (payload: QuickAddCommittedEvent) => void) => () => void
+    onExternalDataChanged: (callback: () => void) => () => void
+    onCodexControlStatusChanged: (
+      callback: (payload: CodexControlStatusEvent) => void
+    ) => () => void
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) => () => void
     onMaximizedChanged: (callback: (flag: boolean) => void) => () => void
   }
@@ -39,6 +44,7 @@ interface API {
     createCategory: (name: string) => Promise<Category>
     updateCategory: (id: number, name: string) => Promise<void>
     deleteCategory: (id: number) => Promise<void>
+    reorderCategories: (orderedIds: number[]) => Promise<void>
     getTasks: (categoryId: number) => Promise<Task[]>
     getAllTasks: () => Promise<Task[]>
     getArchivedTaskGroups: () => Promise<ArchivedTaskGroup[]>

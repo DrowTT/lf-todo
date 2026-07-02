@@ -7,6 +7,7 @@ import {
   parseCreateTaskRequest,
   parseMoveTaskToCategoryRequest,
   parseQuickAddSubmitRequest,
+  parseReorderCategoriesRequest,
   parseReorderTasksRequest,
   parseRestoreArchivedTasksRequest,
   parseSearchTasksRequest,
@@ -37,6 +38,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions = {}): v
   ipcMain.handle('db:delete-category', (_event, id: unknown) =>
     db.deleteCategory(expectInteger(id, 'db:delete-category.request.id', { min: 1 }))
   )
+  ipcMain.handle('db:reorder-categories', (_event, payload: unknown) => {
+    const request = parseReorderCategoriesRequest(payload, 'db:reorder-categories.request')
+    return db.reorderCategories(request.orderedIds)
+  })
 
   ipcMain.handle('db:get-tasks', (_event, categoryId: unknown) =>
     db.getTasksByCategory(expectInteger(categoryId, 'db:get-tasks.request.categoryId', { min: 1 }))

@@ -62,7 +62,10 @@ function createUnavailableCategoryRepository(): CategoryRepository {
     updateCategory: createUnavailableAction<[number, string], void>(
       'categoryRepository.updateCategory'
     ),
-    deleteCategory: createUnavailableAction<[number], void>('categoryRepository.deleteCategory')
+    deleteCategory: createUnavailableAction<[number], void>('categoryRepository.deleteCategory'),
+    reorderCategories: createUnavailableAction<[number[]], void>(
+      'categoryRepository.reorderCategories'
+    )
   }
 }
 

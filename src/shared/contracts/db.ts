@@ -36,6 +36,10 @@ export interface ReorderTasksRequest {
   orderedIds: number[]
 }
 
+export interface ReorderCategoriesRequest {
+  orderedIds: number[]
+}
+
 export interface SearchTasksRequest {
   query: string
   categoryId: number | null
@@ -59,13 +63,13 @@ export interface MoveTaskToCategoryRequest {
   targetCategoryId: number
 }
 
-function parseOrderedIds(value: unknown, label: string): number[] {
+function parseOrderedIds(value: unknown, label: string, entityName: string): number[] {
   const orderedIds = expectArray(value, label, (item, itemLabel) =>
     expectInteger(item, itemLabel, { min: 1 })
   )
 
   if (new Set(orderedIds).size !== orderedIds.length) {
-    throw new Error(`${label} must not contain duplicate task ids`)
+    throw new Error(`${label} must not contain duplicate ${entityName} ids`)
   }
 
   return orderedIds
@@ -235,7 +239,19 @@ export function parseReorderTasksRequest(value: unknown, label = 'payload'): Reo
   assertAllowedKeys(record, ['orderedIds'], label)
 
   return {
-    orderedIds: parseOrderedIds(record.orderedIds, `${label}.orderedIds`)
+    orderedIds: parseOrderedIds(record.orderedIds, `${label}.orderedIds`, 'task')
+  }
+}
+
+export function parseReorderCategoriesRequest(
+  value: unknown,
+  label = 'payload'
+): ReorderCategoriesRequest {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['orderedIds'], label)
+
+  return {
+    orderedIds: parseOrderedIds(record.orderedIds, `${label}.orderedIds`, 'category')
   }
 }
 
@@ -268,7 +284,7 @@ export function parseRestoreArchivedTasksRequest(
   assertAllowedKeys(record, ['ids'], label)
 
   return {
-    ids: parseOrderedIds(record.ids, `${label}.ids`)
+    ids: parseOrderedIds(record.ids, `${label}.ids`, 'task')
   }
 }
 
@@ -280,7 +296,7 @@ export function parseArchiveCompletedTaskIdsRequest(
   assertAllowedKeys(record, ['ids'], label)
 
   return {
-    ids: parseOrderedIds(record.ids, `${label}.ids`)
+    ids: parseOrderedIds(record.ids, `${label}.ids`, 'task')
   }
 }
 

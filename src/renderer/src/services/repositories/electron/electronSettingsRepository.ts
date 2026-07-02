@@ -2,6 +2,7 @@ import { parseBackupImportResult } from '../../../../../shared/contracts/backup'
 import {
   parseAppInfo,
   parseAutoCleanupConfig,
+  parseCodexControlStatusEvent,
   parsePomodoroData,
   parsePomodoroSessionState,
   parseQuickAddCommittedEvent,
@@ -206,6 +207,12 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
       onQuickAddCommitted() {
         return noop
       },
+      onExternalDataChanged() {
+        return noop
+      },
+      onCodexControlStatusChanged() {
+        return noop
+      },
       onAlwaysOnTopChanged() {
         return noop
       },
@@ -241,6 +248,14 @@ export function createElectronWindowService(api: Window['api'] | undefined): Win
     onQuickAddCommitted(callback) {
       return api.window.onQuickAddCommitted((payload) => {
         callback(parseQuickAddCommittedEvent(payload, 'window:quick-add-committed.event'))
+      })
+    },
+    onExternalDataChanged(callback) {
+      return api.window.onExternalDataChanged(callback)
+    },
+    onCodexControlStatusChanged(callback) {
+      return api.window.onCodexControlStatusChanged((payload) => {
+        callback(parseCodexControlStatusEvent(payload, 'codex:control-status-changed.event'))
       })
     },
     onAlwaysOnTopChanged(callback) {

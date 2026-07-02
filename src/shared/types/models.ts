@@ -63,6 +63,15 @@ export interface QuickAddCommittedEvent {
   categoryCreated: boolean
 }
 
+export type CodexControlStatus = 'running' | 'changed' | 'idle'
+
+export interface CodexControlStatusEvent {
+  status: CodexControlStatus
+  method: string | null
+  operationCount: number
+  changed: boolean
+}
+
 export type TaskUpdate = Partial<
   Pick<
     Task,

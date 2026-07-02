@@ -261,6 +261,10 @@ export function useAppFacade() {
     }
   }
 
+  async function reorderCategories(previousOrderedIds: number[]) {
+    return await categoryStore.reorderCategories(previousOrderedIds)
+  }
+
   async function selectCategory(id: number) {
     categoryStore.selectCategory(id)
     selectTaskView(createCategoryTaskView(id))
@@ -610,6 +614,7 @@ export function useAppFacade() {
     addCategory,
     deleteCategory,
     updateCategory,
+    reorderCategories,
     selectCategory,
     selectSystemTaskView,
     selectAllTasksView,

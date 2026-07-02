@@ -5,4 +5,5 @@ export interface CategoryRepository {
   createCategory(name: string): Promise<Category>
   updateCategory(id: number, name: string): Promise<void>
   deleteCategory(id: number): Promise<void>
+  reorderCategories(orderedIds: number[]): Promise<void>
 }

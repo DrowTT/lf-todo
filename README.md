@@ -37,6 +37,36 @@ Arctic Blue 主题 · 无边框窗口 · 玻璃态设计
 - 推荐在迁移到新电脑前，通过设置页的“导出备份”生成 JSON 备份文件。
 - “恢复备份”会覆盖当前待办、分类和归档数据；“合并导入”会保留当前数据，但可能产生重复任务。
 
+## Codex MCP
+
+项目内置本地 MCP Server，便于 Codex 读取和整理待办。MCP 不直接操作数据库，所有读写都会通过正在运行的 LF-Todo App 主进程桥接完成。
+
+```bash
+# 源码仓库内启动 MCP stdio server
+pnpm mcp:lf-todo
+
+# 本地冒烟验证
+pnpm mcp:lf-todo:smoke
+```
+
+- App 默认使用系统用户数据目录下的 `lite-todo.db`，MCP 只连接 App 桥接服务。
+- 使用 MCP 前必须先启动 LF-Todo App。
+- App 会在用户数据目录写入 `mcp-bridge.json`，MCP 通过该文件连接本机 `127.0.0.1` 桥接服务。
+- 如需调试非默认位置，可用 `LF_TODO_MCP_BRIDGE_PATH=/path/to/mcp-bridge.json` 指定桥接文件。
+- MCP 进程需要 Node.js 22.12+。
+- 写入类批量操作默认 `dryRun=true`，显式传 `dryRun=false` 才会执行。
+- 真实写入默认会通过 App 在用户数据目录下生成 `codex-backups/` 备份，并通知界面刷新。
+- 当前 Codex 线程通常不会热加载新增 MCP 配置；修改 `.codex/config.toml` 后建议重启 Codex 或开启新线程。
+
+面向普通用户分发时，MCP Server 会作为 `lf-todo-mcp` npm 包发布，Codex 配置可写为：
+
+```toml
+[mcp_servers.lf_todo]
+command = "npx"
+args = ["-y", "lf-todo-mcp"]
+startup_timeout_sec = 60
+```
+
 ## 📌 Stable 维护策略
 
 `v1.4.0 Stable` 后，仅优先维护以下事项：

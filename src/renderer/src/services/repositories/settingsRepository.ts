@@ -1,6 +1,7 @@
 import type {
   AppInfo,
   AutoCleanupConfig,
+  CodexControlStatusEvent,
   PomodoroData,
   PomodoroSessionState,
   QuickAddCommittedEvent,
@@ -45,6 +46,8 @@ export interface WindowService {
   toggleMaximize(): void
   onQuitRequested(callback: () => void): () => void
   onQuickAddCommitted(callback: (payload: QuickAddCommittedEvent) => void): () => void
+  onExternalDataChanged(callback: () => void): () => void
+  onCodexControlStatusChanged(callback: (payload: CodexControlStatusEvent) => void): () => void
   onAlwaysOnTopChanged(callback: (flag: boolean) => void): () => void
   onMaximizedChanged(callback: (flag: boolean) => void): () => void
 }

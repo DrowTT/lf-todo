@@ -3,6 +3,8 @@ import type {
   AppInfo,
   AutoCleanupConfig,
   Category,
+  CodexControlStatus,
+  CodexControlStatusEvent,
   PomodoroData,
   PomodoroRecord,
   PomodoroSessionState,
@@ -194,6 +196,41 @@ export function parseQuickAddCommittedEvent(
   return {
     categoryId: expectInteger(record.categoryId, `${label}.categoryId`, { min: 1 }),
     categoryCreated: expectBoolean(record.categoryCreated, `${label}.categoryCreated`)
+  }
+}
+
+function parseCodexControlStatus(value: unknown, label: string): CodexControlStatus {
+  const status = expectString(value, label, { trim: true, minLength: 1 })
+
+  if (status === 'running' || status === 'changed' || status === 'idle') {
+    return status
+  }
+
+  throw new Error(`${label} must be a supported Codex control status`)
+}
+
+export function parseCodexControlStatusEvent(
+  value: unknown,
+  label = 'codexControlStatusEvent'
+): CodexControlStatusEvent {
+  const record = expectRecord(value, label)
+  assertAllowedKeys(record, ['status', 'method', 'operationCount', 'changed'], label)
+
+  return {
+    status: parseCodexControlStatus(record.status, `${label}.status`),
+    method:
+      record.method === null
+        ? null
+        : expectString(record.method, `${label}.method`, {
+            trim: true,
+            minLength: 1,
+            maxLength: 64
+          }),
+    operationCount: expectInteger(record.operationCount, `${label}.operationCount`, {
+      min: 0,
+      max: 100
+    }),
+    changed: expectBoolean(record.changed, `${label}.changed`)
   }
 }
 

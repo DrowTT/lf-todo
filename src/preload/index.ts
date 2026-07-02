@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  CodexControlStatusEvent,
   QuickAddCommittedEvent,
   QuickAddSubmitInput,
   TaskCreateInput,
@@ -12,6 +13,7 @@ import {
   parseAutoCleanupConfig,
   parseCategories,
   parseCategory,
+  parseCodexControlStatusEvent,
   parsePendingTaskCounts,
   parsePomodoroData,
   parsePomodoroSessionState,
@@ -29,6 +31,7 @@ import {
   parseCreateTaskRequest,
   parseMoveTaskToCategoryRequest,
   parseQuickAddSubmitRequest,
+  parseReorderCategoriesRequest,
   parseReorderTasksRequest,
   parseRestoreArchivedTasksRequest,
   parseSearchTasksRequest,
@@ -115,6 +118,10 @@ const api = {
       subscribe('window:quick-add-session-requested', callback, parseVoid),
     onQuickAddCommitted: (callback: (payload: QuickAddCommittedEvent) => void) =>
       subscribe('window:quick-add-committed', callback, parseQuickAddCommittedEvent),
+    onExternalDataChanged: (callback: () => void) =>
+      subscribe('db:external-data-changed', callback, parseVoid),
+    onCodexControlStatusChanged: (callback: (payload: CodexControlStatusEvent) => void) =>
+      subscribe('codex:control-status-changed', callback, parseCodexControlStatusEvent),
     onAlwaysOnTopChanged: (callback: (flag: boolean) => void) =>
       subscribe('window:always-on-top-changed', callback, expectBoolean),
     onMaximizedChanged: (callback: (flag: boolean) => void) =>
@@ -152,6 +159,8 @@ const api = {
           expectInteger(id, 'db:delete-category.request.id', { min: 1 })
         )
         .then((value) => parseVoid(value, 'db:delete-category.response')),
+    reorderCategories: (orderedIds: number[]) =>
+      invokeVoidWithPayload('db:reorder-categories', { orderedIds }, parseReorderCategoriesRequest),
     getTasks: (categoryId: number) =>
       ipcRenderer
         .invoke(

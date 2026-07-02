@@ -14,6 +14,9 @@ export function createElectronCategoryRepository(api: Window['api']): CategoryRe
     },
     async deleteCategory(id) {
       await api.db.deleteCategory(id)
+    },
+    async reorderCategories(orderedIds) {
+      await api.db.reorderCategories(orderedIds)
     }
   }
 }

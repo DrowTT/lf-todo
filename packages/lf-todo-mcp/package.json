@@ -1,0 +1,42 @@
+{
+  "name": "lf-todo-mcp",
+  "version": "0.1.0",
+  "description": "LF-Todo 的本地 Codex MCP Server",
+  "type": "module",
+  "bin": {
+    "lf-todo-mcp": "dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "postbuild": "chmod +x dist/server.js",
+    "dev": "tsx src/server.ts",
+    "smoke": "pnpm build && node dist/smokeClient.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pack:dry-run": "pnpm build && npm pack --dry-run",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "mcp",
+    "codex",
+    "todo",
+    "lf-todo"
+  ],
+  "author": "LF",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3"
+  }
+}

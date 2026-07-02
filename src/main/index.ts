@@ -20,6 +20,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
 import * as db from './db/database'
 import { registerIpcHandlers } from './ipc'
+import { startMcpBridge, stopMcpBridge } from './mcpBridge'
 import { initAutoUpdater } from './updater'
 import {
   BackupCompatibilityError,
@@ -45,7 +46,7 @@ import type {
   BackupImportResult,
   BackupImportSummary
 } from '../shared/types/backup'
-import type { QuickAddCommittedEvent } from '../shared/types/models'
+import type { CodexControlStatusEvent, QuickAddCommittedEvent } from '../shared/types/models'
 import { ContractError } from '../shared/contracts/utils'
 
 interface AutoCleanupConfig {
@@ -458,6 +459,22 @@ function notifyQuickAddCommitted(payload: QuickAddCommittedEvent): void {
   if (!win) return
 
   win.webContents.send('window:quick-add-committed', payload)
+}
+
+function notifyExternalDataChanged(): void {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('db:external-data-changed')
+    }
+  })
+}
+
+function notifyCodexControlStatus(payload: CodexControlStatusEvent): void {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('codex:control-status-changed', payload)
+    }
+  })
 }
 
 function registerGlobalHotkeys(): void {
@@ -1534,7 +1551,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('ping', () => console.log('pong'))
 
-  db.initDatabase()
+  db.initDatabaseAtPath(join(app.getPath('userData'), 'lite-todo.db'))
 
   const persistedAutoLaunch = store.get('autoLaunch')
   const actualAutoLaunch = getAutoLaunchState()
@@ -1562,6 +1579,14 @@ app.whenReady().then(() => {
   createQuickAddWindow()
   registerGlobalHotkeys()
   startDueReminderScheduler()
+  void startMcpBridge({
+    userDataPath: app.getPath('userData'),
+    appVersion: app.getVersion(),
+    onDataChanged: notifyExternalDataChanged,
+    onControlStatusChanged: notifyCodexControlStatus
+  }).catch((error) => {
+    writeStartupLog('mcp-bridge', 'mcp bridge start failed', error)
+  })
 
   app.on('activate', () => {
     if (!getActiveMainWindow()) {
@@ -1584,6 +1609,7 @@ app.on('before-quit', () => {
   isAppQuitting = true
   globalShortcut.unregisterAll()
   stopDueReminderScheduler()
+  stopMcpBridge()
   db.closeDatabase()
 })
 

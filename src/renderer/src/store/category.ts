@@ -1,8 +1,14 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Category } from '../../../shared/types/models'
 import { useAppRuntime } from '../app/runtime'
 import { clearStoredValue, readStoredNumber, writeStoredNumber } from '../utils/localStorage'
+import {
+  buildPendingOperationKey,
+  hasPendingOperation,
+  pendingOperations,
+  runAsyncAction
+} from '../services/runAsyncAction'
 
 // ─── localStorage 持久化封装 ──────────────────────────────────────
 // 统一使用 lf-todo: 前缀（与 useSidebarResize.ts、subtask store 保持一致的命名规范）
@@ -14,6 +20,10 @@ const persistence = {
   clear: () => clearStoredValue(CURRENT_CATEGORY_STORAGE_KEY)
 }
 // ─────────────────────────────────────────────────────────────────
+
+const CATEGORY_OPERATION_TYPES = {
+  reorder: 'category:reorder'
+} as const
 
 /**
  * 分类 Store（Pinia setup store）
@@ -29,6 +39,9 @@ export const useCategoryStore = defineStore('category', () => {
 
   const { repositories, toast } = useAppRuntime()
   const categoryRepository = repositories.category
+  const isReorderingCategories = computed(() =>
+    hasPendingOperation({ type: CATEGORY_OPERATION_TYPES.reorder })
+  )
 
   /**
    * 仅刷新分类列表，不触碰 currentCategoryId（优化 #4）
@@ -135,6 +148,45 @@ export const useCategoryStore = defineStore('category', () => {
     }
   }
 
+  function restoreCategoryOrder(previousOrderedIds: number[]) {
+    const categoriesById = new Map(categories.value.map((category) => [category.id, category]))
+    const orderedCategories = previousOrderedIds
+      .map((id) => categoriesById.get(id))
+      .filter((category): category is Category => Boolean(category))
+    const systemCategories = categories.value.filter((category) => category.is_system)
+    const customCategories = categories.value.filter((category) => !category.is_system)
+
+    if (orderedCategories.length === customCategories.length) {
+      categories.value = [...systemCategories, ...orderedCategories]
+    }
+  }
+
+  async function reorderCategories(previousOrderedIds: number[]) {
+    const orderedIds = categories.value
+      .filter((category) => !category.is_system)
+      .map((category) => category.id)
+
+    if (
+      previousOrderedIds.length === orderedIds.length &&
+      previousOrderedIds.every((categoryId, index) => categoryId === orderedIds[index])
+    ) {
+      return true
+    }
+
+    return runAsyncAction({
+      key: buildPendingOperationKey(CATEGORY_OPERATION_TYPES.reorder, 'custom'),
+      type: CATEGORY_OPERATION_TYPES.reorder,
+      entityId: 'custom',
+      execute: () => categoryRepository.reorderCategories(orderedIds),
+      rollback: () => {
+        restoreCategoryOrder(previousOrderedIds)
+      },
+      errorMessage: '保存分类排序失败，请重试',
+      notifyError: toast.show,
+      logPrefix: '[categoryStore] reorderCategories 失败'
+    })
+  }
+
   function selectCategory(id: number) {
     currentCategoryId.value = id
     persistence.set(id)
@@ -143,10 +195,13 @@ export const useCategoryStore = defineStore('category', () => {
   return {
     categories,
     currentCategoryId,
+    pendingOperations,
+    isReorderingCategories,
     fetchCategories,
     addCategory,
     deleteCategory,
     updateCategory,
+    reorderCategories,
     selectCategory
   }
 })

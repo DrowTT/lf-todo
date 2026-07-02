@@ -114,6 +114,7 @@ async function handleQuitRequested() {
 
 let stopQuitRequestedListener: (() => void) | null = null
 let stopQuickAddCommittedListener: (() => void) | null = null
+let stopExternalDataChangedListener: (() => void) | null = null
 
 onMounted(() => {
   window.addEventListener('keydown', handleWindowKeydown)
@@ -125,6 +126,9 @@ onMounted(() => {
     stopQuickAddCommittedListener = runtime.window.onQuickAddCommitted(() => {
       void app.fetchCategories()
     })
+    stopExternalDataChangedListener = runtime.window.onExternalDataChanged(() => {
+      void app.fetchCategories()
+    })
   }
 })
 
@@ -132,6 +136,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleWindowKeydown)
   stopQuitRequestedListener?.()
   stopQuickAddCommittedListener?.()
+  stopExternalDataChangedListener?.()
 })
 </script>
 

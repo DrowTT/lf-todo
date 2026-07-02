@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, markRaw, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import draggable from 'vuedraggable'
 import { Archive, Inbox, ListTodo } from 'lucide-vue-next'
+import type { Category } from '../../../shared/types/models'
 import { useAppFacade } from '../app/facade/useAppFacade'
 import { useAppRuntime } from '../app/runtime'
 import { useContextMenu } from '../composables/useContextMenu'
@@ -44,6 +46,7 @@ const {
 const newCategoryName = ref('')
 const isAdding = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
+const categoryDragStartOrder = ref<number[]>([])
 
 const editingCategoryId = ref<number | null>(null)
 const editingName = ref('')
@@ -60,6 +63,17 @@ const systemEntryIcons = {
 }
 
 const customCategories = computed(() => categories.value.filter((category) => !category.is_system))
+const draggableCustomCategories = computed({
+  get: () => customCategories.value,
+  set: (value: Category[]) => {
+    const systemCategories = categories.value.filter((category) => category.is_system)
+    categories.value = [...systemCategories, ...value]
+  }
+})
+const isCategoryDragDisabled = computed(
+  () =>
+    editingCategoryId.value !== null || isAdding.value || app.categoryStore.isReorderingCategories
+)
 
 const inboxEntry = computed(() => {
   const inboxId = inboxCategory.value?.id ?? null
@@ -209,6 +223,15 @@ const handleRenameConfirm = async () => {
   cancelRename()
 }
 
+function handleCategoryDragStart() {
+  categoryDragStartOrder.value = customCategories.value.map((category) => category.id)
+}
+
+async function handleCategoryDragEnd() {
+  await app.reorderCategories(categoryDragStartOrder.value)
+  categoryDragStartOrder.value = []
+}
+
 const cancelRename = () => {
   editingCategoryId.value = null
   editingName.value = ''
@@ -348,66 +371,81 @@ watch(contextMenuRef, (element) => {
     <section class="category-list__categories">
       <div class="category-section__label">分类</div>
       <div class="category-list__categories-scroll">
-        <ul class="category-section__list category-section__list--categories">
-          <li
-            v-for="category in customCategories"
-            :key="category.id"
-            class="category-item category-item--category-entry"
-            :class="{
-              'category-item--active':
-                currentMainView === 'tasks' &&
-                activeTaskCategoryId === category.id &&
-                editingCategoryId !== category.id,
-              'category-item--editing': editingCategoryId === category.id,
-              'category-item--input-shell': editingCategoryId === category.id,
-              'category-item--drop-target': hoverCategoryId === category.id,
-              'category-item--drop-disabled': isDraggingTask && dragSourceCategoryId === category.id
-            }"
-            :data-category-drop-id="category.id"
-            @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"
-            @contextmenu="handleCategoryContextMenu($event, category)"
-            @dragenter="handleTaskDragEnter($event, category.id)"
-            @dragover="handleTaskDragOver($event, category.id)"
-            @dragleave="handleTaskDragLeave($event, category.id)"
-            @drop="handleTaskDrop($event, category.id)"
-          >
-            <input
-              v-if="editingCategoryId === category.id"
-              :ref="setEditInputRef"
-              v-model="editingName"
-              class="category-item__edit-input--embedded category-item__edit-input--category-entry"
-              maxlength="6"
-              @keyup.enter="handleRenameConfirm"
-              @keyup.escape="cancelRename"
-              @blur="cancelRename"
-              @click.stop
-            />
-            <template v-else>
-              <span class="category-item__name">{{ category.name }}</span>
-              <span v-if="pendingCounts[category.id]" class="category-item__badge">
-                {{ pendingCounts[category.id] }}
-              </span>
-            </template>
-          </li>
+        <draggable
+          v-model="draggableCustomCategories"
+          item-key="id"
+          :animation="180"
+          :disabled="isCategoryDragDisabled"
+          ghost-class="category-item--ghost"
+          drag-class="category-item--dragging"
+          class="category-section__list category-section__list--categories"
+          tag="ul"
+          @start="handleCategoryDragStart"
+          @end="handleCategoryDragEnd"
+        >
+          <template #item="{ element: category }">
+            <li
+              class="category-item category-item--category-entry"
+              :class="{
+                'category-item--active':
+                  currentMainView === 'tasks' &&
+                  activeTaskCategoryId === category.id &&
+                  editingCategoryId !== category.id,
+                'category-item--editing': editingCategoryId === category.id,
+                'category-item--input-shell': editingCategoryId === category.id,
+                'category-item--drop-target': hoverCategoryId === category.id,
+                'category-item--drop-disabled':
+                  isDraggingTask && dragSourceCategoryId === category.id,
+                'category-item--reordering': app.categoryStore.isReorderingCategories
+              }"
+              :data-category-drop-id="category.id"
+              @click="editingCategoryId !== category.id && handleSelectCategory(category.id)"
+              @contextmenu="handleCategoryContextMenu($event, category)"
+              @dragenter="handleTaskDragEnter($event, category.id)"
+              @dragover="handleTaskDragOver($event, category.id)"
+              @dragleave="handleTaskDragLeave($event, category.id)"
+              @drop="handleTaskDrop($event, category.id)"
+            >
+              <input
+                v-if="editingCategoryId === category.id"
+                :ref="setEditInputRef"
+                v-model="editingName"
+                class="category-item__edit-input--embedded category-item__edit-input--category-entry"
+                maxlength="6"
+                @keyup.enter="handleRenameConfirm"
+                @keyup.escape="cancelRename"
+                @blur="cancelRename"
+                @click.stop
+              />
+              <template v-else>
+                <span class="category-item__name">{{ category.name }}</span>
+                <span v-if="pendingCounts[category.id]" class="category-item__badge">
+                  {{ pendingCounts[category.id] }}
+                </span>
+              </template>
+            </li>
+          </template>
 
-          <li v-if="!isAdding" class="category-item category-item--create" @click="startAdding">
-            <span class="category-item__name category-item__name--muted">新建分类</span>
-          </li>
+          <template #footer>
+            <li v-if="!isAdding" class="category-item category-item--create" @click="startAdding">
+              <span class="category-item__name category-item__name--muted">新建分类</span>
+            </li>
 
-          <li v-else class="category-item category-item--create-input">
-            <input
-              ref="inputRef"
-              v-model="newCategoryName"
-              class="category-item__edit-input--embedded"
-              placeholder="输入分类名称..."
-              maxlength="6"
-              autofocus
-              @keyup.enter="handleAddCategory"
-              @keyup.escape="cancelAddCategory"
-              @blur="handleAddCategory"
-            />
-          </li>
-        </ul>
+            <li v-else class="category-item category-item--create-input">
+              <input
+                ref="inputRef"
+                v-model="newCategoryName"
+                class="category-item__edit-input--embedded"
+                placeholder="输入分类名称..."
+                maxlength="6"
+                autofocus
+                @keyup.enter="handleAddCategory"
+                @keyup.escape="cancelAddCategory"
+                @blur="handleAddCategory"
+              />
+            </li>
+          </template>
+        </draggable>
       </div>
     </section>
 
@@ -566,8 +604,6 @@ watch(contextMenuRef, (element) => {
 
   &--category-entry .category-item__name {
     padding-left: 13px;
-    padding-top: 2px;
-    line-height: 18px;
   }
 
   &--create,
@@ -641,6 +677,24 @@ watch(contextMenuRef, (element) => {
     opacity: 0.74;
   }
 
+  &--reordering {
+    cursor: wait;
+  }
+
+  &--dragging {
+    opacity: 0.96;
+    box-shadow:
+      inset 0 0 0 1px rgba($accent-color, 0.12),
+      0 10px 22px rgba(148, 163, 184, 0.14);
+    background: rgba(255, 255, 255, 0.96);
+    z-index: 5;
+  }
+
+  &--ghost {
+    opacity: 0.36;
+    background: rgba($accent-color, 0.06);
+  }
+
   &__icon-shell {
     display: inline-flex;
     align-items: center;
@@ -662,8 +716,8 @@ watch(contextMenuRef, (element) => {
     min-width: 0;
     display: block;
     box-sizing: border-box;
+    height: 20px;
     padding-left: 12px;
-    padding-top: 1px;
     line-height: 19px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -738,8 +792,8 @@ watch(contextMenuRef, (element) => {
     }
 
     &--category-entry {
-      padding: 1px 0 1px 12px;
-      line-height: 18px;
+      padding: 0 0 1px 12px;
+      line-height: 19px;
     }
   }
 }
